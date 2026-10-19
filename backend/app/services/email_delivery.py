@@ -10,6 +10,11 @@ from app.core.config import settings
 class EmailDeliveryNotConfigured(RuntimeError):
     pass
 
+
+class EmailDeliveryFailed(RuntimeError):
+    """Sanitized delivery failure; never expose provider exception details."""
+    pass
+
 def verification_url(token: str, base_url: str | None = None) -> str:
     base = (base_url if base_url is not None else settings.public_base_url) or ""
     parts = urlsplit(base)
@@ -42,7 +47,12 @@ class SMTPEmailDelivery:
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
         message["To"] = recipient
         message.set_content("Verify your email address to activate your account.\n\nOpen this link: " + link + "\n\nThis link expires at " + expires_at.isoformat() + ". If you did not request this, ignore this email.\n")
-        await asyncio.to_thread(self._send_message, message)
+        try:
+            await asyncio.to_thread(self._send_message, message)
+        except Exception:
+            # SMTP/client exceptions may contain server responses or sensitive context.
+            # Return a stable error code; never chain or log the original exception here.
+            raise EmailDeliveryFailed("smtp_delivery_failed") from None
 
     def _send_message(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self._settings.smtp_host, self._settings.smtp_port, timeout=10) as client:
