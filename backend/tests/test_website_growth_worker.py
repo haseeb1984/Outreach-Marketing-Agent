@@ -18,6 +18,15 @@ def test_worker_payload_accepts_bounded_https_scan():
     assert payload["target_queries"] == ["plumber near me"]
 
 
+def test_worker_strips_query_and_fragment_from_start_url():
+    payload = validate_scan_payload({
+        "start_url": "https://example.com/path?access_token=secret#section",
+        "business_type": "Retail",
+        "target_market": "Pakistan",
+    })
+    assert payload["start_url"] == "https://example.com/path"
+
+
 @pytest.mark.parametrize("payload", [
     None,
     {"start_url": "http://example.com", "business_type": "x", "target_market": "y"},
