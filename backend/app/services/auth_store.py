@@ -208,6 +208,102 @@ class AuthStore:
                 )
         return {"token": replacement, "expires_at": expires_at}
 
+    async def issue_password_reset(
+        self, *, email: str, lifetime_minutes: int = 30,
+    ) -> dict[str, Any] | None:
+        """Issue a one-time reset token for an eligible account.
+
+        Callers must always return the same public response regardless of this result.
+        The raw token is returned once for trusted delivery; only its digest is stored.
+        """
+        from app.services.auth_security import normalize_email
+
+        normalized_email = normalize_email(email)
+        if (
+            isinstance(lifetime_minutes, bool)
+            or not isinstance(lifetime_minutes, int)
+            or not 5 <= lifetime_minutes <= 60
+        ):
+            raise ValueError("password_reset_lifetime_out_of_range")
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(minutes=lifetime_minutes)
+        token = new_opaque_token()
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                user = await connection.fetchrow(
+                    """SELECT id FROM app_users
+                       WHERE email=$1 AND status='active'
+                         AND email_verified_at IS NOT NULL
+                       FOR UPDATE""",
+                    normalized_email,
+                )
+                if user is None:
+                    return None
+                await connection.execute(
+                    """UPDATE password_reset_tokens SET consumed_at=$2
+                       WHERE user_id=$1 AND consumed_at IS NULL""",
+                    user["id"], now,
+                )
+                await connection.execute(
+                    """INSERT INTO password_reset_tokens
+                       (user_id, token_sha256, created_at, expires_at)
+                       VALUES ($1, $2, $3, $4)""",
+                    user["id"], token_digest(token), now, expires_at,
+                )
+        return {"user_id": str(user["id"]), "reset_token": token, "expires_at": expires_at}
+
+    async def reset_password(self, *, token: str, new_password: str) -> bool:
+        """Consume one live reset token, update the password, and revoke all sessions."""
+        from app.services.auth_security import hash_password
+
+        try:
+            digest = token_digest(token)
+        except ValueError:
+            return False
+        password_hash = hash_password(new_password).encoded
+        now = datetime.now(timezone.utc)
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                reset = await connection.fetchrow(
+                    """SELECT r.id AS reset_id, r.user_id
+                       FROM password_reset_tokens r
+                       JOIN app_users u ON u.id=r.user_id
+                       WHERE r.token_sha256=$1 AND r.consumed_at IS NULL
+                         AND r.expires_at > $2 AND u.status='active'
+                         AND u.email_verified_at IS NOT NULL
+                       FOR UPDATE OF r""",
+                    digest, now,
+                )
+                if reset is None:
+                    return False
+                updated = await connection.fetchrow(
+                    """UPDATE app_users SET password_hash=$2, updated_at=$3
+                       WHERE id=$1 AND status='active'
+                         AND email_verified_at IS NOT NULL
+                       RETURNING id""",
+                    reset["user_id"], password_hash, now,
+                )
+                if updated is None:
+                    return False
+                await connection.execute(
+                    """UPDATE password_reset_tokens SET consumed_at=$2
+                       WHERE user_id=$1 AND consumed_at IS NULL""",
+                    reset["user_id"], now,
+                )
+                await connection.execute(
+                    """UPDATE auth_sessions SET revoked_at=$2
+                       WHERE user_id=$1 AND revoked_at IS NULL""",
+                    reset["user_id"], now,
+                )
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (actor_user_id, event_type, outcome, metadata, created_at)
+                       VALUES ($1, 'account.password_reset', 'success',
+                               '{}'::jsonb, $2)""",
+                    reset["user_id"], now,
+                )
+                return True
+
     async def authenticate_session(self, token: str) -> dict[str, Any] | None:
         try:
             digest = token_digest(token)
