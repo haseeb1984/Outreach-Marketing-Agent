@@ -68,16 +68,24 @@ def issue_dns_challenge(
     if current.tzinfo is None or current.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     token = secrets.token_urlsafe(32)
-    return {
+    challenge = {
         "workspace_id": workspace,
         "domain": normalized,
         "method": "dns_txt",
-        "record_name": f"_oma-verify.{normalized}",
-        "record_value": TXT_PREFIX + token,
         "token_sha256": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "status": "pending",
         "created_at": current.astimezone(timezone.utc).isoformat(),
         "expires_at": (current + ttl).astimezone(timezone.utc).isoformat(),
+    }
+    # Keep the raw token only in the one-time DNS instructions, not in the
+    # challenge object callers should persist in their database.
+    return {
+        "challenge": challenge,
+        "dns_record": {
+            "record_name": f"_oma-verify.{normalized}",
+            "record_value": TXT_PREFIX + token,
+            "type": "TXT",
+        },
     }
 
 
