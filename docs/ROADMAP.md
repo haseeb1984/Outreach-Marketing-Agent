@@ -2,6 +2,12 @@
 
 Implementation is phased. A phase is not complete merely because files exist; automated tests and provider sandbox checks must pass. Frontend quality requirements are defined in docs/QUALITY_STANDARDS.md. Commercial SaaS requirements are defined in docs/SAAS_PLATFORM_REQUIREMENTS.md. Written requirements are not proof of implementation.
 
+## Product priority rule
+
+The first release must prioritize four core workflows: (1) client/business discovery and qualification, (2) personalized email and official WhatsApp outreach, (3) competitor-aware SEO strategy, and (4) safe website crawlability/SEO diagnosis plus verified improvement. Paid ads, social publishing, video, advanced PR, reputation, advanced CRO, and other channels are optional add-ons. Do not expand optional channels while core workflows remain unimplemented or untested.
+
+SEO work must target measurable competitive improvement: baseline target queries/pages, inspect observable competitor evidence, apply prioritized client-approved improvements, re-crawl, and measure outcomes using authorized data. The 90–95% improvement ambition is not a universal guarantee; report actual performance honestly and never fabricate rankings or causality.
+
 ## Phase 1 — Foundation
 - [x] Initialize repository and product principles.
 - [x] Document architecture and compliance requirements.
@@ -27,15 +33,18 @@ Implementation is phased. A phase is not complete merely because files exist; au
 - [ ] Optional analysis of repositories the user is authorized to access.
 - [ ] Source-backed features, benefits, pricing and audience profile.
 
-## Phase 4 — Prospect research and CRM
-- [ ] Approved public-source search adapters.
-- [ ] Evidence URL, observation date, fit score and discovery reason for each lead.
+## Phase 4 — Core client discovery, competitor intelligence and CRM
+- [ ] Approved public-source search adapters for business/client discovery and prospect research.
+- [ ] Profile the client's actual offer, audience, market, goals and approved outreach criteria.
+- [ ] Discover relevant competing businesses/pages and compare observable search intent, content coverage, crawlability and available authority evidence.
+- [ ] Evidence URL, observation date, fit score and discovery reason for each lead and competitor finding.
 - [ ] Deduplication, human review, CRM stages, notes, and campaign membership.
 - [ ] Enforce workspace/project scope for all prospect data.
 
-## Phase 5 — Provider accounts and outreach drafting
+## Phase 5 — Core personalized outreach (email and WhatsApp)
 - [ ] Multiple connected email accounts with project scoping and secure token storage/revocation.
-- [ ] Official WhatsApp Business Platform integration where eligible.
+- [ ] Official WhatsApp Business Platform integration where eligible; never unofficial WhatsApp Web automation.
+- [ ] Business- and prospect-specific messages grounded in verified facts, fit reason, offer and context; avoid generic bulk templates.
 - [ ] Evidence-grounded personalized drafts and approval queue.
 - [ ] Reply synchronization/classification and human handoff.
 - [ ] Opt-out/suppression enforcement before every send and follow-up.
@@ -78,12 +87,14 @@ Implementation is phased. A phase is not complete merely because files exist; au
 - [ ] Ensure promotion channels use authorized integrations and respect anti-spam requirements, opt-outs, provider limits and explicit automation consent.
 - Exit: public crawlability and marketing workflow have recorded tests; no claim is made that AI platforms will index or recommend the product.
 
-## Phase 10 — Per-client website growth and modern marketing engine
+## Phase 10 — Core competitive SEO and website growth engine
 - [ ] Add per-workspace client/business profiles, authorized domains, audience/market/language goals, budget caps, conversion goals and brand guidelines.
 - [ ] Build a safe read-only website audit with SSRF-safe fetching, bounded crawl, and evidence-backed technical SEO/indexability findings.
 - [ ] Audit each authorized client's robots.txt, XML sitemaps, canonicalization, internal links, metadata, structured data, mobile usability, accessibility and performance.
 - [ ] Add AI/search crawler readiness checks, optional /llms.txt recommendations, factual entity consistency and evidence-based AI search content guidance.
-- [ ] Implement strategy selection and prioritization across technical SEO, content/topic authority, AEO/GEO, digital PR, local SEO, e-commerce, social/community, email lifecycle, partnership/influencer outreach, authorized paid acquisition, CRO, analytics, reputation, video and retention.
+- [ ] Implement competitor-aware technical SEO and crawlability priorities, search-intent/content gap analysis, and repeatable before/after verification as core workflows.
+- [ ] Treat AEO/GEO and other modern channels as optional/secondary modules unless they directly support the client's agreed core goals.
+- [ ] Keep digital PR, local/e-commerce specialists, social/community, paid acquisition, reputation, video, advanced CRO and retention optional and opt-in.
 - [ ] Require evidence, baseline, confidence, effort/cost, KPI, approval state and outcome tracking for recommendations.
 - [ ] Add channel-by-channel authorization, human approval, quota/budget limits, opt-outs, provider policy checks, audit trail, rollback where feasible and emergency kill switch.
 - [ ] Build client reporting that distinguishes observed, calculated, estimated, recommended, completed and unknown outcomes.
