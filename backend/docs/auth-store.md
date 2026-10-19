@@ -8,3 +8,9 @@
 - Every future workspace route must check membership for the requested workspace before accessing jobs, domains, reports, prospect data, or exports.
 - This adapter is not wired to FastAPI routes. Email delivery, login throttling, CSRF/session cookie policy, password reset, registration abuse controls, and security audit event integration remain unimplemented.
 - Do not claim that authentication is production-ready until these missing controls and real PostgreSQL integration tests are complete.
+
+## Email delivery adapter
+
+SMTPEmailDelivery is an optional server-side adapter for verification emails. Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_EMAIL, and PUBLIC_BASE_URL using deployment environment variables/secrets. It requires an HTTPS origin and STARTTLS, and fails closed when configuration is incomplete. The adapter does not log the verification token or email body.
+
+This adapter is not called automatically by registration yet. Before public routes, wire it through bounded delivery, add rate limits and generic responses, and test against a real SMTP sandbox/provider. Never return verification tokens from public API responses.
