@@ -69,10 +69,16 @@ Ingest verifiable provider and user-supplied conversion events → reconcile by 
 - Measure discovery and conversion with privacy-respecting analytics. Report measured evidence, not promised rankings, AI citations, or guaranteed growth.
 
 
+## Core competitive growth workflows
+- Core value is client/business discovery, business-specific email and official WhatsApp outreach, competitor intelligence, and measurable website crawlability/SEO improvement. Other marketing channels are optional add-ons.
+- Client discovery captures verified business facts, audience, market, offer, target customers, and constraints; prospect and competitor results require source evidence, observation timestamps, deduplication, and transparent fit/priority reasons.
+- Competitor analysis is limited to observable public pages and authorized data. It compares search intent, content coverage, technical crawlability, internal structure, user experience, and external authority evidence where available; it must not claim knowledge of private ranking algorithms.
+- SEO optimization follows a baseline → evidence-backed diagnosis → prioritized client-approved changes → re-crawl/re-test → performance measurement loop. Ranking goals are measured for defined query sets and time windows; no fixed uplift is guaranteed or fabricated.
+
 ## Per-client website growth and modern marketing
 - Each workspace can own separate client/business profiles and explicitly authorized domains. Store goals, markets/languages, audience, brand constraints, budgets, approved channels, baseline metrics, and authorization evidence.
 - The website audit service is read-only by default. It uses SSRF-safe fetch/crawl controls and returns evidence-backed observations, not unsupported assumptions.
-- A strategy orchestrator selects relevant modules from technical SEO, AI/search crawler readiness, content/topic authority, AEO/GEO, digital PR, local/e-commerce SEO, social/community, email lifecycle, influencer/partner outreach, paid acquisition, CRO, analytics, reputation, video and retention.
+- A strategy orchestrator must prioritize core business discovery, competitor-aware technical/content SEO, and personalized email/official WhatsApp outreach. Other modules (AEO/GEO enhancements, digital PR, local/e-commerce specialists, social/community, paid acquisition, advanced CRO, reputation, video and retention) are optional and selected only when relevant.
 - Strategy decisions consume verified client facts, authorized analytics, current audit evidence, explicit goals and resource limits. Each recommendation records sources, date, confidence, impact hypothesis, effort/cost, KPI, risk and approval state.
 - Execution connectors are separate from planning. Website writes, CMS publishing, DNS changes, ad spend, emails, social posting and external messages require scoped authorization and configurable approval. Quotas, suppression, provider policies, idempotency, audit history and a kill switch apply at execution time.
 - Analytics distinguishes observed, calculated, estimated, recommended, completed and unknown results; no invented traffic, rankings, citations, leads or ROI.
