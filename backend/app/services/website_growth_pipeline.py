@@ -10,6 +10,7 @@ from typing import Any
 from app.services.website_discovery import discover_and_crawl
 from app.services.website_growth_report import build_website_growth_report
 from app.services.website_fetch import FetchLimits, Resolver
+from app.services.domain_authorization import authorize_domain_url
 
 
 async def discover_and_build_growth_report(
