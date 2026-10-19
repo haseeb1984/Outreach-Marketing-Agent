@@ -229,12 +229,6 @@ def sitemap_xml() -> Response:
     return Response(content=xml, media_type="application/xml")
 
 
-@app.get("/", include_in_schema=False)
-def root_api_info() -> dict[str, str]:
-    """Retained API service metadata is available at /api-info."""
-    return {"service": settings.app_name, "status": "running", "docs": "/docs"}
-
-
 @app.get("/api-info", include_in_schema=False)
 def api_info() -> dict[str, str]:
     return {"service": settings.app_name, "status": "running", "docs": "/docs"}
