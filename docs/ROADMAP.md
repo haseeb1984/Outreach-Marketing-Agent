@@ -78,7 +78,19 @@ Implementation is phased. A phase is not complete merely because files exist; au
 - [ ] Ensure promotion channels use authorized integrations and respect anti-spam requirements, opt-outs, provider limits and explicit automation consent.
 - Exit: public crawlability and marketing workflow have recorded tests; no claim is made that AI platforms will index or recommend the product.
 
-## Phase 10 — Production hardening and launch
+## Phase 10 — Per-client website growth and modern marketing engine
+- [ ] Add per-workspace client/business profiles, authorized domains, audience/market/language goals, budget caps, conversion goals and brand guidelines.
+- [ ] Build a safe read-only website audit with SSRF-safe fetching, bounded crawl, and evidence-backed technical SEO/indexability findings.
+- [ ] Audit each authorized client's robots.txt, XML sitemaps, canonicalization, internal links, metadata, structured data, mobile usability, accessibility and performance.
+- [ ] Add AI/search crawler readiness checks, optional /llms.txt recommendations, factual entity consistency and evidence-based AI search content guidance.
+- [ ] Implement strategy selection and prioritization across technical SEO, content/topic authority, AEO/GEO, digital PR, local SEO, e-commerce, social/community, email lifecycle, partnership/influencer outreach, authorized paid acquisition, CRO, analytics, reputation, video and retention.
+- [ ] Require evidence, baseline, confidence, effort/cost, KPI, approval state and outcome tracking for recommendations.
+- [ ] Add channel-by-channel authorization, human approval, quota/budget limits, opt-outs, provider policy checks, audit trail, rollback where feasible and emergency kill switch.
+- [ ] Build client reporting that distinguishes observed, calculated, estimated, recommended, completed and unknown outcomes.
+- [ ] Test tenant isolation, ownership verification, write/publish/spend/send approval gates, suppression, rate limits, crawl bounds and non-fabricated reporting.
+- Exit: core supported marketing workflow passes recorded tests; unsupported integrations are explicitly labelled planned or unavailable.
+
+## Phase 11 — Production hardening and launch
 - [ ] Authorization/security review, dependency scanning and backups.
 - [ ] Concurrency/load tests, retention/deletion and operational alerts.
 - [ ] Payment webhook reconciliation, billing/support runbooks, backup restore and incident drills.
