@@ -32,4 +32,6 @@ def test_origin_check_requires_exact_https_origin():
     assert not origin_matches("http://app.example.com", "https://app.example.com")
     assert not origin_matches("https://app.example.com.attacker.test", "https://app.example.com")
     assert not origin_matches("https://user@app.example.com", "https://app.example.com")
+    assert not origin_matches("https://app.example.com/path", "https://app.example.com")
+    assert origin_matches("https://app.example.com:443", "https://app.example.com/")
     assert not origin_matches("null", "https://app.example.com")
