@@ -65,3 +65,26 @@ def test_pipeline_does_not_generate_actions_when_discovery_fails_closed(monkeypa
     assert result["status"] == "crawl_skipped"
     assert result["strategy"]["actions"] == []
     assert result["reason"] == "robots_txt_unavailable_fail_closed"
+
+def test_pipeline_rejects_unverified_or_cross_workspace_domain_before_fetch(monkeypatch):
+    async def forbidden_discover(*args, **kwargs):
+        raise AssertionError("discovery must not run before domain authorization")
+
+    monkeypatch.setattr(website_growth_pipeline, "discover_and_crawl", forbidden_discover)
+    for workspace_id, records in (
+        ("workspace-1", []),
+        ("workspace-2", [{"domain": "client.example", "workspace_id": "workspace-1", "status": "verified"}]),
+    ):
+        try:
+            asyncio.run(website_growth_pipeline.discover_and_build_growth_report(
+                "https://client.example/",
+                workspace_id=workspace_id,
+                verified_domains=records,
+                business_type="SaaS",
+                target_market="Global",
+                target_queries=["software"],
+            ))
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("unauthorized domain should be rejected")
