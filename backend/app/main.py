@@ -3,18 +3,46 @@
 Public marketing pages deliberately describe planned capabilities accurately. They do
 not imply that billing, account management, or outreach integrations are already live.
 """
+from contextlib import asynccontextmanager
 from html import escape
 from urllib.parse import urljoin
 
+import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from app.core.config import settings
 
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Create an optional PostgreSQL pool without running migrations at startup."""
+    application.state.db_pool = None
+    application.state.domain_authorization_store = None
+    if settings.database_url:
+        pool = await asyncpg.create_pool(
+            dsn=settings.database_url,
+            min_size=1,
+            max_size=5,
+            timeout=5,
+            command_timeout=15,
+        )
+        from app.services.domain_authorization_store import DomainAuthorizationStore
+
+        application.state.db_pool = pool
+        application.state.domain_authorization_store = DomainAuthorizationStore(pool)
+    try:
+        yield
+    finally:
+        pool = getattr(application.state, "db_pool", None)
+        if pool is not None:
+            await pool.close()
+
+
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     description="Evidence-led, human-approved influencer and outreach campaign workspace.",
+    lifespan=lifespan,
 )
 
 PUBLIC_PAGES = [
