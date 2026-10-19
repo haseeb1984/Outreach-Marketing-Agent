@@ -57,3 +57,46 @@ def test_crawler_rejects_excessive_limits():
             pass
         else:
             raise AssertionError("invalid crawl limit should be rejected")
+
+
+def test_crawler_skips_paths_disallowed_by_supplied_robots_txt(monkeypatch):
+    seen = []
+
+    async def fake_fetch(url, **kwargs):
+        seen.append(url)
+        return FetchedPage(
+            requested_url=url,
+            final_url=url,
+            status_code=200,
+            content_type="text/html",
+            body='<html><head><title>Home</title></head><body><h1>Home</h1><a href="/private/">Private</a><a href="/public/">Public</a></body></html>',
+        )
+
+    monkeypatch.setattr(website_crawler, "fetch_html", fake_fetch)
+    robots = "User-agent: *\nDisallow: /private/\n"
+    report = asyncio.run(
+        website_crawler.crawl_website(
+            "https://example.com/",
+            max_pages=10,
+            max_depth=2,
+            robots_txt=robots,
+        )
+    )
+    assert "https://example.com/private/" not in seen
+    assert "https://example.com/public/" in seen
+    assert any(item["url"] == "https://example.com/private/" for item in report["robots_blocked_pages"])
+
+
+def test_crawler_can_skip_start_url_when_supplied_robots_disallows_it(monkeypatch):
+    async def fake_fetch(url, **kwargs):
+        raise AssertionError("disallowed start URL must not be fetched")
+
+    monkeypatch.setattr(website_crawler, "fetch_html", fake_fetch)
+    report = asyncio.run(
+        website_crawler.crawl_website(
+            "https://example.com/private/",
+            robots_txt="User-agent: *\nDisallow: /private/\n",
+        )
+    )
+    assert report["pages_crawled"] == 0
+    assert report["robots_blocked_pages"][0]["url"] == "https://example.com/private/"
