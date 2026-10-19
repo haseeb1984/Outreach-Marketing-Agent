@@ -19,6 +19,8 @@ async def discover_and_build_growth_report(
     business_type: str,
     target_market: str,
     target_queries: list[str],
+    workspace_id: str,
+    verified_domains: list[dict[str, Any]],
     competitor_gaps: list[dict[str, Any]] | None = None,
     max_pages: int = 25,
     max_depth: int = 2,
@@ -26,7 +28,8 @@ async def discover_and_build_growth_report(
     limits: FetchLimits = FetchLimits(),
     resolver: Resolver | None = None,
 ) -> dict[str, Any]:
-    """Discover crawl inputs, run a bounded crawl, and build a reviewable report."""
+    """Authorize the workspace domain before any network fetch, then build a report."""
+    authorization = authorize_domain_url(start_url, workspace_id, verified_domains)
     discovery = await discover_and_crawl(
         start_url,
         max_pages=max_pages,
@@ -41,6 +44,11 @@ async def discover_and_build_growth_report(
             "report_type": "website_growth_review",
             "start_url": discovery.get("start_url", start_url),
             "status": "crawl_skipped",
+            "domain_authorization": {
+                "workspace_id": authorization["workspace_id"],
+                "host": authorization["host"],
+                "verified_domain_required": True,
+            },
             "reason": discovery.get("reason", "crawl_report_unavailable"),
             "discovery": {
                 "robots": discovery.get("robots"),
@@ -68,6 +76,11 @@ async def discover_and_build_growth_report(
         competitor_gaps=competitor_gaps,
     )
     report["status"] = "report_ready_for_human_review"
+    report["domain_authorization"] = {
+        "workspace_id": authorization["workspace_id"],
+        "host": authorization["host"],
+        "verified_domain_required": True,
+    }
     report["discovery"] = {
         "robots": discovery.get("robots"),
         "sitemap_documents": discovery.get("sitemap_documents", []),
