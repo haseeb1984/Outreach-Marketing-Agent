@@ -96,6 +96,12 @@ async def process_claimed_job(
     try:
         try:
             payload = validate_scan_payload(job.get("payload"))
+        except ValueError as exc:
+            # These codes are authored by validate_scan_payload, never external exception text.
+            return await queue.fail(
+                job_id=job["id"], worker_id=worker_id, error_code=str(exc)[:100]
+            )
+        try:
             report = await scan_runner(
                 payload["start_url"],
                 workspace_id=str(job["workspace_id"]),
@@ -106,9 +112,11 @@ async def process_claimed_job(
                 max_pages=payload["max_pages"],
                 max_depth=payload["max_depth"],
             )
-        except ValueError as exc:
-            code = str(exc)[:100] if str(exc) else "scan_rejected"
-            return await queue.fail(job_id=job["id"], worker_id=worker_id, error_code=code)
+        except ValueError:
+            # Avoid persisting potentially sensitive exception details in job metadata.
+            return await queue.fail(
+                job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
+            )
         except Exception:
             logger.exception("website growth job failed")
             return await queue.fail(
@@ -116,7 +124,12 @@ async def process_claimed_job(
             )
         if lost.is_set():
             return "lease_lost"
-        completed = await queue.complete(job_id=job["id"], worker_id=worker_id, result=report)
+        try:
+            completed = await queue.complete(job_id=job["id"], worker_id=worker_id, result=report)
+        except ValueError:
+            return await queue.fail(
+                job_id=job["id"], worker_id=worker_id, error_code="website_scan_result_invalid"
+            )
         return "succeeded" if completed else "lease_lost"
     finally:
         heartbeat.cancel()
