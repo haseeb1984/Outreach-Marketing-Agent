@@ -9,7 +9,7 @@ import asyncio
 import logging
 import secrets
 from typing import Any, Awaitable, Callable
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
 
@@ -39,6 +39,8 @@ def validate_scan_payload(payload: Any) -> dict[str, Any]:
     parsed = urlsplit(start_url)
     if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("invalid_start_url")
+    # Do not persist or log arbitrary query strings/fragments that may contain tokens.
+    start_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", "", ""))
     business_type = payload.get("business_type")
     target_market = payload.get("target_market")
     if not isinstance(business_type, str) or not business_type.strip() or len(business_type) > 160:
@@ -74,7 +76,7 @@ async def _maintain_lease(queue: WorkspaceJobQueue, job: dict[str, Any], worker_
                 job_id=job["id"], worker_id=worker_id, lease_seconds=LEASE_SECONDS
             )
         except Exception:
-            logger.exception("worker lease heartbeat failed")
+            logger.warning("worker lease heartbeat failed; job lease is considered lost")
             lost.set()
             return
         if not extended:
@@ -118,7 +120,7 @@ async def process_claimed_job(
                 job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
             )
         except Exception:
-            logger.exception("website growth job failed")
+            logger.warning("website growth job failed; recording a generic failure code")
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code="website_growth_scan_failed"
             )
@@ -166,7 +168,7 @@ async def run_worker(*, poll_seconds: float = POLL_SECONDS) -> None:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("worker iteration failed")
+                logger.error("worker iteration failed; retrying after a bounded delay")
                 await asyncio.sleep(poll_seconds)
     finally:
         await pool.close()
