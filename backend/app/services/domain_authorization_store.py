@@ -169,3 +169,19 @@ class DomainAuthorizationStore:
                     str(workspace_id), normalized,
                 )
         return result.endswith(" 1")
+
+    async def get_pending_challenge(
+        self, *, workspace_id: str, domain: str
+    ) -> dict[str, Any] | None:
+        """Return minimal challenge metadata before DNS resolution, not its token hash."""
+        normalized = normalize_domain(domain)
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """SELECT workspace_id, domain_ascii AS domain, status, expires_at
+                   FROM domain_verification_challenges
+                   WHERE workspace_id=$1 AND domain_ascii=$2 AND status='pending'
+                   ORDER BY created_at DESC LIMIT 1""",
+                str(workspace_id), normalized,
+            )
+        return dict(row) if row is not None else None
+
