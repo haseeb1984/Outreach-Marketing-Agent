@@ -154,6 +154,60 @@ class AuthStore:
         # The raw token is returned once. The database stores only its digest.
         return {"token": token, "expires_at": expires_at}
 
+    async def rotate_session(
+        self, *, current_token: str, user_agent: str | None = None,
+        lifetime_hours: int = 24,
+    ) -> dict[str, Any] | None:
+        """Atomically replace a live session after re-authentication or privilege changes.
+
+        The current token is consumed exactly once. A missing, expired, revoked, or
+        inactive-account session returns None; only the digest of either token is stored.
+        """
+        if (
+            isinstance(lifetime_hours, bool)
+            or not isinstance(lifetime_hours, int)
+            or not 1 <= lifetime_hours <= 720
+        ):
+            raise ValueError("session_lifetime_out_of_range")
+        try:
+            current_digest = token_digest(current_token)
+        except ValueError:
+            return None
+        replacement = new_opaque_token()
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(hours=lifetime_hours)
+        safe_user_agent = user_agent[:500] if isinstance(user_agent, str) else None
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                current = await connection.fetchrow(
+                    """SELECT s.id AS session_id, s.user_id
+                       FROM auth_sessions s
+                       JOIN app_users u ON u.id=s.user_id
+                       WHERE s.token_sha256=$1 AND s.revoked_at IS NULL
+                         AND s.expires_at > $2 AND u.status='active'
+                         AND u.email_verified_at IS NOT NULL
+                       FOR UPDATE OF s""",
+                    current_digest, now,
+                )
+                if current is None:
+                    return None
+                revoked = await connection.fetchrow(
+                    """UPDATE auth_sessions SET revoked_at=$2
+                       WHERE id=$1 AND revoked_at IS NULL
+                       RETURNING id""",
+                    current["session_id"], now,
+                )
+                if revoked is None:
+                    return None
+                await connection.execute(
+                    """INSERT INTO auth_sessions
+                       (user_id, token_sha256, created_at, expires_at, last_seen_at, user_agent)
+                       VALUES ($1, $2, $3, $4, $3, $5)""",
+                    current["user_id"], token_digest(replacement), now, expires_at,
+                    safe_user_agent,
+                )
+        return {"token": replacement, "expires_at": expires_at}
+
     async def authenticate_session(self, token: str) -> dict[str, Any] | None:
         try:
             digest = token_digest(token)
