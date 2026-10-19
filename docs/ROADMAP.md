@@ -1,59 +1,78 @@
 # Delivery Roadmap
 
-Implementation is phased. A phase is not complete merely because files exist; automated tests and provider sandbox checks must pass. Frontend quality requirements are defined in docs/QUALITY_STANDARDS.md and are release gates once the UI exists.
+Implementation is phased. A phase is not complete merely because files exist; automated tests and provider sandbox checks must pass. Frontend quality requirements are defined in docs/QUALITY_STANDARDS.md. Commercial SaaS requirements are defined in docs/SAAS_PLATFORM_REQUIREMENTS.md. Written requirements are not proof of implementation.
 
 ## Phase 1 — Foundation
 - [x] Initialize repository and product principles.
 - [x] Document architecture and compliance requirements.
 - [x] Document accessibility, SEO, responsive design, and performance acceptance criteria.
+- [x] Document commercial SaaS, tenant isolation, billing, and entitlement requirements.
 - [ ] Runnable FastAPI health endpoint and configuration.
 - [ ] Automated tests and CI.
 - [ ] Database schema and migration workflow.
 - Exit: clean install, app starts, tests pass, CI is green, no secrets committed.
 
-## Phase 2 — Product discovery
+## Phase 2 — Identity and SaaS foundation
+- [ ] Select and document frontend stack and deployment architecture.
+- [ ] Implement customer registration, email verification, login/logout, password reset, session expiry/revocation, and account deletion/export.
+- [ ] Implement workspaces/tenants, memberships, roles, invitations, and server-side object authorization.
+- [ ] Add database migrations and tenant-aware data access patterns.
+- [ ] Add rate limits, security event audit logs, secret management, and baseline monitoring.
+- [ ] Add automated cross-tenant authorization tests for every resource type.
+- Exit: identity and tenant boundaries are tested; no cross-tenant leakage or critical/high security blockers.
+
+## Phase 3 — Product discovery
 - [ ] Multi-project CRUD and tenant boundaries.
 - [ ] Website analysis with SSRF protections.
 - [ ] Optional analysis of repositories the user is authorized to access.
 - [ ] Source-backed features, benefits, pricing and audience profile.
 
-## Phase 3 — Prospect research
+## Phase 4 — Prospect research and CRM
 - [ ] Approved public-source search adapters.
 - [ ] Evidence URL, observation date, fit score and discovery reason for each lead.
-- [ ] Deduplication and human review.
+- [ ] Deduplication, human review, CRM stages, notes, and campaign membership.
+- [ ] Enforce workspace/project scope for all prospect data.
 
-## Phase 4 — CRM and accounts
-- [ ] Prospect stages, notes and campaign membership.
-- [ ] Multiple connected email accounts with project scoping.
+## Phase 5 — Provider accounts and outreach drafting
+- [ ] Multiple connected email accounts with project scoping and secure token storage/revocation.
 - [ ] Official WhatsApp Business Platform integration where eligible.
-- [ ] Encrypted credentials, revocation and reconnect flows.
-
-## Phase 5 — Drafting and replies
 - [ ] Evidence-grounded personalized drafts and approval queue.
 - [ ] Reply synchronization/classification and human handoff.
-- [ ] Opt-out/suppression enforcement before every send.
+- [ ] Opt-out/suppression enforcement before every send and follow-up.
 
-## Phase 6 — Controlled automation and analytics
+## Phase 6 — Billing, plans and usage entitlements
+- [ ] Confirm merchant eligibility, launch jurisdictions, supported currencies, fees and payment provider before production integration.
+- [ ] Implement hosted checkout/provider adapter and signed, idempotent webhook processing.
+- [ ] Model plans, entitlements, subscription lifecycle, cancellations, failed payments, refunds, and reconciliation.
+- [ ] Enforce entitlements and usage quotas server-side on every paid operation and queued job.
+- [ ] Implement atomic quota reservations and concurrency/race tests.
+- [ ] Add customer billing/usage UI, invoices/receipts where supported, and clear cancellation/support policies.
+- [ ] Verify that forged redirects, client plan tampering, duplicate/out-of-order webhooks, and cross-tenant billing access cannot grant or expose access.
+- Exit: provider sandbox lifecycle tests pass; real payments remain disabled until security, merchant, policy and operational checks pass.
+
+## Phase 7 — Controlled automation and analytics
 - [ ] Explicit opt-in, sending limits, quiet hours, retries and kill switch.
 - [ ] Idempotent queue jobs and duplicate-send protection.
+- [ ] Re-check entitlements, quotas, account status, and suppression rules at send time.
 - [ ] Track only verifiable delivery, reply, click, signup and sales events.
 
-## Phase 7 — Frontend, accessibility, SEO and performance
-- [ ] Document and agree the frontend stack before substantial UI implementation.
-- [ ] Build responsive public marketing pages and authenticated dashboard with semantic HTML and accessible interaction patterns.
-- [ ] Meet WCAG 2.2 AA acceptance criteria; run automated accessibility checks and manual keyboard/screen-reader tests.
+## Phase 8 — Frontend, accessibility, SEO and performance
+- [ ] Build public marketing, pricing, policy, registration, account, workspace, dashboard, billing, and support pages.
+- [ ] Meet WCAG 2.2 AA; run automated accessibility checks and manual keyboard/screen-reader tests.
 - [ ] Add technical SEO essentials for intended public pages: metadata, canonical URLs, sitemap, robots rules, correct status codes and accurate structured data where appropriate.
-- [ ] Prevent private/dashboard pages from being indexed; ensure authentication and authorization protect private content.
-- [ ] Add Lighthouse CI or equivalent repeatable lab checks; investigate regressions and target at least 90 for Performance, Accessibility, SEO and Best Practices on representative pages.
+- [ ] Prevent private/dashboard/account/billing pages from being indexed; authentication must protect private content.
+- [ ] Add Lighthouse CI or equivalent repeatable lab checks; target at least 90 for Performance, Accessibility, SEO and Best Practices on representative pages.
 - [ ] Measure Core Web Vitals; target LCP ≤ 2.5 s, INP ≤ 200 ms and CLS ≤ 0.1 at the 75th percentile when field data is available.
-- [ ] Verify mobile/tablet/desktop layouts, zoom/reflow, supported browsers and core workflow states.
-- Exit: release evidence is recorded per docs/QUALITY_STANDARDS.md; no known critical barriers in core tasks and no critical/high security release blockers.
+- [ ] Verify mobile/tablet/desktop layouts, zoom/reflow, supported browsers, payment flows, and error/recovery states.
+- Exit: release evidence recorded per docs/QUALITY_STANDARDS.md; no critical barriers in core tasks and no critical/high security blockers.
 
-## Phase 8 — Production hardening
+## Phase 9 — Production hardening and launch
 - [ ] Authorization/security review, dependency scanning and backups.
 - [ ] Concurrency/load tests, retention/deletion and operational alerts.
-- [ ] Deployment, restore and incident runbooks.
-- [ ] Validate performance under representative API and background-job load.
+- [ ] Payment webhook reconciliation, billing/support runbooks, backup restore and incident drills.
+- [ ] Verify provider terms, messaging/email compliance, privacy/terms pages, customer support and merchant requirements.
+- [ ] Staging-to-production checklist, rollback plan, monitoring and first-customer support readiness.
+- Exit: all release gates and required evidence pass; no mock integration represented as live.
 
 ## Progress reporting
 
