@@ -68,6 +68,12 @@ class AuthStore:
                        VALUES ($1, $2, $3, $4)""",
                     user["id"], token_digest(token), now, expires_at,
                 )
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id, actor_user_id, event_type, outcome, metadata, created_at)
+                       VALUES ($1, $2, 'registration.created', 'success', '{}'::jsonb, $3)""",
+                    workspace_id, user["id"], now,
+                )
         return {
             "user_id": str(user["id"]),
             "email": normalized_email,
