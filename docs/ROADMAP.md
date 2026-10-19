@@ -109,6 +109,28 @@ SEO work must target measurable competitive improvement: baseline target queries
 - [ ] Staging-to-production checklist, rollback plan, monitoring and first-customer support readiness.
 - Exit: all release gates and required evidence pass; no mock integration represented as live.
 
+## Verified implementation snapshot — 2026-10-20
+
+This snapshot records shipped backend service components, not phase completion. The full phases above remain open until their listed acceptance criteria are met.
+
+### Phase 10 — website discovery and SEO growth foundation
+- **Implemented and CI-tested:** `backend/app/services/website_audit.py` parses supplied HTML into evidence-linked observations without making network requests.
+- **Implemented and CI-tested:** `backend/app/services/website_fetch.py` provides bounded HTTP retrieval, public-address validation, restricted redirects, response-size/time limits, and text-document retrieval for trusted callers. DNS validation separated from connection establishment does not fully eliminate rebinding races.
+- **Implemented and CI-tested:** `backend/app/services/website_crawler.py` performs bounded same-host, source-HTML crawling and aggregates observations. It can honor supplied robots rules and same-host seed URLs.
+- **Implemented and CI-tested:** `backend/app/services/robots_sitemap.py` parses robots.txt and sitemap XML, and evaluates common Allow/Disallow path patterns. It is not a complete implementation of every crawler's robots behavior.
+- **Implemented and CI-tested:** `backend/app/services/website_discovery.py` fetches robots.txt and bounded same-host sitemap documents, then orchestrates the crawl. Unexpected robots retrieval/validation failures fail closed.
+- **Implemented and CI-tested:** `backend/app/services/website_growth_report.py` and `backend/app/services/website_growth_pipeline.py` compose crawl findings into evidence-backed, human-reviewable strategy actions. When safe discovery is skipped, the pipeline emits no strategy actions.
+- **CI evidence:** [website discovery/growth pipeline run](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39323836566) passed on 2026-10-20, including Python 3.11, 3.12 and 3.13 test jobs; dependency audit passed in the Python 3.12 job.
+- **Still not implemented/production-ready:** tenant/workspace authorization and verified domain ownership, durable storage, quotas and queueing, connection-pinned egress proxy protection against DNS rebinding, JavaScript rendering, PageSpeed/field-data integrations, comprehensive accessibility/performance/security checks, competitor-data acquisition, authorized analytics baselines, before/after measurement, public authenticated API wiring, and any automated site changes. These are not represented as complete.
+- **Release restriction:** these service functions are not a public unauthenticated crawl API. Production exposure requires tenant authorization, abuse controls, per-workspace quotas, and stronger network egress enforcement first.
+
+### Current core workflow status
+- **Website crawlability/SEO diagnosis:** foundational read-only services implemented; broader feature coverage and production safety remain in progress.
+- **Evidence-based SEO strategy:** standalone strategy builder and crawl-report composition implemented; real competitor research and authorized performance data remain unimplemented.
+- **Business/prospect discovery and CRM:** not yet a complete integrated workflow.
+- **Email and official WhatsApp outreach:** evidence-based draft generation exists; provider connections, persistent approvals, suppression enforcement at send time, and live delivery are not complete.
+- **Commercial SaaS:** authentication, tenant isolation, billing, durable queueing, frontend dashboard, and production launch gates remain outstanding.
+
 ## Progress reporting
 
 Report each phase as Done / In progress / Blocked with commit or test evidence. Do not mark mocks as completed integrations. A written standard is not proof of implementation or conformance.
