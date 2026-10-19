@@ -105,8 +105,30 @@ h1{{font-size:clamp(2rem,5vw,3.4rem);line-height:1.12;max-width:17ch;margin:.25r
 
 @app.get("/health", tags=["operations"])
 def health() -> dict[str, str]:
-    """Liveness endpoint; database readiness will be added with persistence."""
+    """Liveness endpoint; does not imply database readiness."""
     return {"status": "ok", "environment": settings.environment}
+
+
+@app.get("/ready", tags=["operations"])
+async def readiness() -> Response:
+    """Report readiness only when the configured PostgreSQL connection is usable."""
+    from fastapi.responses import JSONResponse
+
+    pool = getattr(app.state, "db_pool", None)
+    if pool is None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "database_not_configured"},
+        )
+    try:
+        async with pool.acquire() as connection:
+            await connection.fetchval("SELECT 1")
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "database_unavailable"},
+        )
+    return JSONResponse(status_code=200, content={"status": "ready", "database": "ok"})
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
