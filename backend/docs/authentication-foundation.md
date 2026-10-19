@@ -8,7 +8,7 @@ These are schema and cryptographic primitives, not a finished authentication fea
 
 1. Email delivery and single-use verification/reset flows with short expiry and generic responses that do not reveal whether an account exists.
 2. Wire the database-backed rate limiter into login, registration, verification, and reset routes, with independent IP/account buckets, generic responses, and appropriate `429` handling. The limiter exists as a primitive but is not yet connected to public routes.
-3. Session cookie policy (Secure, HttpOnly, SameSite), CSRF defenses where cookies authenticate state-changing requests, rotation/revocation, expiry enforcement, and session fixation protections.
+3. Session cookie policy (Secure, HttpOnly, SameSite), CSRF defenses where cookies authenticate state-changing requests, rotation/revocation, expiry enforcement, and session fixation protections. `AuthStore.rotate_session()` now provides an atomic single-use replacement primitive; it is not yet wired to an HTTP login/privilege-change route.
 4. Password reset invalidation of active sessions and account suspension checks.
 5. Workspace membership authorization on every workspace-scoped read/write, including jobs, domains, reports, exports, and audit events.
 6. Audit events that never include passwords, raw tokens, session cookies, or unnecessary personal data.
