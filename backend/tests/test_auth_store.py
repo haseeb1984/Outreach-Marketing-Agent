@@ -34,3 +34,20 @@ def test_registration_rejects_invalid_email_before_database_access():
 
     with pytest.raises(ValueError, match="invalid_email"):
         asyncio.run(AuthStore(None).register_user(email="not-an-email", password="a long enough password"))
+
+
+def test_rotation_lifetime_is_bounded_before_database_access():
+    import asyncio
+    from app.services.auth_store import AuthStore
+
+    store = AuthStore(None)
+    for lifetime in (0, -1, 721, True, 1.5):
+        with pytest.raises(ValueError, match="session_lifetime_out_of_range"):
+            asyncio.run(store.rotate_session(current_token="x" * 43, lifetime_hours=lifetime))
+
+
+def test_rotation_rejects_malformed_token_without_database_access():
+    import asyncio
+    from app.services.auth_store import AuthStore
+
+    assert asyncio.run(AuthStore(None).rotate_session(current_token="short")) is None
