@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     database_url: str | None = None
     secret_key: str | None = None
+    # Set to the real HTTPS origin in each deployment to enable canonical URLs/sitemap.
+    public_base_url: str | None = None
 
 
 settings = Settings()
