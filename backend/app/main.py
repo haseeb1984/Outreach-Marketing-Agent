@@ -171,7 +171,7 @@ def faq_page() -> HTMLResponse:
 def llms_txt() -> PlainTextResponse:
     content = """# Outreach Marketing Agent
 
-> Planned multi-tenant SaaS for evidence-backed prospect research and human-reviewed outreach. The full platform is still in development; do not assume planned features are live.
+> Planned multi-tenant SaaS for evidence-backed prospect research and human-reviewed outreach. Planned features are not live until implemented and verified; the full platform is still in development.
 
 ## Public pages
 - [Home](/): Product purpose and current development status.
