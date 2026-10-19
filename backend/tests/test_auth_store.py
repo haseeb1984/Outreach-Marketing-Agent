@@ -51,3 +51,36 @@ def test_rotation_rejects_malformed_token_without_database_access():
     from app.services.auth_store import AuthStore
 
     assert asyncio.run(AuthStore(None).rotate_session(current_token="short")) is None
+
+
+def test_password_reset_rejects_malformed_token_without_database_access():
+    import asyncio
+    from app.services.auth_store import AuthStore
+
+    assert asyncio.run(AuthStore(None).reset_password(token="short", new_password="a valid long password")) is False
+
+
+def test_password_reset_rejects_invalid_password_before_database_access():
+    import asyncio
+    from app.services.auth_store import AuthStore
+
+    with pytest.raises(ValueError, match="password_length_out_of_range"):
+        asyncio.run(AuthStore(None).reset_password(token="x" * 43, new_password="short"))
+
+
+def test_password_reset_lifetime_is_bounded_before_database_access():
+    import asyncio
+    from app.services.auth_store import AuthStore
+
+    store = AuthStore(None)
+    for lifetime in (0, 4, 61, True, 1.5):
+        with pytest.raises(ValueError, match="password_reset_lifetime_out_of_range"):
+            asyncio.run(store.issue_password_reset(email="person@example.com", lifetime_minutes=lifetime))
+
+
+def test_password_reset_issue_rejects_invalid_email_before_database_access():
+    import asyncio
+    from app.services.auth_store import AuthStore
+
+    with pytest.raises(ValueError, match="invalid_email"):
+        asyncio.run(AuthStore(None).issue_password_reset(email="not-an-email"))
