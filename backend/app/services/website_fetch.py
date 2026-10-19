@@ -120,7 +120,7 @@ async def fetch_html(
                     continue
                 content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
                 permitted_types = accepted_content_types or {"text/html", "application/xhtml+xml"}
-                if content_type not in permitted_types:
+                if 200 <= response.status_code < 300 and content_type not in permitted_types:
                     raise ValueError("Target response content type is not permitted")
                 content_length = response.headers.get("content-length")
                 if content_length:
