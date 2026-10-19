@@ -35,6 +35,7 @@ async def crawl_website(
     resolver: Resolver | None = None,
     robots_txt: str | None = None,
     user_agent: str = "OutreachMarketingAgentAudit",
+    seed_urls: list[str] | None = None,
 ) -> dict:
     """Crawl a bounded number of same-host pages and aggregate deterministic findings.
 
@@ -50,6 +51,16 @@ async def crawl_website(
     allowed_host = _host(start)
     queue = deque([(start, 0)])
     queued = {start}
+    for seed_url in seed_urls or []:
+        try:
+            seed = _normalize_crawl_url(seed_url)
+        except ValueError:
+            continue
+        if _host(seed) == allowed_host and seed not in queued:
+            queued.add(seed)
+            queue.append((seed, 0))
+            if len(queued) >= max_pages:
+                break
     visited: set[str] = set()
     pages: list[dict] = []
     errors: list[dict] = []
@@ -154,7 +165,7 @@ async def crawl_website(
             key=lambda item: (-item["occurrences"], item["code"]),
         ),
         "limitations": [
-            "Robots rules are enforced only when robots_txt is supplied by a trusted bounded retrieval layer; this crawler does not fetch robots.txt itself.",
+            "Robots rules are enforced only when robots_txt is supplied by the trusted discovery layer; this crawler does not fetch robots.txt itself.",
             "This is a bounded source-HTML crawl, not a JavaScript-rendered, accessibility, performance, or search-index audit.",
             "DNS is checked before each request, but production multi-tenant use still requires connection-pinned egress to eliminate DNS-rebinding races.",
             "The crawler is not exposed as an API endpoint; authentication, workspace authorization, quotas, and abuse controls are required first.",
