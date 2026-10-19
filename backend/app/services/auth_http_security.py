@@ -60,7 +60,7 @@ def origin_matches(request_origin: str | None, expected_origin: str) -> bool:
 
     def normalize(value: str) -> str | None:
         value = value.strip()
-        if not value or any(ch in value for ch in "\\r\\n\\\\"):
+        if not value or "\r" in value or "\n" in value or "\\" in value:
             return None
         try:
             parsed = urlsplit(value)
