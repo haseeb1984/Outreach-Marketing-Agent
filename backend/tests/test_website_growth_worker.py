@@ -113,4 +113,4 @@ async def test_process_claimed_job_records_safe_failure_code():
         scan_runner=runner,
     )
     assert outcome == "failed"
-    assert queue.failed["error_code"] == "verified_domain_not_authorized"
+    assert queue.failed["error_code"] == "website_scan_rejected"
