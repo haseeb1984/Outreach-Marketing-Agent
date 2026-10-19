@@ -61,6 +61,6 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 
 ## Development status
 
-The current repository contains project documentation and a basic FastAPI health endpoint. It is **not yet a complete SaaS product**: frontend, identity, persistence, tenant authorization, billing, subscription entitlements, provider integrations, and complete workflows still need implementation and verification in small, testable phases. No production billing or accessibility/SEO/performance compliance is claimed.
+The current repository contains project documentation, a basic FastAPI API, and an initial server-rendered public marketing surface with product/pricing/FAQ pages, robots.txt, llms.txt, and configurable sitemap generation. It is **not yet a complete SaaS product**: customer identity, authenticated dashboard, persistence, tenant authorization, billing, subscription entitlements, provider integrations, and complete workflows still need implementation and verification. The public pages and discovery endpoints also require CI results and deployment configuration checks before being treated as production-ready. No production billing or WCAG/SEO/performance compliance is claimed.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SAFETY_AND_COMPLIANCE.md](docs/SAFETY_AND_COMPLIANCE.md), [docs/QUALITY_STANDARDS.md](docs/QUALITY_STANDARDS.md), and [docs/SAAS_PLATFORM_REQUIREMENTS.md](docs/SAAS_PLATFORM_REQUIREMENTS.md).
