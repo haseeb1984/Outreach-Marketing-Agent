@@ -20,23 +20,27 @@ def test_normalize_domain_accepts_idn_and_rejects_url_or_ip():
 
 def test_dns_challenge_verifies_only_matching_token_before_expiry():
     now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-    challenge = issue_dns_challenge("Example.com", "workspace-1", now=now)
-    assert challenge["record_name"] == "_oma-verify.example.com"
+    issued = issue_dns_challenge("Example.com", "workspace-1", now=now)
+    challenge = issued["challenge"]
+    record = issued["dns_record"]
+    assert record["record_name"] == "_oma-verify.example.com"
     assert "token_sha256" in challenge
-    assert challenge["record_value"].startswith("outreach-marketing-agent-verification=")
-    assert challenge["token_sha256"] not in challenge["record_value"]
+    assert record["record_value"].startswith("outreach-marketing-agent-verification=")
+    assert challenge["token_sha256"] not in record["record_value"]
+    assert "record_value" not in challenge
     assert verify_dns_challenge(challenge, ["unrelated=value"], now=now)["verified"] is False
-    assert verify_dns_challenge(challenge, [challenge["record_value"]], now=now)["verified"] is True
+    assert verify_dns_challenge(challenge, [record["record_value"]], now=now)["verified"] is True
     assert verify_dns_challenge(
-        challenge, [challenge["record_value"]], now=now + timedelta(days=2)
+        challenge, [record["record_value"]], now=now + timedelta(days=2)
     )["reason"] == "challenge_expired"
 
 
 def test_dns_challenge_requires_pending_record_and_timezone_aware_time():
     now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-    challenge = issue_dns_challenge("example.com", "workspace-1", now=now)
+    issued = issue_dns_challenge("example.com", "workspace-1", now=now)
+    challenge = issued["challenge"]
     challenge["status"] = "verified"
-    assert verify_dns_challenge(challenge, [challenge["record_value"]], now=now)["reason"] == "challenge_not_pending"
+    assert verify_dns_challenge(challenge, [issued["dns_record"]["record_value"]], now=now)["reason"] == "challenge_not_pending"
     with pytest.raises(ValueError):
         issue_dns_challenge("example.com", "workspace-1", now=datetime(2026, 10, 20))
 
