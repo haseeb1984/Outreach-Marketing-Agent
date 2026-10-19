@@ -87,7 +87,16 @@ async def fetch_html(
             parsed = urlsplit(current_url)
             host = parsed.hostname or ""
             port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
-            await resolver(host, port)
+            addresses = await resolver(host, port)
+            if not addresses:
+                raise ValueError("Hostname returned no IP addresses")
+            for raw_address in addresses:
+                try:
+                    resolved_ip = ipaddress.ip_address(raw_address.split("%", 1)[0])
+                except ValueError as exc:
+                    raise ValueError("DNS returned an invalid IP address") from exc
+                if not resolved_ip.is_global:
+                    raise ValueError("Hostname resolves to a non-public IP address")
             async with active_client.stream("GET", current_url, follow_redirects=False) as response:
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("location")
