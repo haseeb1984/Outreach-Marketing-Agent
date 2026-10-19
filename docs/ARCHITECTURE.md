@@ -57,6 +57,17 @@ Ingest verifiable provider and user-supplied conversion events → reconcile by 
 - Use separate development/staging/production configurations, backups and restore drills, monitoring, alerts, and incident runbooks.
 - Keep payment events and security-sensitive actions auditable; define data retention and deletion behavior before launch.
 
+
+## Public discoverability and responsible self-marketing
+- Keep a public, crawlable website/documentation surface separate from the authenticated application and private APIs.
+- Generate sitemap and robots rules from an explicit allowlist of canonical public routes; do not include account, dashboard, customer, lead, billing, report or private API URLs.
+- Maintain /llms.txt as a concise index of authoritative public product documentation; do not treat it as an authentication mechanism or guarantee of AI crawler adoption.
+- The optional marketing service consumes verified product capability records, approved sources and aggregate performance data. It creates draft content with evidence references and marks uncertain claims for review.
+- Publishing runs through a policy/quality gate: validate claims against actual shipped features, check links, metadata, duplicate/doorway patterns, accessibility, consent and channel-specific limits. Initial publishing requires human approval.
+- Keep publication permissions, schedules, revisions, rollback, audit logs, per-channel quotas and an emergency kill switch. Marketing automation cannot override unsubscribe/suppression records or provider restrictions.
+- Store public content and customer-specific marketing drafts with different access controls. Never expose private leads, connected-account data, campaign details, secrets, billing records or customer reports to public crawlers.
+- Measure discovery and conversion with privacy-respecting analytics. Report measured evidence, not promised rankings, AI citations, or guaranteed growth.
+
 ## Quality gates
 - Follow docs/QUALITY_STANDARDS.md for WCAG 2.2 AA, technical SEO, responsive design, and Core Web Vitals.
 - Follow docs/SAAS_PLATFORM_REQUIREMENTS.md for customer accounts, subscription billing, entitlements, quotas, tenant isolation, payment security, and launch tests.
