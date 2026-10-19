@@ -145,6 +145,25 @@ class WorkspaceJobQueue:
         result["id"] = str(result["id"])
         return result
 
+    async def extend_lease(
+        self, *, job_id: str | UUID, worker_id: str, lease_seconds: int = 300
+    ) -> bool:
+        """Extend an owned, still-valid lease; stale workers cannot resurrect it."""
+        if not worker_id or len(worker_id) > 200:
+            raise ValueError("A valid worker identifier is required")
+        if not 5 <= lease_seconds <= 900:
+            raise ValueError("lease_seconds must be between 5 and 900")
+        now = datetime.now(timezone.utc)
+        async with self._pool.acquire() as connection:
+            status = await connection.execute(
+                """UPDATE workspace_jobs
+                   SET lease_expires_at=$4 + ($3 * interval '1 second'), updated_at=$4
+                   WHERE id=$1 AND status='running' AND locked_by=$2
+                     AND lease_expires_at > $4""",
+                UUID(str(job_id)), worker_id, lease_seconds, now,
+            )
+        return status.endswith(" 1")
+
     async def complete(
         self, *, job_id: str | UUID, worker_id: str, result: dict[str, Any]
     ) -> bool:
