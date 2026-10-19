@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 class BrowserSecurityConfigurationError(ValueError):
     """Raised for unsafe cookie or CSRF configuration."""
@@ -56,14 +57,27 @@ def origin_matches(request_origin: str | None, expected_origin: str) -> bool:
     """Require exact HTTPS origin equality; expected_origin must come from config."""
     if not isinstance(request_origin, str) or not isinstance(expected_origin, str):
         return False
+
     def normalize(value: str) -> str | None:
         value = value.strip()
-        if not value.startswith("https://") or any(ch in value for ch in "\r\n\\"):
+        if not value or any(ch in value for ch in "\\r\\n\\\\"):
             return None
-        origin = value.rstrip("/")
-        if any(ch in origin for ch in "?#") or "@" in origin[8:]:
+        try:
+            parsed = urlsplit(value)
+            # Origin headers contain only scheme + authority; permit a single trailing slash
+            # for configured origins, but reject paths, query strings, fragments, and userinfo.
+            if parsed.scheme.lower() != "https" or not parsed.hostname:
+                return None
+            if parsed.username is not None or parsed.password is not None:
+                return None
+            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+                return None
+            port = parsed.port
+            host = parsed.hostname.lower()
+            return f"https://{host}" + (f":{port}" if port is not None and port != 443 else "")
+        except ValueError:
             return None
-        return origin.lower()
+
     actual = normalize(request_origin)
     expected = normalize(expected_origin)
     return actual is not None and expected is not None and actual == expected
