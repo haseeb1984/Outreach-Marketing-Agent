@@ -206,3 +206,31 @@ class WorkspaceJobQueue:
                     UUID(str(job_id)), worker_id, error_code, now, retry_delay_seconds,
                 )
                 return "queued_for_retry"
+
+    async def get_status(self, *, workspace_id: str, job_id: str | UUID) -> dict[str, Any] | None:
+        """Read job metadata only inside the owning workspace; omit raw payload/result."""
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """SELECT id, workspace_id, job_type, status, attempt_count, max_attempts,
+                          error_code, created_at, started_at, finished_at, updated_at
+                   FROM workspace_jobs WHERE id=$1 AND workspace_id=$2""",
+                UUID(str(job_id)), str(workspace_id),
+            )
+        if row is None:
+            return None
+        result = dict(row)
+        result["id"] = str(result["id"])
+        return result
+
+    async def cancel(self, *, workspace_id: str, job_id: str | UUID) -> bool:
+        """Cancel queued jobs only; running workers must finish or lose their lease."""
+        now = datetime.now(timezone.utc)
+        async with self._pool.acquire() as connection:
+            status = await connection.execute(
+                """UPDATE workspace_jobs
+                   SET status='cancelled', finished_at=$3, updated_at=$3
+                   WHERE id=$1 AND workspace_id=$2 AND status='queued'""",
+                UUID(str(job_id)), str(workspace_id), now,
+            )
+        return status.endswith(" 1")
+
