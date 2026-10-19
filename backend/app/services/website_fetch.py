@@ -64,6 +64,7 @@ async def fetch_html(
     client: httpx.AsyncClient | None = None,
     limits: FetchLimits = FetchLimits(),
     resolver: Resolver = resolve_public_addresses,
+    allowed_hosts: set[str] | None = None,
 ) -> FetchedPage:
     """Fetch a single HTML page with bounded redirects and response size.
 
@@ -85,7 +86,9 @@ async def fetch_html(
         for redirect_count in range(limits.max_redirects + 1):
             current_url = validate_page_url(current_url)
             parsed = urlsplit(current_url)
-            host = parsed.hostname or ""
+            host = (parsed.hostname or "").lower().rstrip(".")
+            if allowed_hosts is not None and host not in {item.lower().rstrip(".") for item in allowed_hosts}:
+                raise ValueError("Request host is outside the allowed host scope")
             port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
             addresses = await resolver(host, port)
             if not addresses:
@@ -105,8 +108,11 @@ async def fetch_html(
                     if redirect_count >= limits.max_redirects:
                         raise ValueError("Maximum redirect count exceeded")
                     current_url = urljoin(current_url, location)
-                    # Validate before the next request; the next loop rechecks DNS.
+                    # Validate destination and scope before any request to it.
                     validate_page_url(current_url)
+                    destination_host = (urlsplit(current_url).hostname or "").lower().rstrip(".")
+                    if allowed_hosts is not None and destination_host not in {item.lower().rstrip(".") for item in allowed_hosts}:
+                        raise ValueError("Redirect destination is outside the allowed host scope")
                     continue
                 content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
                 if content_type not in {"text/html", "application/xhtml+xml"}:
