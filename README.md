@@ -1,6 +1,6 @@
 # Outreach Marketing Agent
 
-A commercial, multi-tenant SaaS platform for AI-assisted influencer, partnership, and outreach work. Customers will be able to register, manage isolated workspaces/projects, research relevant public-facing prospects, draft personalized outreach, manage replies, review campaign outcomes, and pay for plan-based access.
+A commercial, multi-tenant SaaS platform whose core job is to help client businesses win more qualified opportunities and improve organic search performance through business-aware prospect discovery, personalized email/WhatsApp outreach, competitor intelligence, and website crawlability/SEO optimization. Customers will be able to register, manage isolated workspaces/projects, research public-facing prospects and competing pages, draft personalized outreach, track replies and SEO outcomes, and pay for plan-based access.
 
 ## Product principles
 
@@ -13,6 +13,17 @@ A commercial, multi-tenant SaaS platform for AI-assisted influencer, partnership
 - **Provider portability:** use interfaces for LLMs, search providers, email, official WhatsApp Business Platform, payment/billing providers, and job queues.
 - **Accessible and usable by design:** target WCAG 2.2 Level AA, with keyboard and screen-reader support across core workflows.
 - **Fast and technically discoverable:** public pages must meet technical SEO requirements and target good Core Web Vitals; private dashboard/account/billing pages must not be indexed.
+
+## Core product priorities (must-have)
+
+These are the product's primary value, not optional add-ons. Build and test them before expanding into secondary marketing channels:
+
+1. **Business/client discovery and qualification:** understand the client's actual business, offer, audience, market, location, language, ideal customers, and competitors; discover relevant prospects with source evidence, deduplication, fit reasons, and prioritization.
+2. **Business-specific outreach:** generate genuinely personalized messages from verified prospect and client facts, with email as a core channel and WhatsApp through the official WhatsApp Business Platform only where eligible. Include review/approval, reply handling, opt-outs, suppression, sending limits, deliverability controls, and auditable outcomes.
+3. **Competitor intelligence and search strategy:** identify relevant competing pages and search intent; compare visible content coverage, site structure, technical signals, public authority/link evidence where available, and user experience. Prioritize actions from evidence rather than pretending to know private ranking algorithms.
+4. **Website crawlability and SEO improvement:** safely crawl authorized public pages, find indexability and technical/content gaps, create prioritized recommendations, and verify approved changes with repeatable checks. Connect authorized Search Console/analytics data when available to measure real results.
+
+Other channels—paid ads, social publishing, video campaigns, influencer programs beyond core outreach, local/e-commerce specialist modules, reputation monitoring, advanced CRO experiments, and retention automation—are optional modules selected only when relevant to the client's business and approved budget.
 
 ## Planned capabilities
 
@@ -30,7 +41,7 @@ A commercial, multi-tenant SaaS platform for AI-assisted influencer, partnership
 
 
 12. AI discoverability and responsible self-marketing for this SaaS itself: crawlable public product/docs pages, sitemap, robots.txt, maintained /llms.txt, truthful structured data, evidence-based content planning, and compliant promotion.
-13. Per-client website growth engine: AI/search crawler readiness and technical SEO audits for every authorized client domain, plus adaptive content, AEO/GEO, digital PR, local/e-commerce SEO, social, email lifecycle, influencer/partner outreach, optional paid acquisition, CRO, analytics, reputation, video, and retention strategies.
+13. Core per-client growth engine: competitor-aware SEO and crawlability improvement tied to measurable search outcomes, plus client/business discovery and personalized email/official WhatsApp outreach. Other marketing channels remain optional.
 
 ## AI crawler discoverability and self-marketing
 
@@ -59,6 +70,10 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 - Security and compliance requirements in [docs/SAFETY_AND_COMPLIANCE.md](docs/SAFETY_AND_COMPLIANCE.md) remain mandatory and take priority over visual, SEO, performance, and revenue goals.
 - Do not accept real payments until provider eligibility, verified billing lifecycle, authorization, sandbox tests, policies, support and operational readiness have been checked.
 - Do not claim a standard, integration, or end-to-end workflow is complete until relevant checks have run and evidence is recorded.
+
+## Ranking and competitive-performance objective
+
+The product should be engineered to maximize the chance of beating relevant competitors through evidence-led diagnosis, prioritization, approved implementation, and repeated measurement—not merely produce audit reports. Use verified public search guidance and authorized first-party performance data; never claim access to a search engine's private algorithm or promise a fixed ranking result. Establish a baseline per client, define target queries and business KPIs, track changes over a suitable period, and report measured gains, losses, confidence, and likely contributing work. A 90–95% ranking improvement is an ambitious aspiration, not a result that can honestly be guaranteed across every site, query, market, and timeframe.
 
 ## Development status
 
