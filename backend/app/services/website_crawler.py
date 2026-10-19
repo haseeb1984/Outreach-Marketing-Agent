@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from urllib.parse import urldefrag, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from app.services.website_audit import analyze_html, validate_page_url
 from app.services.website_fetch import FetchLimits, Resolver, fetch_html
+from app.services.robots_sitemap import evaluate_robots_path
 
 
 def _normalize_crawl_url(value: str) -> str:
@@ -32,6 +33,8 @@ async def crawl_website(
     max_depth: int = 2,
     limits: FetchLimits = FetchLimits(),
     resolver: Resolver | None = None,
+    robots_txt: str | None = None,
+    user_agent: str = "OutreachMarketingAgentAudit",
 ) -> dict:
     """Crawl a bounded number of same-host pages and aggregate deterministic findings.
 
@@ -51,6 +54,7 @@ async def crawl_website(
     pages: list[dict] = []
     errors: list[dict] = []
     cross_host_redirects: list[dict] = []
+    robots_blocked: list[dict] = []
     findings_by_code: dict[str, dict] = {}
 
     while queue and len(pages) < max_pages:
@@ -58,6 +62,19 @@ async def crawl_website(
         if requested in visited:
             continue
         visited.add(requested)
+        if robots_txt is not None:
+            parts = urlsplit(requested)
+            path = parts.path or "/"
+            if parts.query:
+                path += "?" + parts.query
+            decision = evaluate_robots_path(body=robots_txt, path=path, user_agent=user_agent)
+            if not decision["allowed"]:
+                robots_blocked.append({
+                    "url": requested,
+                    "matched_rule": decision["matched_rule"],
+                    "action": "skipped_due_to_robots_txt",
+                })
+                continue
         kwargs = {"limits": limits, "allowed_hosts": {allowed_host}}
         if resolver is not None:
             kwargs["resolver"] = resolver
@@ -131,12 +148,13 @@ async def crawl_website(
         "pages": pages,
         "errors": errors,
         "cross_host_redirects_not_crawled": cross_host_redirects,
+        "robots_blocked_pages": robots_blocked,
         "aggregate_findings": sorted(
             findings_by_code.values(),
             key=lambda item: (-item["occurrences"], item["code"]),
         ),
         "limitations": [
-            "Only same-host HTML pages linked from fetched HTML are discovered; sitemap and robots integration is separate.",
+            "Robots rules are enforced only when robots_txt is supplied by a trusted bounded retrieval layer; this crawler does not fetch robots.txt itself.",
             "This is a bounded source-HTML crawl, not a JavaScript-rendered, accessibility, performance, or search-index audit.",
             "DNS is checked before each request, but production multi-tenant use still requires connection-pinned egress to eliminate DNS-rebinding races.",
             "The crawler is not exposed as an API endpoint; authentication, workspace authorization, quotas, and abuse controls are required first.",
