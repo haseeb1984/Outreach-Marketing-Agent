@@ -66,7 +66,19 @@ Implementation is phased. A phase is not complete merely because files exist; au
 - [ ] Verify mobile/tablet/desktop layouts, zoom/reflow, supported browsers, payment flows, and error/recovery states.
 - Exit: release evidence recorded per docs/QUALITY_STANDARDS.md; no critical barriers in core tasks and no critical/high security blockers.
 
-## Phase 9 — Production hardening and launch
+## Phase 9 — AI discoverability and self-marketing
+- [ ] Publish server-rendered/crawlable public marketing, pricing, product, documentation, FAQ, changelog and policy pages with accurate metadata and canonical URLs.
+- [ ] Add and validate sitemap.xml and robots.txt; ensure neither exposes private data or blocks required public assets.
+- [ ] Publish and maintain /llms.txt as a helpful public documentation index, without assuming every AI crawler supports it.
+- [ ] Add accurate structured data only where visible content supports it; prohibit fabricated reviews, ratings, feature claims and statistics.
+- [ ] Add approved content planning and drafting based on verified features, evidence, user questions and measured demand.
+- [ ] Implement factual claim checks, broken-link checks, SEO/accessibility checks, human approval, version history, scheduling, rollback and a marketing kill switch.
+- [ ] Add privacy-respecting analytics for organic discovery, qualified signups, activation and conversions; connect official webmaster tools only with user authorization.
+- [ ] Test crawler access to public routes and verify private/authenticated routes remain inaccessible to anonymous crawlers and other tenants.
+- [ ] Ensure promotion channels use authorized integrations and respect anti-spam requirements, opt-outs, provider limits and explicit automation consent.
+- Exit: public crawlability and marketing workflow have recorded tests; no claim is made that AI platforms will index or recommend the product.
+
+## Phase 10 — Production hardening and launch
 - [ ] Authorization/security review, dependency scanning and backups.
 - [ ] Concurrency/load tests, retention/deletion and operational alerts.
 - [ ] Payment webhook reconciliation, billing/support runbooks, backup restore and incident drills.
