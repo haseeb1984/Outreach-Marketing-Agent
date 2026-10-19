@@ -132,13 +132,15 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_memberships') IS NOT NULL
                      AND to_regclass('public.auth_sessions') IS NOT NULL
                      AND to_regclass('public.security_audit_events') IS NOT NULL
+                     AND to_regclass('public.auth_rate_limit_buckets') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
                             '002_workspace_jobs.sql',
-                            '003_authentication_foundation.sql'
-                          )) = 3"""
+                            '003_authentication_foundation.sql',
+                            '004_auth_rate_limits.sql'
+                          )) = 4"""
             )
             if not schema_ready:
                 return JSONResponse(
