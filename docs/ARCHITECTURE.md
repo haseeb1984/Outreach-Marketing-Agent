@@ -68,6 +68,17 @@ Ingest verifiable provider and user-supplied conversion events → reconcile by 
 - Store public content and customer-specific marketing drafts with different access controls. Never expose private leads, connected-account data, campaign details, secrets, billing records or customer reports to public crawlers.
 - Measure discovery and conversion with privacy-respecting analytics. Report measured evidence, not promised rankings, AI citations, or guaranteed growth.
 
+
+## Per-client website growth and modern marketing
+- Each workspace can own separate client/business profiles and explicitly authorized domains. Store goals, markets/languages, audience, brand constraints, budgets, approved channels, baseline metrics, and authorization evidence.
+- The website audit service is read-only by default. It uses SSRF-safe fetch/crawl controls and returns evidence-backed observations, not unsupported assumptions.
+- A strategy orchestrator selects relevant modules from technical SEO, AI/search crawler readiness, content/topic authority, AEO/GEO, digital PR, local/e-commerce SEO, social/community, email lifecycle, influencer/partner outreach, paid acquisition, CRO, analytics, reputation, video and retention.
+- Strategy decisions consume verified client facts, authorized analytics, current audit evidence, explicit goals and resource limits. Each recommendation records sources, date, confidence, impact hypothesis, effort/cost, KPI, risk and approval state.
+- Execution connectors are separate from planning. Website writes, CMS publishing, DNS changes, ad spend, emails, social posting and external messages require scoped authorization and configurable approval. Quotas, suppression, provider policies, idempotency, audit history and a kill switch apply at execution time.
+- Analytics distinguishes observed, calculated, estimated, recommended, completed and unknown results; no invented traffic, rankings, citations, leads or ROI.
+- Public crawler endpoints and the client's public website content are not granted access to workspace data, customer credentials, lead records, campaign drafts or private reports. Tenant isolation and object-level authorization apply to every request and job.
+- Full specification and acceptance criteria: docs/CLIENT_WEBSITE_GROWTH_ENGINE.md.
+
 ## Quality gates
 - Follow docs/QUALITY_STANDARDS.md for WCAG 2.2 AA, technical SEO, responsive design, and Core Web Vitals.
 - Follow docs/SAAS_PLATFORM_REQUIREMENTS.md for customer accounts, subscription billing, entitlements, quotas, tenant isolation, payment security, and launch tests.
