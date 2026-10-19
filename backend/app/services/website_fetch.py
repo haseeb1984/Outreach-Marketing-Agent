@@ -65,8 +65,12 @@ async def fetch_html(
     limits: FetchLimits = FetchLimits(),
     resolver: Resolver = resolve_public_addresses,
     allowed_hosts: set[str] | None = None,
+    accepted_content_types: set[str] | None = None,
 ) -> FetchedPage:
     """Fetch a single HTML page with bounded redirects and response size.
+
+    By default only HTML/XHTML is accepted. Trusted callers may pass a narrow set
+    of additional content types for robots.txt or XML sitemap documents.
 
     Injected clients are useful for tests. Production callers should use the default
     client or a vetted transport/egress proxy, never a client with redirect following
@@ -115,8 +119,9 @@ async def fetch_html(
                         raise ValueError("Redirect destination is outside the allowed host scope")
                     continue
                 content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-                if content_type not in {"text/html", "application/xhtml+xml"}:
-                    raise ValueError("Target response is not HTML")
+                permitted_types = accepted_content_types or {"text/html", "application/xhtml+xml"}
+                if content_type not in permitted_types:
+                    raise ValueError("Target response content type is not permitted")
                 content_length = response.headers.get("content-length")
                 if content_length:
                     try:
@@ -153,3 +158,30 @@ async def fetch_html(
     finally:
         if owns_client:
             await active_client.aclose()
+
+
+async def fetch_text_document(
+    url: str,
+    *,
+    client: httpx.AsyncClient | None = None,
+    limits: FetchLimits = FetchLimits(max_bytes=500_000),
+    resolver: Resolver = resolve_public_addresses,
+    allowed_hosts: set[str] | None = None,
+    accepted_content_types: set[str] | None = None,
+) -> FetchedPage:
+    """Fetch a bounded text/XML document through the same SSRF and redirect guards."""
+    permitted = accepted_content_types or {
+        "text/plain",
+        "application/xml",
+        "text/xml",
+        "application/rss+xml",
+        "application/atom+xml",
+    }
+    return await fetch_html(
+        url,
+        client=client,
+        limits=limits,
+        resolver=resolver,
+        allowed_hosts=allowed_hosts,
+        accepted_content_types=permitted,
+    )
