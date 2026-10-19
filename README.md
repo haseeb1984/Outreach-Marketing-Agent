@@ -29,13 +29,14 @@ A commercial, multi-tenant SaaS platform for AI-assisted influencer, partnership
 11. Audit logs, privacy/retention controls, monitoring, test coverage, backups, and deployment/incident documentation.
 
 
-12. AI discoverability and responsible self-marketing: crawlable public product/docs pages, sitemap, robots.txt, maintained /llms.txt, truthful structured data, search performance monitoring, evidence-based content planning, approval-controlled publishing, and compliant outreach promotion.
+12. AI discoverability and responsible self-marketing for this SaaS itself: crawlable public product/docs pages, sitemap, robots.txt, maintained /llms.txt, truthful structured data, evidence-based content planning, and compliant promotion.
+13. Per-client website growth engine: AI/search crawler readiness and technical SEO audits for every authorized client domain, plus adaptive content, AEO/GEO, digital PR, local/e-commerce SEO, social, email lifecycle, influencer/partner outreach, optional paid acquisition, CRO, analytics, reputation, video, and retention strategies.
 
 ## AI crawler discoverability and self-marketing
 
 The public website should be understandable to both traditional search engines and AI-powered search/research crawlers. The product will expose useful public HTML, a valid sitemap and robots.txt, and a maintained /llms.txt directory, while keeping customer workspaces, reports, leads, billing data and APIs protected. An optional self-marketing workspace will plan and draft useful, source-backed content, run SEO/accessibility checks, require human approval by default, and measure results. No system can guarantee that AI crawlers will visit, index, cite, or recommend the site. Marketing must not use spam, fabricated claims, doorway pages, fake backlinks, or unauthorized platform automation.
 
-See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY_AND_MARKETING.md). This is a planned capability, not yet an implemented or verified integration.
+See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY_AND_MARKETING.md) for our own site, and [Client Website Growth Engine](docs/CLIENT_WEBSITE_GROWTH_ENGINE.md) for per-client audits, strategy selection, authorization, execution controls, reporting, and acceptance tests. These are requirements, not claims that every module is already implemented.
 
 ## Initial technical direction
 
