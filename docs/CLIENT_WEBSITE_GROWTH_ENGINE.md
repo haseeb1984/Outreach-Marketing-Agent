@@ -1,5 +1,29 @@
 # Client Website Growth and Modern Marketing Engine
 
+## Product priority: core versus optional
+
+The product's core outcome is to help a client win qualified business and improve organic search performance against relevant competitors. The mandatory core is:
+
+1. **Client/business discovery and qualification** based on the real offer, audience, market, intent, competitors, and verified public evidence.
+2. **Business-specific outreach** with tailored email and official WhatsApp Business Platform workflows where eligible, including human approval, suppression/opt-out enforcement, safe sending limits, reply handling, and measurable outcomes.
+3. **Competitor-aware SEO strategy** comparing relevant competing pages and available search-performance evidence to identify the highest-value gaps and opportunities.
+4. **Website crawlability and SEO improvement** through safe audits, prioritized actionable recommendations, authorized implementation workflows, and post-change verification.
+
+Other modules—paid advertising, social publishing, video, advanced influencer programs, digital PR campaigns, reputation management, advanced CRO, retention, and specialist local/e-commerce workflows—are optional and should be enabled only when relevant to the client and approved by them. Do not let optional breadth delay the four core workflows.
+
+## Ranking objective and honest measurement
+
+The system must actively pursue improved organic visibility and competitive performance; an audit-only product is insufficient. It should:
+
+- Establish a baseline for target queries/pages and available KPIs before making recommendations.
+- Use current published search-engine guidance, observed public competitor evidence, and authorized Search Console/analytics data where available. Do not claim to know private ranking algorithms or use unsupported “secret ranking factor” scores.
+- Compare search intent, content completeness and usefulness, information architecture, crawl/indexability, internal linking, structured data accuracy, page experience, and credible external authority evidence where observable.
+- Prioritize improvements by evidence strength, expected impact, effort, confidence, business value, and risk; execute only within client-approved permissions.
+- Re-crawl and measure after changes, report what improved or regressed, and update the strategy from results.
+- Track rankings and visibility for an agreed query set over a defined period, while separating correlation from proven causation.
+
+The 90–95% improvement ambition is a product goal to pursue, not a universal guarantee: rankings are relative, query-specific, time-dependent, and affected by competition and search-engine changes outside the application's control. The application must never fake results or promise a fixed uplift. Its responsibility is to do the evidence-led work, verify changes, and make performance transparent.
+
 ## Purpose and scope
 
 The product markets client websites and businesses, not only itself. For each client, it should build an evidence-backed growth plan spanning traditional search, AI-powered search/research discovery, technical website quality, content, distribution, conversion, retention, and measurable business outcomes. The plan adapts to business type, geography, audience, goals, budget, available data, and verified capabilities.
@@ -36,9 +60,9 @@ This document is a product specification, not proof that the listed integrations
 - Monitor crawler access logs or authorized webmaster/search analytics where available. Separate observed requests/indexing data from estimates.
 - Do not promise that any AI system will crawl, index, cite, mention, or recommend a site. Do not use cloaking, hidden text, fake entities, synthetic reviews, mass-produced near-duplicate pages, or prompt-injection tricks intended to manipulate AI systems.
 
-## 3. Modern marketing strategy modules
+## 3. Optional marketing strategy modules
 
-The strategy engine should select appropriate modules rather than turn every channel on for every client.
+These are optional add-ons, not prerequisites for the core product. The strategy engine should select only appropriate modules rather than turn every channel on for every client.
 
 1. **Technical SEO:** crawl/indexation, information architecture, internal links, canonicalization, sitemap/robots, redirects, duplicate content, international SEO, image SEO, structured data, mobile rendering, speed and accessibility.
 2. **Content and topical authority:** audience research, topic clusters, content gap analysis, briefs, expert-reviewed articles, guides, case studies with permission, templates, tools, glossary pages, video transcripts, refresh plans, and editorial calendar.
