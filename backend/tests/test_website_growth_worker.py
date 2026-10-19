@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.workers.website_growth_worker import process_claimed_job, validate_scan_payload
@@ -48,8 +50,7 @@ class FakeQueue:
         return "failed"
 
 
-@pytest.mark.asyncio
-async def test_process_claimed_job_completes_and_uses_database_workspace_identity():
+def test_process_claimed_job_completes_and_uses_database_workspace_identity():
     queue = FakeQueue()
     job = {
         "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
@@ -67,17 +68,16 @@ async def test_process_claimed_job_completes_and_uses_database_workspace_identit
         seen.update(kwargs)
         return {"status": "report_ready_for_human_review", "actions": []}
 
-    outcome = await process_claimed_job(
+    outcome = asyncio.run(process_claimed_job(
         queue=queue, domain_store=object(), job=job, worker_id="worker-1", scan_runner=runner
-    )
+    ))
     assert outcome == "succeeded"
     assert seen["workspace_id"] == "trusted-db-workspace"
     assert seen["max_pages"] == 10
     assert queue.completed["result"]["status"] == "report_ready_for_human_review"
 
 
-@pytest.mark.asyncio
-async def test_process_claimed_job_returns_lease_lost_if_completion_is_fenced():
+def test_process_claimed_job_returns_lease_lost_if_completion_is_fenced():
     queue = FakeQueue(complete=False)
     job = {
         "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
@@ -88,20 +88,19 @@ async def test_process_claimed_job_returns_lease_lost_if_completion_is_fenced():
     async def runner(url, **kwargs):
         return {"status": "report_ready_for_human_review"}
 
-    outcome = await process_claimed_job(
+    outcome = asyncio.run(process_claimed_job(
         queue=queue, domain_store=object(), job=job, worker_id="worker-1", scan_runner=runner
-    )
+    ))
     assert outcome == "lease_lost"
 
 
-@pytest.mark.asyncio
-async def test_process_claimed_job_records_safe_failure_code():
+def test_process_claimed_job_records_safe_failure_code():
     queue = FakeQueue()
 
     async def runner(url, **kwargs):
         raise ValueError("verified_domain_not_authorized")
 
-    outcome = await process_claimed_job(
+    outcome = asyncio.run(process_claimed_job(
         queue=queue,
         domain_store=object(),
         job={
@@ -111,6 +110,6 @@ async def test_process_claimed_job_records_safe_failure_code():
         },
         worker_id="worker-1",
         scan_runner=runner,
-    )
+    ))
     assert outcome == "failed"
     assert queue.failed["error_code"] == "website_scan_rejected"
