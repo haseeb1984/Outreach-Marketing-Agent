@@ -31,6 +31,8 @@ def test_pipeline_composes_discovery_crawl_and_growth_report(monkeypatch):
         "https://client.example/",
         business_type="local service",
         target_market="Karachi",
+        workspace_id="workspace-1",
+        verified_domains=[{"domain": "client.example", "workspace_id": "workspace-1", "status": "verified"}],
         target_queries=["service Karachi"],
     ))
     assert result["status"] == "report_ready_for_human_review"
@@ -61,6 +63,8 @@ def test_pipeline_does_not_generate_actions_when_discovery_fails_closed(monkeypa
         business_type="SaaS",
         target_market="Global",
         target_queries=["software"],
+        workspace_id="workspace-1",
+        verified_domains=[{"domain": "client.example", "workspace_id": "workspace-1", "status": "verified"}],
     ))
     assert result["status"] == "crawl_skipped"
     assert result["strategy"]["actions"] == []
