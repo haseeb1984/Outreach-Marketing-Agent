@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.services.auth_security import new_opaque_token, token_digest
 
@@ -41,7 +41,7 @@ class AuthStore:
         token = new_opaque_token()
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=verification_lifetime_hours)
-        workspace_id = str(UUID(bytes=__import__("secrets").token_bytes(16), version=4))
+        workspace_id = str(uuid4())
         async with self._pool.acquire() as connection:
             async with connection.transaction():
                 user = await connection.fetchrow(
