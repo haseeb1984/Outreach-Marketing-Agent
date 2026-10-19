@@ -22,9 +22,9 @@ CREATE TABLE IF NOT EXISTS workspace_domains (
     ),
     UNIQUE (workspace_id, domain_ascii),
     CHECK (
-        (status = 'verified' AND verified_at IS NOT NULL AND revoked_at IS NULL)
-        OR status <> 'verified'
-        OR revoked_at IS NULL
+        (status = 'pending' AND verified_at IS NULL AND revoked_at IS NULL)
+        OR (status = 'verified' AND verified_at IS NOT NULL AND revoked_at IS NULL)
+        OR (status = 'revoked' AND revoked_at IS NOT NULL)
     )
 );
 
