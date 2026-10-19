@@ -58,13 +58,20 @@ async def crawl_website(
         if requested in visited:
             continue
         visited.add(requested)
-        kwargs = {"limits": limits}
+        kwargs = {"limits": limits, "allowed_hosts": {allowed_host}}
         if resolver is not None:
             kwargs["resolver"] = resolver
         try:
             fetched = await fetch_html(requested, **kwargs)
         except (ValueError, OSError) as exc:
-            errors.append({"url": requested, "depth": depth, "error": str(exc)})
+            if "outside the allowed host scope" in str(exc):
+                cross_host_redirects.append({
+                    "requested_url": requested,
+                    "action": "redirect_blocked_before_request",
+                    "reason": str(exc),
+                })
+            else:
+                errors.append({"url": requested, "depth": depth, "error": str(exc)})
             continue
 
         final_url = _normalize_crawl_url(fetched.final_url)
