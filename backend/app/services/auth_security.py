@@ -26,7 +26,7 @@ def hash_password(password: str) -> PasswordHash:
     return PasswordHash("scrypt$" + str(_SCRYPT_N) + "$" + str(_SCRYPT_R) + "$" + str(_SCRYPT_P) + "$" + salt.hex() + "$" + digest.hex())
 
 def verify_password(password: str, encoded: str) -> bool:
-    if not isinstance(password, str) or not isinstance(encoded, str): return False
+    if not isinstance(password, str) or len(password) > 1024 or not isinstance(encoded, str) or len(encoded) > 512: return False
     try:
         algorithm, n_text, r_text, p_text, salt_hex, digest_hex = encoded.split("$")
         n, r, p = int(n_text), int(r_text), int(p_text)
