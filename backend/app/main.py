@@ -123,6 +123,16 @@ async def readiness() -> Response:
     try:
         async with pool.acquire() as connection:
             await connection.fetchval("SELECT 1")
+            schema_ready = await connection.fetchval(
+                """SELECT to_regclass('public.workspace_domains') IS NOT NULL
+                   AND to_regclass('public.domain_verification_challenges') IS NOT NULL
+                   AND to_regclass('public.schema_migrations') IS NOT NULL"""
+            )
+            if not schema_ready:
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "not_ready", "reason": "database_schema_not_migrated"},
+                )
     except Exception:
         return JSONResponse(
             status_code=503,
