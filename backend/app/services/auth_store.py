@@ -260,7 +260,8 @@ class AuthStore:
             digest = token_digest(token)
         except ValueError:
             return False
-        password_hash = hash_password(new_password).encoded
+        if not isinstance(new_password, str) or not 12 <= len(new_password) <= 1024:
+            raise ValueError("password_length_out_of_range")
         now = datetime.now(timezone.utc)
         async with self._pool.acquire() as connection:
             async with connection.transaction():
@@ -276,6 +277,7 @@ class AuthStore:
                 )
                 if reset is None:
                     return False
+                password_hash = hash_password(new_password).encoded
                 updated = await connection.fetchrow(
                     """UPDATE app_users SET password_hash=$2, updated_at=$3
                        WHERE id=$1 AND status='active'
