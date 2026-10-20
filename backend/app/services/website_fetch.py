@@ -23,6 +23,31 @@ from app.services.website_audit import validate_page_url
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
+def _validate_trusted_proxy_url(value: str | None) -> str:
+    """Validate proxy URL shape without echoing potentially sensitive configuration."""
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError("Trusted egress proxy URL is invalid")
+    if any(ord(char) < 32 for char in value):
+        raise ValueError("Trusted egress proxy URL is invalid")
+    try:
+        parsed = urlsplit(value)
+        # Credentials in proxy URLs can leak through diagnostics; configure proxy auth
+        # using deployment-managed transport secrets rather than embedding userinfo.
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("Trusted egress proxy URL is invalid")
+        _ = parsed.port  # Force validation of malformed/out-of-range ports.
+    except ValueError:
+        raise ValueError("Trusted egress proxy URL is invalid") from None
+    return value
+
+
 @dataclass(frozen=True)
 class FetchLimits:
     timeout_seconds: float = 8.0
@@ -81,15 +106,18 @@ async def fetch_html(
     requested_url = validate_page_url(url)
     owns_client = client is None
     is_production = settings.environment.strip().lower() == "production"
-    if is_production and not settings.trusted_egress_proxy_url:
-        raise ValueError("Trusted egress proxy is required in production")
+    proxy_url = None
+    if is_production:
+        if not settings.trusted_egress_proxy_url:
+            raise ValueError("Trusted egress proxy is required in production")
+        proxy_url = _validate_trusted_proxy_url(settings.trusted_egress_proxy_url)
     if is_production and client is not None:
         raise ValueError("Injected HTTP clients are disabled in production")
     active_client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(limits.timeout_seconds),
         follow_redirects=False,
         trust_env=False,
-        proxy=settings.trusted_egress_proxy_url if is_production else None,
+        proxy=proxy_url,
         headers={"User-Agent": "OutreachMarketingAgentAudit/0.1 (+read-only; bounded-fetch)"},
     )
     current_url = requested_url
