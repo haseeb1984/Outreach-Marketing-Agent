@@ -103,27 +103,49 @@ async def process_claimed_job(
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code=str(exc)[:100]
             )
+        scan_task = asyncio.create_task(scan_runner(
+            payload["start_url"],
+            workspace_id=str(job["workspace_id"]),
+            domain_store=domain_store,
+            business_type=payload["business_type"],
+            target_market=payload["target_market"],
+            target_queries=payload["target_queries"],
+            max_pages=payload["max_pages"],
+            max_depth=payload["max_depth"],
+        ))
+        lost_waiter = asyncio.create_task(lost.wait())
         try:
-            report = await scan_runner(
-                payload["start_url"],
-                workspace_id=str(job["workspace_id"]),
-                domain_store=domain_store,
-                business_type=payload["business_type"],
-                target_market=payload["target_market"],
-                target_queries=payload["target_queries"],
-                max_pages=payload["max_pages"],
-                max_depth=payload["max_depth"],
+            done, _ = await asyncio.wait(
+                {scan_task, lost_waiter}, return_when=asyncio.FIRST_COMPLETED
             )
+            if lost_waiter in done and lost.is_set() and not scan_task.done():
+                scan_task.cancel()
+                try:
+                    await scan_task
+                except asyncio.CancelledError:
+                    pass
+                return "lease_lost"
+            report = await scan_task
         except ValueError:
             # Avoid persisting potentially sensitive exception details in job metadata.
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
             )
+        except asyncio.CancelledError:
+            scan_task.cancel()
+            raise
         except Exception:
             logger.warning("website growth job failed; recording a generic failure code")
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code="website_growth_scan_failed"
             )
+        finally:
+            if not lost_waiter.done():
+                lost_waiter.cancel()
+            try:
+                await lost_waiter
+            except asyncio.CancelledError:
+                pass
         if lost.is_set():
             return "lease_lost"
         try:
