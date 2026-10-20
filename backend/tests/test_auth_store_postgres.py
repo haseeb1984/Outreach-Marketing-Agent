@@ -42,6 +42,7 @@ async def _exercise_password_reset() -> None:
             "007_workspace_outreach_drafts.sql",
             "008_workspace_campaigns.sql",
             "009_workspace_prospects.sql",
+            "010_draft_prospect_link.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
