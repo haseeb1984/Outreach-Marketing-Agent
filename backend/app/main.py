@@ -186,8 +186,9 @@ async def readiness() -> Response:
                             '006_password_reset_tokens.sql',
                             '007_workspace_outreach_drafts.sql',
                             '008_workspace_campaigns.sql',
-                            '009_workspace_prospects.sql'
-                          )) = 9"""
+                            '009_workspace_prospects.sql',
+                            '010_draft_prospect_link.sql'
+                          )) = 10"""
             )
             if not schema_ready:
                 return JSONResponse(
