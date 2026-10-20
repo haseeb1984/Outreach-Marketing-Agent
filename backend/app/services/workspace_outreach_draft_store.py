@@ -123,7 +123,7 @@ class WorkspaceOutreachDraftStore:
         if row is None:
             raise ValueError("draft_not_found")
         result = dict(row)
-        for key in ("id", "workspace_id", "created_by", "reviewed_by"):
+        for key in ("id", "workspace_id", "campaign_id", "created_by", "reviewed_by"):
             if result.get(key) is not None:
                 result[key] = str(result[key])
         for key in ("created_at", "updated_at", "reviewed_at"):
