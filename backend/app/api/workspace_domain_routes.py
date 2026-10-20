@@ -181,6 +181,16 @@ async def verify_domain_challenge(
 async def revoke_verified_domain(workspace_id: str, domain: str, request: Request):
     domain_store, session = await _authorize(request, workspace_id, "admin")
     _check_csrf(request, session)
+    limiter = getattr(request.app.state, "auth_rate_limiter", None)
+    if limiter is None:
+        raise HTTPException(status_code=503, detail="workspace_domains_unavailable")
+    await _consume(
+        limiter,
+        namespace="domain-revoke",
+        identifier=str(workspace_id) + ":" + str(session["user_id"]),
+        limit=20,
+        window=3600,
+    )
     try:
         normalized = normalize_domain(domain)
         revoked = await domain_store.revoke_domain(
