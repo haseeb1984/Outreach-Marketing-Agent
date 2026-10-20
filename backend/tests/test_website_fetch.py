@@ -371,3 +371,36 @@ def test_production_fetch_constructs_client_with_configured_egress_proxy(monkeyp
     assert captured["trust_env"] is False
     assert captured["follow_redirects"] is False
     assert result.body == "<title>proxy-routed</title>"
+
+
+@pytest.mark.parametrize(
+    "proxy_url",
+    [
+        "ftp://egress-proxy.internal:3128",
+        "http:///missing-host",
+        "http://user:password@egress-proxy.internal:3128",
+        "http://egress-proxy.internal:99999",
+        "http://egress-proxy.internal:3128?debug=true",
+        "http://egress-proxy.internal:3128#fragment",
+        " http://egress-proxy.internal:3128",
+    ],
+)
+def test_production_fetch_rejects_unsafe_proxy_url_shape(monkeypatch, proxy_url):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "trusted_egress_proxy_url", proxy_url)
+
+    with pytest.raises(ValueError, match="Trusted egress proxy URL is invalid"):
+        asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
+
+
+def test_production_fetch_accepts_configured_proxy_url_shape(monkeypatch):
+    from app.services.website_fetch import _validate_trusted_proxy_url
+
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(
+        settings, "trusted_egress_proxy_url", "http://egress-proxy.internal:3128"
+    )
+
+    assert _validate_trusted_proxy_url(settings.trusted_egress_proxy_url) == (
+        "http://egress-proxy.internal:3128"
+    )
