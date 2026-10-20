@@ -33,6 +33,9 @@ def validate_page_url(value: str) -> str:
         raise ValueError("URL must have a hostname and must not contain credentials")
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("Invalid URL port")
+    effective_port = port or (443 if parsed.scheme.lower() == "https" else 80)
+    if effective_port not in {80, 443}:
+        raise ValueError("Only standard HTTP and HTTPS ports are allowed")
     host = parsed.hostname.rstrip(".").lower()
     if host in {"localhost", "localhost.localdomain"} or host.endswith(".localhost"):
         raise ValueError("Localhost URLs are not allowed")
