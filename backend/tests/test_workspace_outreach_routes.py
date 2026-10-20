@@ -147,3 +147,30 @@ def test_list_drafts_is_workspace_scoped(monkeypatch):
         response = client.get("/api/v1/workspaces/workspace-a/outreach-drafts")
     assert response.status_code == 200
     assert response.json()["drafts"] == []
+
+
+def test_draft_can_be_linked_to_crm_prospect(monkeypatch):
+    data = payload()
+    data["prospect_id"] = "00000000-0000-0000-0000-000000000088"
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, role="member")
+        response = client.post(
+            "/api/v1/workspaces/workspace-a/outreach-drafts",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json=data,
+        )
+    assert response.status_code == 201
+    assert app.state.workspace_outreach_draft_store.created["prospect_id"] == UUID(data["prospect_id"])
+
+
+def test_draft_rejects_malformed_prospect_id(monkeypatch):
+    data = payload()
+    data["prospect_id"] = "not-a-uuid"
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, role="member")
+        response = client.post(
+            "/api/v1/workspaces/workspace-a/outreach-drafts",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json=data,
+        )
+    assert response.status_code == 422
