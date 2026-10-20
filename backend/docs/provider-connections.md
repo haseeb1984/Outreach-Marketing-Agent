@@ -2,7 +2,7 @@
 
 ## Current implementation boundary
 
-Migration 012 stores **connection metadata only** for workspace-owned email and WhatsApp provider accounts. It does not implement OAuth, provider webhooks, token refresh, provider API calls, or message delivery.
+Migration 012 stores **connection metadata only** for workspace-owned email and WhatsApp provider accounts. The API can create an admin-authorized `pending` intent and list safe metadata. It does not implement OAuth, provider webhooks, token refresh, provider API calls, or message delivery.
 
 ## Secret handling
 
@@ -15,8 +15,8 @@ Migration 012 stores **connection metadata only** for workspace-owned email and 
 
 ## Lifecycle
 
-`pending -> connected -> revoked`; validation failures may set `error`. Revoked connections are not reused. Reconnecting should create a new connection record after provider authorization.
+Current API behavior is limited to creating `pending` intent records and listing safe metadata. No customer-facing endpoint can set `connected`, `error`, or `revoked`. When implemented, the intended lifecycle is `pending -> connected -> revoked`; validation failures may set `error`. Revoked connections must not be reused. Reconnecting should create a new record after provider authorization.
 
 ## Release gate
 
-Before exposing connect/disconnect endpoints, implement OAuth state and PKCE where supported, exact redirect URI allowlisting, CSRF protection, workspace-admin authorization, encrypted secret-manager storage, callback replay protection, provider webhook signature checks, token refresh/expiry handling, and integration tests. Until then, sending remains disabled.
+Before adding real connect/disconnect behavior, implement OAuth state and PKCE where supported, exact redirect URI allowlisting, CSRF protection, workspace-admin authorization, encrypted secret-manager storage, callback replay protection, provider webhook signature checks, token refresh/expiry handling, credential revocation, and integration tests. The current intent/list endpoints are not proof of a connection. Until the full release gate passes, sending remains disabled.
