@@ -86,3 +86,87 @@ def test_fetch_html_rejects_private_dns_answer_before_request():
         assert requested == []
 
     asyncio.run(run())
+
+
+
+def test_fetch_html_rejects_mixed_public_and_private_dns_answers():
+    async def run():
+        requested = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            return httpx.Response(200, headers={"content-type": "text/html"}, text="ok", request=request)
+
+        async def mixed_resolver(host: str, port: int) -> list[str]:
+            return ["93.184.216.34", "192.168.1.10"]
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="non-public"):
+                await fetch_html("https://example.com/", client=client, resolver=mixed_resolver)
+        assert requested == []
+
+    asyncio.run(run())
+
+
+def test_fetch_html_rejects_malformed_dns_answer_before_request():
+    async def run():
+        requested = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            return httpx.Response(200, headers={"content-type": "text/html"}, text="ok", request=request)
+
+        async def malformed_resolver(host: str, port: int) -> list[str]:
+            return ["not-an-ip-address"]
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="invalid IP"):
+                await fetch_html("https://example.com/", client=client, resolver=malformed_resolver)
+        assert requested == []
+
+    asyncio.run(run())
+
+
+def test_fetch_html_blocks_public_redirect_outside_allowed_host_scope():
+    async def run():
+        requested = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            return httpx.Response(302, headers={"location": "https://www.example.com/other"}, request=request)
+
+        async def resolver(host: str, port: int) -> list[str]:
+            return ["93.184.216.34"]
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="outside the allowed host scope"):
+                await fetch_html(
+                    "https://example.com/",
+                    client=client,
+                    resolver=resolver,
+                    allowed_hosts={"example.com"},
+                )
+        assert requested == ["https://example.com/"]
+
+    asyncio.run(run())
+
+
+def test_fetch_html_stops_after_configured_redirect_limit():
+    async def run():
+        requested = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            return httpx.Response(302, headers={"location": "/"}, request=request)
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="Maximum redirect count"):
+                await fetch_html(
+                    "https://example.com/",
+                    client=client,
+                    resolver=public_resolver,
+                    limits=FetchLimits(max_redirects=2),
+                )
+        assert len(requested) == 3
+
+    asyncio.run(run())
