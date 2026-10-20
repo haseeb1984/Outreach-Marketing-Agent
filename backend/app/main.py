@@ -21,6 +21,7 @@ async def lifespan(application: FastAPI):
     application.state.auth_store = None
     application.state.auth_rate_limiter = None
     application.state.workspace_job_queue = None
+    application.state.workspace_outreach_draft_store = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -36,9 +37,11 @@ async def lifespan(application: FastAPI):
         from app.services.auth_store import AuthStore
         from app.services.auth_rate_limiter import AuthRateLimiter
         from app.services.workspace_job_queue import WorkspaceJobQueue
+        from app.services.workspace_outreach_draft_store import WorkspaceOutreachDraftStore
 
         application.state.auth_store = AuthStore(pool)
         application.state.workspace_job_queue = WorkspaceJobQueue(pool)
+        application.state.workspace_outreach_draft_store = WorkspaceOutreachDraftStore(pool)
         if settings.secret_key and len(settings.secret_key.encode("utf-8")) >= 32:
             application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
@@ -59,10 +62,12 @@ app = FastAPI(
 from app.api.auth_routes import router as auth_router
 from app.api.workspace_domain_routes import router as workspace_domain_router
 from app.api.workspace_job_routes import router as workspace_job_router
+from app.api.workspace_outreach_routes import router as workspace_outreach_router
 
 app.include_router(auth_router)
 app.include_router(workspace_domain_router)
 app.include_router(workspace_job_router)
+app.include_router(workspace_outreach_router)
 
 
 PUBLIC_PAGES = [
@@ -152,6 +157,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_memberships') IS NOT NULL
                      AND to_regclass('public.auth_sessions') IS NOT NULL
                      AND to_regclass('public.password_reset_tokens') IS NOT NULL
+                     AND to_regclass('public.workspace_outreach_drafts') IS NOT NULL
                      AND to_regclass('public.security_audit_events') IS NOT NULL
                      AND to_regclass('public.auth_rate_limit_buckets') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
@@ -165,8 +171,9 @@ async def readiness() -> Response:
                             '003_authentication_foundation.sql',
                             '004_auth_rate_limits.sql',
                             '005_session_csrf_tokens.sql',
-                            '006_password_reset_tokens.sql'
-                          )) = 6"""
+                            '006_password_reset_tokens.sql',
+                            '007_workspace_outreach_drafts.sql'
+                          )) = 7"""
             )
             if not schema_ready:
                 return JSONResponse(
