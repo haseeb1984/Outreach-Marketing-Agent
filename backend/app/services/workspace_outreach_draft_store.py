@@ -41,9 +41,11 @@ class WorkspaceOutreachDraftStore:
         )
         async with self._pool.acquire() as connection:
             async with connection.transaction():
+                if channel == "whatsapp" and prospect_id is None:
+                    raise ValueError("whatsapp_consent_evidence_required")
                 if prospect_id is not None:
                     prospect = await connection.fetchrow(
-                        """SELECT id, campaign_id, display_name, opt_out
+                        """SELECT id, campaign_id, display_name, opt_out, whatsapp_opt_in_at, whatsapp_opt_in_source, whatsapp_opt_in_evidence_url
                            FROM workspace_prospects
                            WHERE workspace_id=$1 AND id=$2
                            FOR UPDATE""",
@@ -53,6 +55,12 @@ class WorkspaceOutreachDraftStore:
                         raise ValueError("linked_prospect_not_found")
                     if prospect["opt_out"]:
                         raise ValueError("prospect_opted_out")
+                    if channel == "whatsapp" and not (
+                        prospect["whatsapp_opt_in_at"] is not None
+                        and prospect["whatsapp_opt_in_source"]
+                        and prospect["whatsapp_opt_in_evidence_url"]
+                    ):
+                        raise ValueError("whatsapp_consent_evidence_required")
                     if campaign_id is not None and campaign_id != prospect["campaign_id"]:
                         raise ValueError("prospect_campaign_mismatch")
                     campaign_id = prospect["campaign_id"]
