@@ -165,3 +165,12 @@ def test_process_claimed_job_cancels_scan_when_lease_is_lost(monkeypatch):
     assert cancelled.is_set()
     assert queue.completed is None
     assert queue.failed is None
+
+
+def test_worker_error_backoff_doubles_with_poll_floor_and_hard_cap():
+    from app.workers.website_growth_worker import _next_error_backoff
+
+    assert _next_error_backoff(2.0, 2.0) == 4.0
+    assert _next_error_backoff(0.1, 0.5) == 0.5
+    assert _next_error_backoff(20.0, 2.0) == 30.0
+    assert _next_error_backoff(30.0, 2.0) == 30.0
