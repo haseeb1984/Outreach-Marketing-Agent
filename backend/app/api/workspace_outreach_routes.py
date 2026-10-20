@@ -21,6 +21,7 @@ class OutreachDraftInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     channel: str = Field(pattern="^(email|whatsapp)$")
     campaign_id: UUID | None = None
+    prospect_id: UUID | None = None
     client_business: str = Field(min_length=1, max_length=200)
     client_offer: str = Field(min_length=1, max_length=500)
     prospect_name: str = Field(min_length=1, max_length=200)
