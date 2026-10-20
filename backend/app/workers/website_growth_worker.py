@@ -197,9 +197,14 @@ async def run_worker(*, poll_seconds: float = POLL_SECONDS) -> None:
                 # process state only and is capped so recovery remains responsive.
                 logger.error("worker iteration failed; retrying after a bounded delay")
                 await asyncio.sleep(error_backoff)
-                error_backoff = min(30.0, max(poll_seconds, error_backoff * 2))
+                error_backoff = _next_error_backoff(error_backoff, poll_seconds)
     finally:
         await pool.close()
+
+
+def _next_error_backoff(current: float, minimum: float) -> float:
+    """Double a transient-error delay while respecting polling and hard caps."""
+    return min(30.0, max(minimum, current * 2))
 
 
 def main() -> None:
