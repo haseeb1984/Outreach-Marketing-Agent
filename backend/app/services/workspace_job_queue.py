@@ -241,6 +241,32 @@ class WorkspaceJobQueue:
         result["id"] = str(result["id"])
         return result
 
+    async def list_for_workspace(
+        self, *, workspace_id: str, limit: int = 50, before: datetime | None = None
+    ) -> list[dict[str, Any]]:
+        """Return bounded, non-sensitive job metadata for one workspace."""
+        if not str(workspace_id).strip() or len(str(workspace_id)) > 200:
+            raise ValueError("A valid trusted workspace identifier is required")
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        if before is not None and (before.tzinfo is None or before.utcoffset() is None):
+            raise ValueError("before must be timezone-aware")
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """SELECT id, workspace_id, job_type, status, attempt_count, max_attempts,
+                          error_code, created_at, started_at, finished_at, updated_at
+                   FROM workspace_jobs
+                   WHERE workspace_id=$1 AND ($3::timestamptz IS NULL OR created_at < $3)
+                   ORDER BY created_at DESC, id DESC LIMIT $2""",
+                str(workspace_id), limit, before,
+            )
+        results = []
+        for row in rows:
+            item = dict(row)
+            item["id"] = str(item["id"])
+            results.append(item)
+        return results
+
     async def cancel(self, *, workspace_id: str, job_id: str | UUID) -> bool:
         """Cancel queued jobs only; running workers must finish or lose their lease."""
         now = datetime.now(timezone.utc)
