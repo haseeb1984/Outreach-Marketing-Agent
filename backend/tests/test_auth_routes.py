@@ -256,3 +256,84 @@ def test_http_session_rotation_replaces_both_cookies_and_csrf_token(monkeypatch)
         assert asyncio.run(app.state.auth_store.authenticate_session(old_session)) is None
         assert client.get("/api/v1/auth/me").status_code == 200
 
+
+
+def test_password_reset_request_is_generic_and_sends_only_when_store_issues_token(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    sent = []
+    class ResetStore:
+        async def issue_password_reset(self, *, email):
+            if email == "person@example.test":
+                return {
+                    "reset_token": "r" * 43,
+                    "expires_at": datetime.now(timezone.utc) + timedelta(minutes=30),
+                }
+            return None
+
+    class AllowLimiter:
+        async def consume(self, **kwargs):
+            return {
+                "allowed": True,
+                "remaining": 9,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+            }
+
+    async def fake_send(self, **kwargs):
+        sent.append(kwargs)
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    monkeypatch.setattr(auth_routes.SMTPEmailDelivery, "send_password_reset_email", fake_send)
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = ResetStore()
+        app.state.auth_rate_limiter = AllowLimiter()
+        headers = {"Origin": "https://app.example.test"}
+        known = client.post(
+            "/api/v1/auth/password-reset/request", headers=headers,
+            json={"email": "person@example.test"},
+        )
+        unknown = client.post(
+            "/api/v1/auth/password-reset/request", headers=headers,
+            json={"email": "unknown@example.test"},
+        )
+        assert known.status_code == unknown.status_code == 202
+        assert known.json() == unknown.json()
+        assert len(sent) == 1
+        assert sent[0]["recipient"] == "person@example.test"
+
+
+def test_password_reset_confirm_updates_password_and_rejects_invalid_token(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class ResetStore:
+        async def reset_password(self, *, token, new_password):
+            assert len(new_password) >= 12
+            return token == "r" * 43
+
+    class AllowLimiter:
+        async def consume(self, **kwargs):
+            from datetime import datetime, timedelta, timezone
+            return {
+                "allowed": True, "remaining": 9,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+            }
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = ResetStore()
+        app.state.auth_rate_limiter = AllowLimiter()
+        headers = {"Origin": "https://app.example.test"}
+        good = client.post(
+            "/api/v1/auth/password-reset/confirm", headers=headers,
+            json={"token": "r" * 43, "new_password": "correct-horse-battery"},
+        )
+        bad = client.post(
+            "/api/v1/auth/password-reset/confirm", headers=headers,
+            json={"token": "x" * 43, "new_password": "correct-horse-battery"},
+        )
+        assert good.status_code == 200
+        assert bad.status_code == 400
+        assert "invalid_or_expired" in bad.json()["detail"]
