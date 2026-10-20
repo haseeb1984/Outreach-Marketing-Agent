@@ -51,9 +51,9 @@ def test_client_ip_does_not_trust_forwarded_header():
     assert auth_routes._client_identifier(request) == "192.0.2.10"
 
 
-@pytest.mark.asyncio
-async def test_verification_landing_requires_explicit_post(monkeypatch):
-    response = await auth_routes.verification_landing(token="v" * 43)
+def test_verification_landing_requires_explicit_post(monkeypatch):
+    import asyncio
+    response = asyncio.run(auth_routes.verification_landing(token="v" * 43))
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["referrer-policy"] == "no-referrer"
