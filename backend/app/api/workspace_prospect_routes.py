@@ -66,6 +66,24 @@ class ProspectInput(BaseModel):
         return value.strip() if value else None
 
 
+class WhatsAppConsentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: str = Field(min_length=1, max_length=200)
+    evidence_url: str = Field(min_length=9, max_length=2048)
+
+    @field_validator("source")
+    @classmethod
+    def source_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("source_must_not_be_blank")
+        return value.strip()
+
+    @field_validator("evidence_url")
+    @classmethod
+    def evidence_must_be_https(cls, value: str) -> str:
+        return _https_url(value)
+
+
 class ProspectStageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     stage: str = Field(pattern="^(researched|qualified|drafting|contacted|replied|meeting|customer|not_a_fit|opted_out)$")
@@ -120,6 +138,30 @@ async def create_prospect(workspace_id: str, payload: ProspectInput, request: Re
             raise HTTPException(status_code=409, detail="prospect_conflict_or_campaign_unavailable") from None
         raise HTTPException(status_code=503, detail="prospects_unavailable") from None
     return {"workspace_id": workspace_id, "prospect": row}
+
+
+@router.post("/{prospect_id}/whatsapp-consent")
+async def record_whatsapp_consent(
+    workspace_id: str, prospect_id: UUID, payload: WhatsAppConsentInput, request: Request
+):
+    store, limiter, session = await _authorized(request, workspace_id, "member")
+    _check_csrf(request, session)
+    await _consume(limiter, namespace="prospect-whatsapp-consent",
+                   identifier=f"{workspace_id}:{session['user_id']}", limit=60, window=3600)
+    try:
+        row = await store.record_whatsapp_opt_in(
+            workspace_id=workspace_id, user_id=session["user_id"], prospect_id=prospect_id,
+            source=payload.source, evidence_url=payload.evidence_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="prospects_unavailable") from None
+    if row is None:
+        # Covers both absent and opted-out prospects without revealing cross-workspace records.
+        raise HTTPException(status_code=404, detail="eligible_prospect_not_found")
+    return {"workspace_id": workspace_id, "prospect": row,
+            "message": "Consent evidence recorded as operator-provided; the evidence itself has not been independently verified."}
 
 
 @router.post("/{prospect_id}/stage")
