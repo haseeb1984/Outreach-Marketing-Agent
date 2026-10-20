@@ -55,6 +55,11 @@ async def _exercise_lifecycle_guard() -> None:
             hash_password("provider-lifecycle-test-password").encoded,
         )
         await connection.execute("INSERT INTO workspaces (id) VALUES ($1)", workspace_id)
+        await connection.execute(
+            """INSERT INTO workspace_memberships (workspace_id, user_id, role, status)
+               VALUES ($1, $2, 'owner', 'active')""",
+            workspace_id, user_id,
+        )
         connection_id = await connection.fetchval(
             """INSERT INTO workspace_provider_connections
                (workspace_id, provider, display_label, created_by)
