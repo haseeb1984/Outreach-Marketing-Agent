@@ -1,0 +1,112 @@
+"""PostgreSQL integration tests for provider connection lifecycle invariants."""
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+from uuid import uuid4
+
+import asyncpg
+import pytest
+
+from app.services.auth_security import hash_password
+
+
+MIGRATIONS = (
+    "001_workspace_domain_verification.sql",
+    "002_workspace_jobs.sql",
+    "003_authentication_foundation.sql",
+    "004_auth_rate_limits.sql",
+    "005_session_csrf_tokens.sql",
+    "006_password_reset_tokens.sql",
+    "007_workspace_outreach_drafts.sql",
+    "008_workspace_campaigns.sql",
+    "009_workspace_prospects.sql",
+    "010_draft_prospect_link.sql",
+    "011_whatsapp_opt_in_evidence.sql",
+    "012_workspace_provider_connections.sql",
+    "013_provider_connection_lifecycle_guard.sql",
+)
+
+
+@pytest.mark.skipif(
+    not os.getenv("OMA_TEST_DATABASE_URL"),
+    reason="requires a dedicated disposable PostgreSQL test database",
+)
+def test_provider_connection_lifecycle_guard_enforces_validation_and_terminal_revocation():
+    asyncio.run(_exercise_lifecycle_guard())
+
+
+async def _exercise_lifecycle_guard() -> None:
+    connection = await asyncpg.connect(os.environ["OMA_TEST_DATABASE_URL"])
+    try:
+        migrations = Path(__file__).resolve().parents[1] / "migrations"
+        for migration_name in MIGRATIONS:
+            await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
+
+        user_id = uuid4()
+        workspace_id = "provider-lifecycle-" + uuid4().hex
+        await connection.execute(
+            """INSERT INTO app_users
+               (id, email, password_hash, email_verified_at, status)
+               VALUES ($1, $2, $3, now(), 'active')""",
+            user_id, f"{user_id.hex}@example.test",
+            hash_password("provider-lifecycle-test-password").encoded,
+        )
+        await connection.execute("INSERT INTO workspaces (id) VALUES ($1)", workspace_id)
+        connection_id = await connection.fetchval(
+            """INSERT INTO workspace_provider_connections
+               (workspace_id, provider, display_label, created_by)
+               VALUES ($1, 'email', 'Integration test mailbox', $2)
+               RETURNING id""",
+            workspace_id, user_id,
+        )
+
+        # A raw status update cannot fabricate a successful provider authorization.
+        with pytest.raises(asyncpg.CheckViolationError):
+            await connection.execute(
+                "UPDATE workspace_provider_connections SET status='connected' WHERE id=$1",
+                connection_id,
+            )
+
+        # A complete validation record is required before the connected state is allowed.
+        await connection.execute(
+            """UPDATE workspace_provider_connections
+               SET status='connected', provider_account_id='provider-account-test',
+                   secret_reference='vault://opaque/provider-connection-test',
+                   granted_scopes=ARRAY['messages.read'], last_validated_at=now()
+               WHERE id=$1""",
+            connection_id,
+        )
+        assert await connection.fetchval(
+            "SELECT status FROM workspace_provider_connections WHERE id=$1", connection_id
+        ) == "connected"
+
+        # A later metadata-only update must not be able to erase connected-state proof.
+        with pytest.raises(asyncpg.CheckViolationError):
+            await connection.execute(
+                "UPDATE workspace_provider_connections SET secret_reference=NULL WHERE id=$1",
+                connection_id,
+            )
+
+        await connection.execute(
+            "UPDATE workspace_provider_connections SET status='revoked' WHERE id=$1",
+            connection_id,
+        )
+        assert await connection.fetchval(
+            "SELECT revoked_at IS NOT NULL FROM workspace_provider_connections WHERE id=$1",
+            connection_id,
+        ) is True
+
+        # Revocation is terminal; reconnecting must create a fresh intent/record.
+        with pytest.raises(asyncpg.CheckViolationError):
+            await connection.execute(
+                """UPDATE workspace_provider_connections
+                   SET status='connected', provider_account_id='provider-account-test',
+                       secret_reference='vault://opaque/provider-connection-test',
+                       granted_scopes=ARRAY['messages.read'], last_validated_at=now()
+                   WHERE id=$1""",
+                connection_id,
+            )
+    finally:
+        await connection.close()
