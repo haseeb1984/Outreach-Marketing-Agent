@@ -91,3 +91,39 @@ def test_list_campaigns_is_workspace_scoped(monkeypatch):
         response = client.get("/api/v1/workspaces/workspace-a/campaigns")
     assert response.status_code == 200
     assert response.json()["campaigns"] == []
+
+
+def test_campaign_status_transition_requires_admin_and_csrf(monkeypatch):
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, "member")
+        denied = client.post(
+            "/api/v1/workspaces/workspace-a/campaigns/00000000-0000-0000-0000-000000000099/status",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"status": "active"},
+        )
+        setup(monkeypatch, client, "admin")
+        no_csrf = client.post(
+            "/api/v1/workspaces/workspace-a/campaigns/00000000-0000-0000-0000-000000000099/status",
+            headers={"Origin": "https://app.example.test"},
+            json={"status": "active"},
+        )
+    assert denied.status_code == 404
+    assert no_csrf.status_code == 403
+
+
+def test_campaign_status_transition_records_target(monkeypatch):
+    class TransitionStore(FakeCampaignStore):
+        async def transition_status(self, **kwargs):
+            self.transition = kwargs
+            return {"id": str(kwargs["campaign_id"]), "status": kwargs["status"]}
+
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, "admin")
+        app.state.workspace_campaign_store = TransitionStore()
+        response = client.post(
+            "/api/v1/workspaces/workspace-a/campaigns/00000000-0000-0000-0000-000000000099/status",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"status": "paused"},
+        )
+    assert response.status_code == 200
+    assert response.json()["campaign"]["status"] == "paused"
