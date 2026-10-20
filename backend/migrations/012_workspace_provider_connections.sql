@@ -2,7 +2,7 @@
 -- never in this table or in customer-facing API payloads.
 CREATE TABLE IF NOT EXISTS workspace_provider_connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     provider TEXT NOT NULL CHECK (provider IN ('email', 'whatsapp')),
     provider_account_id TEXT,
     display_label TEXT NOT NULL CHECK (length(btrim(display_label)) BETWEEN 1 AND 160),
