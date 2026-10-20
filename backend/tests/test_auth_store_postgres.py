@@ -14,6 +14,7 @@ import asyncpg
 import pytest
 
 from app.services.auth_security import hash_password, verify_password
+from app.services.auth_http_security import csrf_token_digest
 from app.services.auth_store import AuthStore
 from app.services.auth_rate_limiter import AuthRateLimiter
 
@@ -70,6 +71,16 @@ async def _exercise_password_reset() -> None:
     try:
         store = AuthStore(pool)
         session = await store.create_session(user_id=user_id, lifetime_hours=1)
+        assert len(session["csrf_token"]) >= 32
+        async with pool.acquire() as conn:
+            stored_csrf_digest = await conn.fetchval(
+                "SELECT csrf_token_sha256 FROM auth_sessions WHERE token_sha256=$1",
+                __import__("app.services.auth_security", fromlist=["token_digest"]).token_digest(session["token"]),
+            )
+        assert stored_csrf_digest == csrf_token_digest(session["csrf_token"])
+        authenticated = await store.authenticate_session(session["token"])
+        assert authenticated is not None
+        assert authenticated["csrf_token_sha256"] == stored_csrf_digest
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
         token = reset["reset_token"]

@@ -6,6 +6,16 @@ UPDATE auth_sessions
        csrf_token_sha256 = repeat('0', 64)
  WHERE csrf_token_sha256 IS NULL;
 ALTER TABLE auth_sessions ALTER COLUMN csrf_token_sha256 SET NOT NULL;
-ALTER TABLE auth_sessions
-  ADD CONSTRAINT auth_sessions_csrf_digest_format
-  CHECK (csrf_token_sha256 ~ '^[0-9a-f]{64}$');
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'auth_sessions_csrf_digest_format'
+       AND conrelid = 'public.auth_sessions'::regclass
+  ) THEN
+    ALTER TABLE auth_sessions
+      ADD CONSTRAINT auth_sessions_csrf_digest_format
+      CHECK (csrf_token_sha256 ~ '^[0-9a-f]{64}
+);
+  END IF;
+END $;
