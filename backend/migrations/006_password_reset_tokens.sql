@@ -19,6 +19,4 @@ CREATE INDEX IF NOT EXISTS password_reset_tokens_user_live_idx
 CREATE INDEX IF NOT EXISTS password_reset_tokens_expiry_idx
     ON password_reset_tokens (expires_at);
 
-INSERT INTO schema_migrations (version)
-VALUES ('006_password_reset_tokens.sql')
-ON CONFLICT (version) DO NOTHING;
+-- The migration runner records this filename after the SQL succeeds.
