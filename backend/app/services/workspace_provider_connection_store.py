@@ -59,6 +59,30 @@ class WorkspaceProviderConnectionStore:
             )
         return [self._public(row) for row in rows]
 
+    async def cancel_pending(self, *, workspace_id: str, connection_id: UUID, user_id: str) -> dict[str, Any] | None:
+        """Cancel an intent that has no provider credentials attached."""
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """UPDATE workspace_provider_connections
+                       SET status='revoked', revoked_at=now(), updated_at=now()
+                       WHERE workspace_id=$1 AND id=$2 AND status='pending'
+                       RETURNING id, workspace_id, provider, display_label, status, granted_scopes,
+                                 token_expires_at, last_validated_at, last_error_code, created_by,
+                                 created_at, updated_at, revoked_at""",
+                    workspace_id, connection_id,
+                )
+                if row is None:
+                    return None
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id, actor_user_id, event_type, outcome, metadata)
+                       VALUES ($1,$2,'provider_connection.intent_cancelled','success',$3::jsonb)""",
+                    workspace_id, UUID(str(user_id)),
+                    json.dumps({"connection_id": str(connection_id), "provider": row["provider"]}),
+                )
+        return self._public(row)
+
     @staticmethod
     def _public(row: Any) -> dict[str, Any]:
         result = dict(row)
