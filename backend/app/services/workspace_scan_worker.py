@@ -28,16 +28,16 @@ def _compact_report(report: dict[str, Any]) -> dict[str, Any]:
     crawl = discovery.get("crawl") or {}
     findings = crawl.get("aggregate_findings") or []
     compact_findings = []
-    for finding in findings[:50]:
+    for finding in findings[:10]:
         if not isinstance(finding, dict):
             continue
         compact_findings.append({
-            "code": str(finding.get("code", ""))[:100],
-            "title": str(finding.get("title", ""))[:200],
+            "code": str(finding.get("code", ""))[:80],
+            "title": str(finding.get("title", ""))[:120],
             "severity": str(finding.get("severity", ""))[:30],
             "occurrences": max(0, int(finding.get("occurrences", 0))),
             "evidence_urls": [
-                str(url)[:2048] for url in (finding.get("evidence_urls") or [])[:10]
+                str(url)[:512] for url in (finding.get("evidence_urls") or [])[:3]
                 if isinstance(url, str)
             ],
         })
@@ -77,7 +77,14 @@ async def process_claimed_website_scan(
         )
         return {"status": status, "reason": "invalid_scan_job"}
     start_url = payload.get("start_url")
-    if not isinstance(workspace_id, str) or not workspace_id.strip() or not isinstance(start_url, str):
+    max_pages = payload.get("max_pages", 25)
+    max_depth = payload.get("max_depth", 2)
+    if (
+        not isinstance(workspace_id, str) or not workspace_id.strip()
+        or not isinstance(start_url, str)
+        or isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= 100
+        or isinstance(max_depth, bool) or not isinstance(max_depth, int) or not 0 <= max_depth <= 5
+    ):
         status = await job_queue.fail(
             job_id=job_id, worker_id=worker_id, error_code="invalid_scan_job"
         )
@@ -116,8 +123,8 @@ async def process_claimed_website_scan(
             store=domain_store,
             workspace_id=workspace_id,
             start_url=start_url,
-            max_pages=payload.get("max_pages", 25),
-            max_depth=payload.get("max_depth", 2),
+            max_pages=max_pages,
+            max_depth=max_depth,
         )
         completed = await job_queue.complete(
             job_id=job_id,
