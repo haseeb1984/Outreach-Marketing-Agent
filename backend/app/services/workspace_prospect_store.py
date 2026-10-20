@@ -55,6 +55,39 @@ class WorkspaceProspectStore:
             )
         return [self._public(row) for row in rows]
 
+    async def record_whatsapp_opt_in(
+        self, *, workspace_id: str, user_id: str, prospect_id: UUID,
+        source: str, evidence_url: str,
+    ) -> dict[str, Any] | None:
+        """Record the workspace operator's documented consent evidence; does not independently verify it."""
+        source = source.strip()
+        if not 1 <= len(source) <= 200:
+            raise ValueError("invalid_consent_source")
+        parsed = urlsplit(evidence_url.strip())
+        if (parsed.scheme.lower() != "https" or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.query or parsed.fragment):
+            raise ValueError("invalid_consent_evidence_url")
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """UPDATE workspace_prospects
+                       SET whatsapp_opt_in_at=now(), whatsapp_opt_in_source=$3,
+                           whatsapp_opt_in_evidence_url=$4, updated_at=now()
+                       WHERE workspace_id=$1 AND id=$2 AND opt_out=false
+                       RETURNING *""",
+                    workspace_id, prospect_id, source, evidence_url.strip().rstrip("/"),
+                )
+                if row:
+                    await connection.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id, actor_user_id, event_type, outcome, metadata)
+                           VALUES ($1,$2,'prospect.whatsapp_opt_in_recorded','success',$3::jsonb)""",
+                        workspace_id, UUID(str(user_id)),
+                        json.dumps({"prospect_id": str(prospect_id), "evidence_source": source}),
+                    )
+        return self._public(row) if row else None
+
     async def update_stage(self, *, workspace_id: str, user_id: str, prospect_id: UUID,
                            stage: str, note: str | None = None) -> dict[str, Any] | None:
         if stage not in STAGES:
@@ -87,7 +120,7 @@ class WorkspaceProspectStore:
         for key in ("id", "workspace_id", "campaign_id", "created_by"):
             if result.get(key) is not None:
                 result[key] = str(result[key])
-        for key in ("opt_out_at", "created_at", "updated_at"):
+        for key in ("opt_out_at", "whatsapp_opt_in_at", "created_at", "updated_at"):
             if result.get(key) is not None:
                 result[key] = result[key].isoformat()
         return result
