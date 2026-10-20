@@ -121,6 +121,8 @@ def test_workspace_domain_challenge_requires_csrf_and_admin(monkeypatch):
             json={"domain": "Example.com"},
         )
     assert response.status_code == 201
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
     assert response.json()["txt_record_name"] == "_oma-verify.example.com"
     assert response.json()["txt_record_value"].startswith(
         "outreach-marketing-agent-verification="
