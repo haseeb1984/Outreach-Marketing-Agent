@@ -79,7 +79,7 @@ async def _exercise_lifecycle_guard() -> None:
         await connection.execute(
             """UPDATE workspace_provider_connections
                SET status='connected', provider_account_id='provider-account-test',
-                   secret_reference='vault://opaque/provider-connection-test',
+                   secret_reference='vault-prod:provider-connection-test',
                    granted_scopes=ARRAY['messages.read'], last_validated_at=now()
                WHERE id=$1""",
             connection_id,
@@ -109,7 +109,7 @@ async def _exercise_lifecycle_guard() -> None:
             await connection.execute(
                 """UPDATE workspace_provider_connections
                    SET status='connected', provider_account_id='provider-account-test',
-                       secret_reference='vault://opaque/provider-connection-test',
+                       secret_reference='vault-prod:provider-connection-test',
                        granted_scopes=ARRAY['messages.read'], last_validated_at=now()
                    WHERE id=$1""",
                 connection_id,
@@ -133,15 +133,16 @@ async def _exercise_lifecycle_guard() -> None:
             transaction = await oauth_store.create(
                 workspace_id=workspace_id, connection_id=pending_id, user_id=user_id,
                 provider="email", state=state, pkce_challenge="A" * 43,
-                verifier_secret_reference="vault://opaque/pkce-verifier-ref",
+                verifier_secret_reference="vault-prod:pkce-verifier-ref",
                 redirect_uri="https://app.example.test/oauth/email/callback",
+                allowed_redirect_uris=("https://app.example.test/oauth/email/callback",),
                 nonce=nonce, lifetime_seconds=600,
             )
             assert transaction["connection_id"] == str(pending_id)
             assert "verifier_secret_reference" not in transaction
             consumed = await oauth_store.consume(state=state)
             assert consumed is not None
-            assert consumed["verifier_secret_reference"] == "vault://opaque/pkce-verifier-ref"
+            assert consumed["verifier_secret_reference"] == "vault-prod:pkce-verifier-ref"
             assert "nonce_sha256" in consumed
             assert await oauth_store.consume(state=state) is None
             assert await oauth_store.consume(state="x") is None
