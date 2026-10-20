@@ -67,6 +67,12 @@ class FakeDomainStore:
             },
         }
 
+    async def verify_challenge(self, *, workspace_id, domain, txt_values):
+        return {
+            "verified": "outreach-marketing-agent-verification=valid" in txt_values,
+            "reason": "dns_txt_token_matched" if "outreach-marketing-agent-verification=valid" in txt_values else "dns_txt_token_not_found",
+        }
+
     async def revoke_domain(self, *, workspace_id, domain):
         self.revoked = (workspace_id, domain)
         return True
@@ -130,3 +136,27 @@ def test_workspace_domain_revocation_requires_csrf(monkeypatch):
         )
     assert response.status_code == 403
     assert response.json()["detail"] == "csrf_validation_failed"
+
+def test_domain_verification_uses_server_dns_not_client_supplied_evidence(monkeypatch):
+    from app.api import workspace_domain_routes
+
+    async def fake_resolve(domain):
+        assert domain == "example.com"
+        return ["outreach-marketing-agent-verification=valid"]
+
+    monkeypatch.setattr(workspace_domain_routes, "_resolve_txt_values", fake_resolve)
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
+        response = client.post(
+            "/api/v1/workspaces/workspace-a/domains/verify",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"domain": "example.com"},
+        )
+        forged = client.post(
+            "/api/v1/workspaces/workspace-a/domains/verify",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"domain": "example.com", "txt_values": ["outreach-marketing-agent-verification=valid"]},
+        )
+    assert response.status_code == 200
+    assert response.json()["verified"] is True
+    assert forged.status_code == 422
