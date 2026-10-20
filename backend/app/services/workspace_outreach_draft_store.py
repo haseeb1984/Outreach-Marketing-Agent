@@ -58,6 +58,17 @@ class WorkspaceOutreachDraftStore:
                     campaign_id = prospect["campaign_id"]
                     if prospect_name.strip().casefold() != prospect["display_name"].strip().casefold():
                         raise ValueError("prospect_name_mismatch")
+                if campaign_id is not None:
+                    campaign = await connection.fetchrow(
+                        """SELECT id, status FROM workspace_campaigns
+                           WHERE workspace_id=$1 AND id=$2
+                           FOR UPDATE""",
+                        workspace_id, campaign_id,
+                    )
+                    if campaign is None:
+                        raise ValueError("linked_campaign_not_found")
+                    if campaign["status"] not in {"draft", "active"}:
+                        raise ValueError("campaign_not_open_for_drafts")
                 row = await connection.fetchrow(
                     """INSERT INTO workspace_outreach_drafts
                        (workspace_id, campaign_id, prospect_id, created_by, channel, client_business, client_offer,
