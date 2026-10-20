@@ -43,6 +43,17 @@ class VerificationInput(BaseModel):
     token: str = Field(min_length=32, max_length=512)
 
 
+class PasswordResetRequestInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=3, max_length=320)
+
+
+class PasswordResetInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=32, max_length=512)
+    new_password: str = Field(min_length=12, max_length=1024)
+
+
 def _origin_from_config() -> str | None:
     value = settings.public_base_url
     if not isinstance(value, str) or not value.strip():
@@ -276,3 +287,56 @@ async def logout(request: Request):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+@router.post("/password-reset/request", status_code=202)
+async def request_password_reset(payload: PasswordResetRequestInput, request: Request):
+    """Request a reset without revealing whether an eligible account exists."""
+    _require_origin(request)
+    store, limiter = _services(request)
+    await _consume(
+        limiter, namespace="password-reset-ip", identifier=_client_identifier(request),
+        limit=10, window=3600,
+    )
+    try:
+        email = normalize_email(payload.email)
+    except ValueError:
+        # Invalid input gets the same response as an unknown account after IP limiting.
+        return {"message": "If the account is eligible, a password-reset email will be sent."}
+    await _consume(
+        limiter, namespace="password-reset-email", identifier=email, limit=3, window=3600,
+    )
+    try:
+        issued = await store.issue_password_reset(email=email)
+    except Exception:
+        raise HTTPException(status_code=503, detail="password_reset_temporarily_unavailable") from None
+    if issued is not None:
+        try:
+            await SMTPEmailDelivery().send_password_reset_email(
+                recipient=email,
+                token=issued["reset_token"],
+                expires_at=issued["expires_at"],
+            )
+        except (EmailDeliveryFailed, EmailDeliveryNotConfigured, ValueError):
+            # Do not return an account-dependent status; never include provider details.
+            pass
+    return {"message": "If the account is eligible, a password-reset email will be sent."}
+
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset(payload: PasswordResetInput, request: Request):
+    _require_origin(request)
+    store, limiter = _services(request)
+    await _consume(
+        limiter, namespace="password-reset-confirm-ip", identifier=_client_identifier(request),
+        limit=10, window=3600,
+    )
+    try:
+        changed = await store.reset_password(token=payload.token, new_password=payload.new_password)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid_password_reset_input") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="password_reset_temporarily_unavailable") from None
+    if not changed:
+        raise HTTPException(status_code=400, detail="password_reset_link_invalid_or_expired")
+    return {"message": "Password updated. Sign in again with your new password."}
