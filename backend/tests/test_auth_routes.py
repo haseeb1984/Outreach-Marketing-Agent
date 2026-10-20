@@ -147,3 +147,60 @@ def test_http_login_rejects_untrusted_origin(monkeypatch):
             json={"email": "person@example.test", "password": "correct-password"},
         )
         assert response.status_code == 403
+
+def test_http_login_rate_limit_blocks_password_verification(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class NeverAuthenticateStore:
+        async def authenticate_password(self, **kwargs):
+            raise AssertionError("password verification must not run after rate limit")
+
+    class BlockingLimiter:
+        async def consume(self, **kwargs):
+            return {
+                "allowed": False,
+                "remaining": 0,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=2),
+            }
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = NeverAuthenticateStore()
+        app.state.auth_rate_limiter = BlockingLimiter()
+        response = client.post(
+            "/api/v1/auth/login",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test", "password": "correct-password"},
+        )
+        assert response.status_code == 429
+        assert response.json()["detail"] == "too_many_requests"
+        assert int(response.headers["retry-after"]) >= 1
+
+
+def test_http_login_fails_closed_when_rate_limiter_unavailable(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class UnavailableLimiter:
+        async def consume(self, **kwargs):
+            raise RuntimeError("database details must not reach the client")
+
+    class NeverAuthenticateStore:
+        async def authenticate_password(self, **kwargs):
+            raise AssertionError("password verification must not run")
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = NeverAuthenticateStore()
+        app.state.auth_rate_limiter = UnavailableLimiter()
+        response = client.post(
+            "/api/v1/auth/login",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test", "password": "correct-password"},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "authentication_temporarily_unavailable"
+        assert "database details" not in response.text
+
