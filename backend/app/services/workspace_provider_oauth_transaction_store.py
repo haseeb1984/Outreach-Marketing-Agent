@@ -61,6 +61,9 @@ class WorkspaceProviderOAuthTransactionStore:
                     nonce_sha256, created_at, expires_at)
                    SELECT $1, pc.id, $3, $4, $5, $6, $7, $8, $9, $10, $11
                    FROM workspace_provider_connections pc
+                   JOIN workspace_memberships wm
+                     ON wm.workspace_id=pc.workspace_id AND wm.user_id=$3
+                    AND wm.status='active' AND wm.role IN ('owner','admin')
                    WHERE pc.id=$2 AND pc.workspace_id=$1 AND pc.provider=$4
                      AND pc.status='pending'
                    RETURNING id, workspace_id, connection_id, user_id, provider,
