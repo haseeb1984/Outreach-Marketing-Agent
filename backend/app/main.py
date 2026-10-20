@@ -54,8 +54,10 @@ app = FastAPI(
 )
 
 from app.api.auth_routes import router as auth_router
+from app.api.workspace_domain_routes import router as workspace_domain_router
 
 app.include_router(auth_router)
+app.include_router(workspace_domain_router)
 
 
 PUBLIC_PAGES = [
