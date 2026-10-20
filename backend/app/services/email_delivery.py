@@ -20,7 +20,7 @@ def verification_url(token: str, base_url: str | None = None) -> str:
     parts = urlsplit(base)
     if parts.scheme.lower() != "https" or not parts.hostname or parts.username is not None or parts.password is not None or parts.query or parts.fragment:
         raise ValueError("public_https_origin_required")
-    path = parts.path.rstrip("/") + "/verify-email"
+    path = parts.path.rstrip("/") + "/api/v1/auth/verify-email"
     return urlunsplit(("https", parts.netloc, path, urlencode({"token": token}), ""))
 
 class SMTPEmailDelivery:
