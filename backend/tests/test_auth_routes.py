@@ -60,4 +60,4 @@ async def test_verification_landing_requires_explicit_post(monkeypatch):
     html = response.body.decode()
     assert "fetch('/api/v1/auth/verify-email'" in html
     assert "method:'POST'" in html
-    assert "form method=\\"post\\"" not in html
+    assert 'form method="post"' not in html
