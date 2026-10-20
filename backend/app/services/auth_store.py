@@ -265,15 +265,30 @@ class AuthStore:
         now = datetime.now(timezone.utc)
         async with self._pool.acquire() as connection:
             async with connection.transaction():
-                reset = await connection.fetchrow(
-                    """SELECT r.id AS reset_id, r.user_id
-                       FROM password_reset_tokens r
-                       JOIN app_users u ON u.id=r.user_id
-                       WHERE r.token_sha256=$1 AND r.consumed_at IS NULL
-                         AND r.expires_at > $2 AND u.status='active'
-                         AND u.email_verified_at IS NOT NULL
-                       FOR UPDATE OF r""",
+                # Use the same lock order as issue_password_reset (user, then token)
+                # to avoid a deadlock when reset requests race with token re-issuance.
+                candidate = await connection.fetchrow(
+                    """SELECT id, user_id FROM password_reset_tokens
+                       WHERE token_sha256=$1 AND consumed_at IS NULL
+                         AND expires_at > $2""",
                     digest, now,
+                )
+                if candidate is None:
+                    return False
+                user = await connection.fetchrow(
+                    """SELECT id FROM app_users
+                       WHERE id=$1 AND status='active'
+                         AND email_verified_at IS NOT NULL
+                       FOR UPDATE""",
+                    candidate["user_id"],
+                )
+                if user is None:
+                    return False
+                reset = await connection.fetchrow(
+                    """SELECT id AS reset_id, user_id FROM password_reset_tokens
+                       WHERE id=$1 AND token_sha256=$2 AND consumed_at IS NULL
+                         AND expires_at > $3 FOR UPDATE""",
+                    candidate["id"], digest, now,
                 )
                 if reset is None:
                     return False
