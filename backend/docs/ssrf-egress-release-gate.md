@@ -17,6 +17,8 @@ Use one of these designs:
 
 Do not treat a preflight DNS lookup followed by an ordinary hostname-based HTTP connection as sufficient. Do not silently trust ambient proxy environment variables. If a proxy is part of the security boundary, configure it explicitly and fail closed when it is unavailable or misconfigured.
 
+The fetcher now reads `TRUSTED_EGRESS_PROXY_URL` from environment-backed settings and refuses production fetches when it is unset; it also rejects injected HTTP clients in production so callers cannot silently bypass that configured proxy. The configured proxy must be operator-managed and must enforce destination-IP policy at connection time. This application guard is not proof that the proxy itself is secure; deployment must supply and integration-test the trusted proxy before public crawling is enabled.
+
 ### 2. URL and destination restrictions
 
 For every initial URL and redirect hop:
