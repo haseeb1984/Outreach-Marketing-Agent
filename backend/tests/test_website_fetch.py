@@ -170,3 +170,32 @@ def test_fetch_html_stops_after_configured_redirect_limit():
         assert len(requested) == 3
 
     asyncio.run(run())
+
+
+
+def test_fetch_html_rechecks_dns_before_following_same_host_redirect():
+    async def run():
+        requested = []
+        resolutions = 0
+
+        async def handler(request):
+            requested.append(str(request.url))
+            if request.url.path == "/":
+                return httpx.Response(302, headers={"location": "/next"}, request=request)
+            return httpx.Response(200, headers={"content-type": "text/html"}, text="unexpected", request=request)
+
+        async def changing_resolver(host: str, port: int) -> list[str]:
+            nonlocal resolutions
+            resolutions += 1
+            if resolutions == 1:
+                return ["93.184.216.34"]
+            return ["127.0.0.1"]
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="non-public"):
+                await fetch_html("https://example.com/", client=client, resolver=changing_resolver)
+
+        assert resolutions == 2
+        assert requested == ["https://example.com/"]
+
+    asyncio.run(run())
