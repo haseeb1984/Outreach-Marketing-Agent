@@ -5,6 +5,7 @@ Creating a campaign never fetches the target website or sends outreach.
 from __future__ import annotations
 
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -89,4 +90,36 @@ async def create_campaign(workspace_id: str, payload: CampaignInput, request: Re
         )
     except Exception:
         raise HTTPException(status_code=503, detail="campaigns_unavailable") from None
+    return {"workspace_id": workspace_id, "campaign": row}
+
+
+class CampaignStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str = Field(pattern="^(draft|active|paused|completed|archived)$")
+
+
+@router.post("/{campaign_id}/status")
+async def transition_campaign_status(
+    workspace_id: str, campaign_id: UUID,
+    payload: CampaignStatusInput, request: Request,
+):
+    campaigns, limiter, session = await _authorized(request, workspace_id, "admin")
+    _check_csrf(request, session)
+    await _consume(
+        limiter, namespace="campaign-status",
+        identifier=f"{workspace_id}:{session['user_id']}", limit=60, window=3600,
+    )
+    try:
+        row = await campaigns.transition_status(
+            workspace_id=workspace_id, campaign_id=campaign_id,
+            user_id=session["user_id"], status=payload.status,
+        )
+    except ValueError as exc:
+        if str(exc) in {"invalid_campaign_transition", "campaign_status_unchanged", "invalid_campaign_status"}:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        raise HTTPException(status_code=422, detail="invalid_campaign_status") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="campaigns_unavailable") from None
+    if row is None:
+        raise HTTPException(status_code=404, detail="campaign_not_found")
     return {"workspace_id": workspace_id, "campaign": row}
