@@ -87,6 +87,8 @@ async def create_outreach_draft(
 ):
     drafts, limiter, session = await _authorized(request, workspace_id, "member")
     _check_csrf(request, session)
+    if payload.channel == "whatsapp" and not payload.whatsapp_opt_in_confirmed:
+        raise HTTPException(status_code=422, detail="whatsapp_opt_in_required")
     await _consume(
         limiter, namespace="outreach-draft-create",
         identifier=f"{workspace_id}:{session['user_id']}", limit=30, window=3600,
