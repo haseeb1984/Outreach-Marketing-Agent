@@ -45,3 +45,10 @@ invariants on every update, not just status changes.
 This is a defense-in-depth invariant, not proof that provider validation has already
 been implemented. The application still has no endpoint that completes OAuth or
 marks a connection connected, and message sending remains disabled.
+
+
+## OAuth transaction storage foundation (migration 014)
+
+The new `workspace_provider_oauth_transactions` table and transaction store are groundwork only; no public OAuth start/callback route is enabled. They bind a short-lived state digest to the exact pending connection, workspace, initiating user, provider, HTTPS redirect URI, PKCE S256 challenge, and nonce digest. Raw state is returned once to the caller but only its SHA-256 digest is stored. Callback processing must atomically consume state before any code exchange; expired or replayed states fail closed.
+
+The PKCE verifier must be written to an approved secret manager before creating the transaction; only its opaque reference is stored. The store never exchanges authorization codes, marks a connection connected, or sends messages. Before public OAuth routes can ship, add a vetted secret-manager adapter, exact per-provider redirect URI allowlists, provider-specific issuer/audience/nonce checks, token exchange and account validation, credential revocation, and integration tests with provider sandbox accounts. The database's HTTPS check is only a minimum format check, not the redirect allowlist.
