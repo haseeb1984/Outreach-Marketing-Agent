@@ -340,3 +340,33 @@ async def confirm_password_reset(payload: PasswordResetInput, request: Request):
     if not changed:
         raise HTTPException(status_code=400, detail="password_reset_link_invalid_or_expired")
     return {"message": "Password updated. Sign in again with your new password."}
+
+
+@router.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+async def password_reset_landing(token: str = "") -> HTMLResponse:
+    """Render a same-origin form; consuming the token requires an explicit POST."""
+    safe_token = escape(token, quote=True) if 32 <= len(token) <= 512 else ""
+    headers = {"Referrer-Policy": "no-referrer", "Cache-Control": "no-store"}
+    if not safe_token:
+        return HTMLResponse(
+            "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\"></head>"
+            "<body><main><h1>Invalid reset link</h1><p>Request a new password-reset email if needed.</p></main></body></html>",
+            status_code=400, headers=headers,
+        )
+    html = (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"referrer\" content=\"no-referrer\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>Reset password</title></head><body><main><h1>Choose a new password</h1>"
+        "<p>Use at least 12 characters. Existing sessions will be signed out.</p>"
+        "<form id=\"reset-form\"><label for=\"password\">New password</label>"
+        "<input id=\"password\" name=\"password\" type=\"password\" minlength=\"12\" maxlength=\"1024\" autocomplete=\"new-password\" required>"
+        "<button type=\"submit\">Update password</button></form><p id=\"result\" role=\"status\"></p>"
+        "<script>document.getElementById('reset-form').addEventListener('submit',async function(e){e.preventDefault();"
+        "const password=this.elements.password.value;const result=document.getElementById('result');"
+        "try{const r=await fetch('/api/v1/auth/password-reset/confirm',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({token:" + "\"" + safe_token + "\"" + ",new_password:password}),credentials:'same-origin'});"
+        "const data=await r.json();result.textContent=r.ok?data.message:(r.status===400?'Reset link is invalid or expired.':'Password reset is temporarily unavailable.');"
+        "if(r.ok)this.reset();}catch(_){result.textContent='Password reset is temporarily unavailable.';}});</script>"
+        "</main></body></html>"
+    )
+    return HTMLResponse(html, headers=headers)
