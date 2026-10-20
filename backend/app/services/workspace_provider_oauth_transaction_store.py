@@ -12,7 +12,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
+from app.services.provider_oauth_security import validate_redirect_uri
+from app.services.secret_manager import InvalidSecretReference, validate_secret_reference
+
 _PKCE_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+_OAUTH_STATE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -35,18 +39,26 @@ class WorkspaceProviderOAuthTransactionStore:
         self, *, workspace_id: str, connection_id: UUID, user_id: UUID,
         provider: str, state: str, pkce_challenge: str,
         verifier_secret_reference: str, redirect_uri: str, nonce: str,
-        lifetime_seconds: int = 600,
+        allowed_redirect_uris: tuple[str, ...], lifetime_seconds: int = 600,
     ) -> dict[str, Any]:
         if provider not in {"email", "whatsapp"}:
             raise ValueError("invalid_provider")
         if not isinstance(pkce_challenge, str) or not _PKCE_CHALLENGE.fullmatch(pkce_challenge):
             raise ValueError("invalid_pkce_challenge")
-        if not isinstance(redirect_uri, str) or not redirect_uri.startswith("https://") or len(redirect_uri) > 2048 or any(c.isspace() for c in redirect_uri):
-            raise ValueError("invalid_redirect_uri")
-        if not isinstance(verifier_secret_reference, str) or not 1 <= len(verifier_secret_reference.strip()) <= 500:
-            raise ValueError("invalid_verifier_secret_reference")
-        if re.search(r"(token|password|secret)=", verifier_secret_reference, re.I):
-            raise ValueError("invalid_verifier_secret_reference")
+        if not isinstance(state, str) or not _OAUTH_STATE.fullmatch(state):
+            raise ValueError("invalid_oauth_state")
+        if not isinstance(nonce, str) or not _OAUTH_STATE.fullmatch(nonce):
+            raise ValueError("invalid_oauth_nonce")
+        if not isinstance(allowed_redirect_uris, (tuple, list)) or not allowed_redirect_uris:
+            raise ValueError("redirect_uri_allowlist_required")
+        try:
+            redirect_uri = validate_redirect_uri(redirect_uri, allowed_uris=allowed_redirect_uris)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid_redirect_uri") from exc
+        try:
+            verifier_secret_reference = validate_secret_reference(verifier_secret_reference)
+        except InvalidSecretReference as exc:
+            raise ValueError("invalid_verifier_secret_reference") from exc
         if isinstance(lifetime_seconds, bool) or not isinstance(lifetime_seconds, int) or not 60 <= lifetime_seconds <= 900:
             raise ValueError("invalid_oauth_lifetime")
         state_digest = digest_oauth_value(state)
