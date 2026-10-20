@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+from app.core.config import settings
 from app.services.website_audit import validate_page_url
 
 
@@ -79,10 +80,16 @@ async def fetch_html(
     """
     requested_url = validate_page_url(url)
     owns_client = client is None
+    is_production = settings.environment.strip().lower() == "production"
+    if is_production and not settings.trusted_egress_proxy_url:
+        raise ValueError("Trusted egress proxy is required in production")
+    if is_production and client is not None:
+        raise ValueError("Injected HTTP clients are disabled in production")
     active_client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(limits.timeout_seconds),
         follow_redirects=False,
         trust_env=False,
+        proxy=settings.trusted_egress_proxy_url if is_production else None,
         headers={"User-Agent": "OutreachMarketingAgentAudit/0.1 (+read-only; bounded-fetch)"},
     )
     current_url = requested_url
