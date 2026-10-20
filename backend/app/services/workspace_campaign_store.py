@@ -1,6 +1,7 @@
 """Persistence for workspace-scoped outreach campaigns."""
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import UUID
 
@@ -27,7 +28,7 @@ class WorkspaceCampaignStore:
                        (workspace_id, actor_user_id, event_type, outcome, metadata)
                        VALUES ($1, $2, 'campaign.created', 'success', $3::jsonb)""",
                     workspace_id, UUID(str(user_id)),
-                    __import__("json").dumps({"campaign_id": str(row["id"]), "goal": goal, "channel": channel}),
+                    json.dumps({"campaign_id": str(row["id"]), "goal": goal, "channel": channel}),
                 )
         return self._public(row)
 
