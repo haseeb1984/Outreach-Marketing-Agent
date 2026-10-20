@@ -183,9 +183,15 @@ async def verification_landing(token: str = "") -> HTMLResponse:
         "<meta name=\"referrer\" content=\"no-referrer\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         "<title>Verify email</title></head><body><main><h1>Verify your email</h1>"
         "<p>Select the button to activate this verification link.</p>"
-        "<form method=\"post\" action=\"/api/v1/auth/verify-email\">"
+        "<form id=\"verify-form\">"
         f"<input type=\"hidden\" name=\"token\" value=\"{safe_token}\">"
-        "<button type=\"submit\">Verify email</button></form></main></body></html>"
+        "<button type=\"submit\">Verify email</button></form><p id=\"result\" role=\"status\"></p>"
+        "<script>document.getElementById('verify-form').addEventListener('submit',async function(e){e.preventDefault();"
+        "const token=this.elements.token.value;const result=document.getElementById('result');"
+        "try{const r=await fetch('/api/v1/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({token}),credentials:'same-origin'});const data=await r.json();"
+        "result.textContent=r.ok?data.message:'Verification link is invalid or expired.';}catch(_){result.textContent='Verification is temporarily unavailable.';}});</script>"
+        "</main></body></html>"
     )
     return HTMLResponse(html, headers={"Referrer-Policy": "no-referrer", "Cache-Control": "no-store"})
 
