@@ -47,6 +47,12 @@ class FakeProspectStore:
     async def list_for_workspace(self, **kwargs):
         return self.rows
 
+    async def record_whatsapp_opt_in(self, **kwargs):
+        self.consent_record = kwargs
+        return {"id": PROSPECT_ID, "whatsapp_opt_in_at": "2026-10-21T00:00:00+00:00",
+                "whatsapp_opt_in_source": kwargs["source"],
+                "whatsapp_opt_in_evidence_url": kwargs["evidence_url"], "opt_out": False}
+
     async def update_stage(self, **kwargs):
         self.stage_update = kwargs
         opted_out = kwargs["stage"] == "opted_out"
@@ -120,3 +126,41 @@ def test_list_prospects_is_workspace_scoped(monkeypatch):
         response = client.get("/api/v1/workspaces/workspace-a/prospects")
     assert response.status_code == 200
     assert response.json()["prospects"] == []
+
+
+
+def test_whatsapp_consent_requires_member_csrf_and_clean_evidence_url(monkeypatch):
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, "viewer")
+        denied = client.post(
+            f"/api/v1/workspaces/workspace-a/prospects/{PROSPECT_ID}/whatsapp-consent",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"source": "Website signup form", "evidence_url": "https://shop.example/consent"},
+        )
+        setup(monkeypatch, client, "member")
+        unsafe = client.post(
+            f"/api/v1/workspaces/workspace-a/prospects/{PROSPECT_ID}/whatsapp-consent",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"source": "Website signup form", "evidence_url": "https://shop.example/consent?token=secret"},
+        )
+        accepted = client.post(
+            f"/api/v1/workspaces/workspace-a/prospects/{PROSPECT_ID}/whatsapp-consent",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"source": "Website signup form", "evidence_url": "https://shop.example/consent"},
+        )
+    assert denied.status_code == 404
+    assert unsafe.status_code == 422
+    assert accepted.status_code == 200
+    assert accepted.json()["prospect"]["whatsapp_opt_in_source"] == "Website signup form"
+    assert "not been independently verified" in accepted.json()["message"]
+
+
+def test_whatsapp_consent_rejects_non_https_and_extra_fields(monkeypatch):
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, "member")
+        response = client.post(
+            f"/api/v1/workspaces/workspace-a/prospects/{PROSPECT_ID}/whatsapp-consent",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"source": "Form", "evidence_url": "http://shop.example/consent", "access_token": "never accept"},
+        )
+    assert response.status_code == 422
