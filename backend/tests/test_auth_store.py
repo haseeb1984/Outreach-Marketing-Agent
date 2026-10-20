@@ -163,3 +163,20 @@ def test_password_authentication_uses_generic_failure_for_invalid_credentials():
         email="person@example.com", password="correct horse battery staple"
     )) is None
 
+
+
+def test_password_authentication_checks_dummy_hash_for_missing_account(monkeypatch):
+    import asyncio
+    from app.services import auth_security
+    from app.services.auth_store import AuthStore
+
+    calls = []
+    monkeypatch.setattr(auth_security, "verify_password", lambda password, encoded: calls.append(encoded) or False)
+    monkeypatch.setattr(auth_security, "dummy_password_hash", lambda: "dummy-scrypt-hash")
+
+    result = asyncio.run(AuthStore(_CredentialPool(None)).authenticate_password(
+        email="person@example.com", password="candidate password"
+    ))
+
+    assert result is None
+    assert calls == ["dummy-scrypt-hash"]
