@@ -131,3 +131,50 @@ def test_worker_forever_rejects_unbounded_idle_polling():
         assert "between 0.1 and 60" in str(exc)
     else:
         raise AssertionError("invalid idle delay should be rejected")
+
+
+def test_worker_forever_retries_transient_errors_with_bounded_backoff(monkeypatch):
+    calls = []
+    sleeps = []
+
+    async def fake_once(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("sensitive connection detail")
+        raise asyncio.CancelledError()
+
+    async def fake_sleep(delay):
+        sleeps.append(delay)
+
+    monkeypatch.setattr(runtime, "run_worker_once", fake_once)
+    monkeypatch.setattr(runtime.asyncio, "sleep", fake_sleep)
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-retry",
+            job_queue=Queue(),
+            domain_store=object(),
+            error_sleep_seconds=0.5,
+            max_error_sleep_seconds=1.0,
+        ))
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError("worker cancellation must propagate")
+
+    assert len(calls) == 2
+    assert sleeps == [0.5]
+
+
+def test_worker_forever_rejects_invalid_error_backoff():
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-loop",
+            job_queue=Queue(),
+            domain_store=object(),
+            error_sleep_seconds=2,
+            max_error_sleep_seconds=1,
+        ))
+    except ValueError as exc:
+        assert "error sleep" in str(exc)
+    else:
+        raise AssertionError("invalid error backoff should be rejected")
