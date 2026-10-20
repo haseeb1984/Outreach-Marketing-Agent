@@ -68,7 +68,7 @@ def test_connection_intent_requires_admin_and_csrf(monkeypatch):
     assert no_csrf.status_code == 403
     assert created.status_code == 201
     assert created.json()["connection"]["status"] == "pending"
-    assert created.json()["sending_enabled"] if "sending_enabled" in created.json() else True
+    assert "secret_reference" not in created.json()["connection"]
     assert "not yet available" in created.json()["message"]
 
 
