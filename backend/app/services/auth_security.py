@@ -1,7 +1,6 @@
 """Security primitives for account/session flows; not an HTTP authentication system."""
 from __future__ import annotations
 import hashlib, hmac, re, secrets
-from functools import lru_cache
 from dataclasses import dataclass
 
 _SCRYPT_N = 2**14
@@ -51,11 +50,14 @@ def constant_time_token_match(candidate: str, expected_digest: str) -> bool:
     except ValueError: return False
 
 
-@lru_cache(maxsize=1)
 def dummy_password_hash() -> str:
-    """Return one process-local dummy hash for timing-resistant unknown-account checks.
+    """Return a fixed, valid scrypt hash for unknown-account timing equalization.
 
-    The fixed dummy password is never accepted as a user credential; only its
-    salted hash is used to make the unknown-account path perform scrypt work.
+    The matching password is an internal dummy value and is never accepted as a
+    user credential. Keeping the precomputed hash avoids extra scrypt work on the
+    first unknown-account request in each worker process.
     """
-    return hash_password("oma-internal-dummy-password-never-use-for-login").encoded
+    return (
+        "scrypt$16384$8$1$8f4d2a6c91b307e5d8a0426f17c39b50$"
+        "c9588408435df87be0b47c48baceb0f7b64b27c2d491d7077e1dc4acac123681"
+    )
