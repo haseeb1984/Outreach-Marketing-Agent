@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     database_url: str | None = None
     secret_key: str | None = None
+    # Must point to an operator-managed proxy that enforces destination IP policy at connection time.
+    trusted_egress_proxy_url: str | None = None
     # Set to the real HTTPS origin in each deployment to enable canonical URLs/sitemap.
     public_base_url: str | None = None
     smtp_host: str | None = None
