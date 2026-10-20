@@ -49,3 +49,14 @@ A pending draft can be reviewed once. The decision and actor are recorded in the
 ## Release boundary
 
 This feature does not send email or WhatsApp, connect provider accounts, validate consent with a provider, schedule follow-ups, or guarantee the accuracy of supplied research facts. Those require separate integrations, policy checks, credential handling, consent evidence, and delivery-specific approval controls.
+
+## Workspace campaigns
+
+Campaign metadata is managed separately from sending:
+
+- `POST /api/v1/workspaces/{workspace_id}/campaigns` creates a campaign (minimum role: `member`; CSRF-protected and rate-limited).
+- `GET /api/v1/workspaces/{workspace_id}/campaigns?limit=50&status=draft` lists campaigns (minimum role: `viewer`; limit 1–100).
+- Campaign goals: `partnerships`, `influencer_outreach`, `sales`, `brand_awareness`, `other`.
+- Channels: `email`, `whatsapp`, `multi_channel`. Status filters: `draft`, `active`, `paused`, `completed`, `archived`.
+
+Campaign website URLs are stored as metadata only; creation does not fetch them. URLs must be clean HTTPS URLs without credentials, query strings, or fragments. A draft may optionally include `campaign_id`; the database enforces that a linked campaign belongs to the same workspace. Deleting a campaign referenced by drafts is constrained rather than silently unlinking history.
