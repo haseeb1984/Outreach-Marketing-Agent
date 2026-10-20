@@ -26,6 +26,7 @@ MIGRATIONS = (
     "011_whatsapp_opt_in_evidence.sql",
     "012_workspace_provider_connections.sql",
     "013_provider_connection_lifecycle_guard.sql",
+    "014_provider_oauth_transactions.sql",
 )
 
 
@@ -108,5 +109,38 @@ async def _exercise_lifecycle_guard() -> None:
                    WHERE id=$1""",
                 connection_id,
             )
+
+        # OAuth state is bound to one pending connection and can be consumed only once.
+        from app.services.workspace_provider_oauth_transaction_store import (
+            WorkspaceProviderOAuthTransactionStore, new_oauth_state,
+        )
+        pending_id = await connection.fetchval(
+            """INSERT INTO workspace_provider_connections
+               (workspace_id, provider, display_label, created_by)
+               VALUES ($1, 'email', 'OAuth integration mailbox', $2) RETURNING id""",
+            workspace_id, user_id,
+        )
+        pool = await asyncpg.create_pool(os.environ["OMA_TEST_DATABASE_URL"], min_size=1, max_size=2)
+        try:
+            oauth_store = WorkspaceProviderOAuthTransactionStore(pool)
+            state = new_oauth_state()
+            nonce = new_oauth_state()
+            transaction = await oauth_store.create(
+                workspace_id=workspace_id, connection_id=pending_id, user_id=user_id,
+                provider="email", state=state, pkce_challenge="A" * 43,
+                verifier_secret_reference="vault://opaque/pkce-verifier-ref",
+                redirect_uri="https://app.example.test/oauth/email/callback",
+                nonce=nonce, lifetime_seconds=600,
+            )
+            assert transaction["connection_id"] == str(pending_id)
+            assert "verifier_secret_reference" not in transaction
+            consumed = await oauth_store.consume(state=state)
+            assert consumed is not None
+            assert consumed["verifier_secret_reference"] == "vault://opaque/pkce-verifier-ref"
+            assert "nonce_sha256" in consumed
+            assert await oauth_store.consume(state=state) is None
+            assert await oauth_store.consume(state="x") is None
+        finally:
+            await pool.close()
     finally:
         await connection.close()
