@@ -59,6 +59,19 @@ class WorkspaceProviderConnectionStore:
             )
         return [self._public(row) for row in rows]
 
+    async def get_for_workspace(self, *, workspace_id: str, connection_id: UUID) -> dict[str, Any] | None:
+        """Return one connection's safe metadata, scoped to its workspace."""
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """SELECT id, workspace_id, provider, display_label, status, granted_scopes,
+                          token_expires_at, last_validated_at, last_error_code, created_by,
+                          created_at, updated_at, revoked_at
+                   FROM workspace_provider_connections
+                   WHERE workspace_id=$1 AND id=$2""",
+                workspace_id, connection_id,
+            )
+        return self._public(row) if row is not None else None
+
     async def cancel_pending(self, *, workspace_id: str, connection_id: UUID, user_id: str) -> dict[str, Any] | None:
         """Cancel an intent that has no provider credentials attached."""
         async with self._pool.acquire() as connection:
