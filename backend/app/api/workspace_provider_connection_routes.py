@@ -65,6 +65,25 @@ async def list_provider_connections(
             "sending_enabled": False}
 
 
+@router.get("/{connection_id}")
+async def get_provider_connection(
+    workspace_id: str, connection_id: UUID, request: Request,
+):
+    store, limiter, session = await _authorized(request, workspace_id, "viewer")
+    await _consume(limiter, namespace="provider-connection-detail",
+                   identifier=f"{workspace_id}:{session['user_id']}", limit=120, window=3600)
+    try:
+        row = await store.get_for_workspace(
+            workspace_id=workspace_id, connection_id=connection_id,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="provider_connections_unavailable") from None
+    if row is None:
+        # Same response for nonexistent and other-workspace IDs avoids resource enumeration.
+        raise HTTPException(status_code=404, detail="provider_connection_not_found")
+    return {"workspace_id": workspace_id, "connection": row, "sending_enabled": False}
+
+
 @router.post("", status_code=201)
 async def create_provider_connection_intent(
     workspace_id: str, payload: ProviderConnectionIntentInput, request: Request,
