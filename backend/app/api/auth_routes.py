@@ -114,6 +114,14 @@ def _check_csrf(request: Request, session: dict) -> None:
         raise HTTPException(status_code=403, detail="csrf_validation_failed")
 
 
+def _csrf_cookie(token: str, max_age: int) -> str:
+    if not isinstance(token, str) or not 32 <= len(token) <= 512:
+        raise ValueError("invalid_csrf_token")
+    if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 1:
+        raise ValueError("invalid_csrf_lifetime")
+    return f"__Host-oma_csrf={token}; Path=/; Max-Age={max_age}; Secure; SameSite=Lax"
+
+
 @router.post("/register", status_code=202)
 async def register(payload: RegistrationInput, request: Request):
     _require_origin(request)
@@ -207,6 +215,7 @@ async def login(payload: LoginInput, request: Request):
     })
     max_age = max(1, int((session["expires_at"] - datetime.now(timezone.utc)).total_seconds()))
     response.headers.append("Set-Cookie", cookie_policy.set_cookie_header(session["token"], max_age=max_age))
+    response.headers.append("Set-Cookie", _csrf_cookie(session["csrf_token"], max_age))
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -216,9 +225,11 @@ async def login(payload: LoginInput, request: Request):
 @router.get("/me")
 async def me(request: Request):
     _, _, session = await _authenticated(request)
+    csrf_token = request.cookies.get("__Host-oma_csrf", "")
+    token_matches = verify_csrf_token(csrf_token, session["csrf_token_sha256"])
     return {
         "user": {"user_id": str(session["user_id"]), "email": session["email"]},
-        "csrf_token_sha256": session["csrf_token_sha256"],
+        "csrf_token": csrf_token if token_matches else None,
         "expires_at": session["expires_at"].isoformat(),
     }
 
@@ -242,6 +253,7 @@ async def rotate(request: Request):
     })
     max_age = max(1, int((replacement["expires_at"] - datetime.now(timezone.utc)).total_seconds()))
     response.headers.append("Set-Cookie", cookie_policy.set_cookie_header(replacement["token"], max_age=max_age))
+    response.headers.append("Set-Cookie", _csrf_cookie(replacement["csrf_token"], max_age))
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -254,6 +266,7 @@ async def logout(request: Request):
     await store.revoke_session(token)
     response = JSONResponse({"message": "Signed out."})
     response.headers.append("Set-Cookie", cookie_policy.clear_cookie_header())
+    response.headers.append("Set-Cookie", "__Host-oma_csrf=; Path=/; Max-Age=0; Secure; SameSite=Lax")
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
