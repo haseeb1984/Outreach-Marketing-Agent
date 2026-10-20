@@ -50,6 +50,47 @@ class WorkspaceCampaignStore:
                 )
         return [self._public(row) for row in rows]
 
+    async def transition_status(
+        self, *, workspace_id: str, campaign_id: UUID, user_id: str, status: str,
+    ) -> dict[str, Any] | None:
+        """Apply an explicit campaign lifecycle transition atomically."""
+        transitions = {
+            "draft": {"active", "archived"},
+            "active": {"paused", "completed"},
+            "paused": {"active", "completed", "archived"},
+            "completed": {"archived"},
+            "archived": set(),
+        }
+        if status not in transitions:
+            raise ValueError("invalid_campaign_status")
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                current = await connection.fetchrow(
+                    """SELECT id, status FROM workspace_campaigns
+                       WHERE workspace_id=$1 AND id=$2 FOR UPDATE""",
+                    workspace_id, campaign_id,
+                )
+                if current is None:
+                    return None
+                previous = str(current["status"])
+                if status == previous:
+                    raise ValueError("campaign_status_unchanged")
+                if status not in transitions.get(previous, set()):
+                    raise ValueError("invalid_campaign_transition")
+                row = await connection.fetchrow(
+                    """UPDATE workspace_campaigns SET status=$3, updated_at=now()
+                       WHERE workspace_id=$1 AND id=$2 RETURNING *""",
+                    workspace_id, campaign_id, status,
+                )
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id, actor_user_id, event_type, outcome, metadata)
+                       VALUES ($1, $2, 'campaign.status_changed', 'success', $3::jsonb)""",
+                    workspace_id, UUID(str(user_id)),
+                    json.dumps({"campaign_id": str(campaign_id), "from": previous, "to": status}),
+                )
+        return self._public(row)
+
     @staticmethod
     def _public(row: Any) -> dict[str, Any]:
         result = dict(row)
