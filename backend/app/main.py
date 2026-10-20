@@ -24,6 +24,7 @@ async def lifespan(application: FastAPI):
     application.state.workspace_outreach_draft_store = None
     application.state.workspace_campaign_store = None
     application.state.workspace_prospect_store = None
+    application.state.workspace_provider_connection_store = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -42,12 +43,14 @@ async def lifespan(application: FastAPI):
         from app.services.workspace_outreach_draft_store import WorkspaceOutreachDraftStore
         from app.services.workspace_campaign_store import WorkspaceCampaignStore
         from app.services.workspace_prospect_store import WorkspaceProspectStore
+        from app.services.workspace_provider_connection_store import WorkspaceProviderConnectionStore
 
         application.state.auth_store = AuthStore(pool)
         application.state.workspace_job_queue = WorkspaceJobQueue(pool)
         application.state.workspace_outreach_draft_store = WorkspaceOutreachDraftStore(pool)
         application.state.workspace_campaign_store = WorkspaceCampaignStore(pool)
         application.state.workspace_prospect_store = WorkspaceProspectStore(pool)
+        application.state.workspace_provider_connection_store = WorkspaceProviderConnectionStore(pool)
         if settings.secret_key and len(settings.secret_key.encode("utf-8")) >= 32:
             application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
@@ -71,6 +74,7 @@ from app.api.workspace_job_routes import router as workspace_job_router
 from app.api.workspace_outreach_routes import router as workspace_outreach_router
 from app.api.workspace_campaign_routes import router as workspace_campaign_router
 from app.api.workspace_prospect_routes import router as workspace_prospect_router
+from app.api.workspace_provider_connection_routes import router as workspace_provider_connection_router
 
 app.include_router(auth_router)
 app.include_router(workspace_domain_router)
@@ -78,6 +82,7 @@ app.include_router(workspace_job_router)
 app.include_router(workspace_outreach_router)
 app.include_router(workspace_campaign_router)
 app.include_router(workspace_prospect_router)
+app.include_router(workspace_provider_connection_router)
 
 
 PUBLIC_PAGES = [
