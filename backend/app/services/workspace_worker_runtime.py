@@ -109,6 +109,8 @@ async def run_worker_forever(
     egress_guard: Callable[[], Any] | None = None,
     lease_seconds: int = 300,
     idle_sleep_seconds: float = 2.0,
+    error_sleep_seconds: float = 1.0,
+    max_error_sleep_seconds: float = 30.0,
 ) -> None:
     """Run a supervised worker loop until its task is cancelled.
 
@@ -119,14 +121,40 @@ async def run_worker_forever(
         raise ValueError("idle_sleep_seconds must be a number between 0.1 and 60")
     if not 0.1 <= idle_sleep_seconds <= 60:
         raise ValueError("idle_sleep_seconds must be between 0.1 and 60")
+    if (
+        isinstance(error_sleep_seconds, bool)
+        or not isinstance(error_sleep_seconds, (int, float))
+        or isinstance(max_error_sleep_seconds, bool)
+        or not isinstance(max_error_sleep_seconds, (int, float))
+        or not 0.1 <= error_sleep_seconds <= 60
+        or not error_sleep_seconds <= max_error_sleep_seconds <= 300
+    ):
+        raise ValueError("error sleep must be 0.1–60 seconds and maximum must be between the base delay and 300")
 
+    consecutive_errors = 0
     while True:
-        result = await run_worker_once(
-            worker_id=worker_id,
-            job_queue=job_queue,
-            domain_store=domain_store,
-            egress_guard=egress_guard,
-            lease_seconds=lease_seconds,
-        )
+        try:
+            result = await run_worker_once(
+                worker_id=worker_id,
+                job_queue=job_queue,
+                domain_store=domain_store,
+                egress_guard=egress_guard,
+                lease_seconds=lease_seconds,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Never print database/proxy exception details: they may contain secrets.
+            consecutive_errors += 1
+            delay = min(
+                float(max_error_sleep_seconds),
+                float(error_sleep_seconds) * (2 ** min(consecutive_errors - 1, 10)),
+            )
+            await asyncio.sleep(delay)
+            continue
+
         if result.get("status") == "idle":
+            consecutive_errors = 0
             await asyncio.sleep(idle_sleep_seconds)
+        else:
+            consecutive_errors = 0
