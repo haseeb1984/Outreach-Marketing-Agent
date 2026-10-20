@@ -2,7 +2,7 @@
 
 ## Current implementation boundary
 
-Migration 012 stores **connection metadata only** for workspace-owned email and WhatsApp provider accounts. The API can create an admin-authorized `pending` intent and list safe metadata. It does not implement OAuth, provider webhooks, token refresh, provider API calls, or message delivery.
+Migration 012 stores **connection metadata only** for workspace-owned email and WhatsApp provider accounts. The API can create an admin-authorized `pending` intent, list safe metadata, and cancel a pending intent. Cancellation marks only a pending metadata record as revoked; it does not claim to revoke a live provider credential. It does not implement OAuth, provider webhooks, token refresh, provider API calls, or message delivery.
 
 ## Secret handling
 
