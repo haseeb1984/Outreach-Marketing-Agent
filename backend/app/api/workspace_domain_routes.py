@@ -8,6 +8,7 @@ import dns.asyncresolver
 import dns.exception
 import dns.resolver
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.auth_routes import _authenticated, _check_csrf, _consume
@@ -117,14 +118,21 @@ async def create_domain_challenge(
         raise HTTPException(status_code=503, detail="domain_challenge_unavailable") from None
     challenge = result["challenge"]
     dns_record = result["dns_record"]
-    return {
-        "workspace_id": workspace_id,
-        "domain": challenge["domain"],
-        "method": challenge["method"],
-        "txt_record_name": dns_record["record_name"],
-        "txt_record_value": dns_record["record_value"],
-        "expires_at": challenge["expires_at"],
-    }
+    return JSONResponse(
+        content={
+            "workspace_id": workspace_id,
+            "domain": challenge["domain"],
+            "method": challenge["method"],
+            "txt_record_name": dns_record["record_name"],
+            "txt_record_value": dns_record["record_value"],
+            "expires_at": challenge["expires_at"],
+        },
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
 
 
 @router.post("/verify")
