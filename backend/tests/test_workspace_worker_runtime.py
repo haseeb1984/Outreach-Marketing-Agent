@@ -91,3 +91,43 @@ def test_worker_runtime_stops_processing_when_lease_renewal_fails(monkeypatch):
 
     assert result == {"status": "lease_lost", "reason": "job_lease_renewal_failed"}
     assert cancelled.is_set()
+
+
+def test_worker_forever_repeats_after_idle_and_stops_on_cancellation(monkeypatch):
+    calls = []
+
+    async def fake_once(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return {"status": "idle"}
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(runtime, "run_worker_once", fake_once)
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-loop",
+            job_queue=Queue(),
+            domain_store=object(),
+            idle_sleep_seconds=0.1,
+        ))
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError("worker cancellation must propagate")
+
+    assert len(calls) == 2
+    assert calls[0]["worker_id"] == "worker-loop"
+
+
+def test_worker_forever_rejects_unbounded_idle_polling():
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-loop",
+            job_queue=Queue(),
+            domain_store=object(),
+            idle_sleep_seconds=0,
+        ))
+    except ValueError as exc:
+        assert "between 0.1 and 60" in str(exc)
+    else:
+        raise AssertionError("invalid idle delay should be rejected")
