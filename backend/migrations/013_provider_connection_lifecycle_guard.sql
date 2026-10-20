@@ -6,6 +6,21 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     IF NEW.status = OLD.status THEN
+        -- Keep the connected-state proof intact even if a later UPDATE changes metadata only.
+        IF NEW.status = 'connected' AND (
+            NEW.provider_account_id IS NULL
+            OR length(btrim(NEW.provider_account_id)) = 0
+            OR NEW.secret_reference IS NULL
+            OR length(btrim(NEW.secret_reference)) = 0
+            OR cardinality(NEW.granted_scopes) = 0
+            OR NEW.last_validated_at IS NULL
+        ) THEN
+            RAISE EXCEPTION 'connected provider connection requires validated account metadata'
+                USING ERRCODE = 'check_violation';
+        END IF;
+        IF NEW.status = 'revoked' THEN
+            NEW.revoked_at := COALESCE(NEW.revoked_at, OLD.revoked_at, now());
+        END IF;
         RETURN NEW;
     END IF;
 
@@ -56,6 +71,6 @@ DROP TRIGGER IF EXISTS workspace_provider_connection_transition_guard
     ON workspace_provider_connections;
 
 CREATE TRIGGER workspace_provider_connection_transition_guard
-BEFORE UPDATE OF status ON workspace_provider_connections
+BEFORE UPDATE ON workspace_provider_connections
 FOR EACH ROW
 EXECUTE FUNCTION enforce_workspace_provider_connection_transition();
