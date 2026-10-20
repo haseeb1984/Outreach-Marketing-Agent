@@ -252,6 +252,7 @@ def test_http_session_rotation_replaces_both_cookies_and_csrf_token(monkeypatch)
         cookies = response.headers.get_list("set-cookie")
         assert any(value.startswith("__Host-oma_session=" + new_session) for value in cookies)
         assert any(value.startswith("__Host-oma_csrf=" + new_csrf) for value in cookies)
-        assert await app.state.auth_store.authenticate_session(old_session) is None
+        import asyncio
+        assert asyncio.run(app.state.auth_store.authenticate_session(old_session)) is None
         assert client.get("/api/v1/auth/me").status_code == 200
 
