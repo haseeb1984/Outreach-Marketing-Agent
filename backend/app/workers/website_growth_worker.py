@@ -176,22 +176,28 @@ async def run_worker(*, poll_seconds: float = POLL_SECONDS) -> None:
     queue = WorkspaceJobQueue(pool)
     domain_store = DomainAuthorizationStore(pool)
     logger.info("website growth worker started")
+    error_backoff = poll_seconds
     try:
         while True:
             try:
                 job = await queue.claim(worker_id=worker_id, lease_seconds=LEASE_SECONDS)
                 if job is None:
+                    error_backoff = poll_seconds
                     await asyncio.sleep(poll_seconds)
                     continue
                 outcome = await process_claimed_job(
                     queue=queue, domain_store=domain_store, job=job, worker_id=worker_id
                 )
+                error_backoff = poll_seconds
                 logger.info("website growth job finished with outcome=%s", outcome)
             except asyncio.CancelledError:
                 raise
             except Exception:
+                # Avoid hammering PostgreSQL during outages. This delay is local
+                # process state only and is capped so recovery remains responsive.
                 logger.error("worker iteration failed; retrying after a bounded delay")
-                await asyncio.sleep(poll_seconds)
+                await asyncio.sleep(error_backoff)
+                error_backoff = min(30.0, max(poll_seconds, error_backoff * 2))
     finally:
         await pool.close()
 
