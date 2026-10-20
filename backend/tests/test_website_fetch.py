@@ -3,6 +3,7 @@ import asyncio
 import httpx
 import pytest
 
+from app.core.config import settings
 from app.services.website_fetch import FetchLimits, fetch_html
 
 
@@ -300,5 +301,28 @@ def test_fetch_html_fails_closed_when_dns_returns_no_addresses():
                 )
 
         assert requested == []
+
+    asyncio.run(run())
+
+
+def test_production_fetch_fails_closed_without_trusted_egress_proxy(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "trusted_egress_proxy_url", None)
+
+    with pytest.raises(ValueError, match="Trusted egress proxy is required"):
+        asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
+
+
+def test_production_fetch_rejects_injected_http_client(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "trusted_egress_proxy_url", "http://egress-proxy.internal:3128")
+
+    async def handler(request):
+        return httpx.Response(200, headers={"content-type": "text/html"}, text="ok", request=request)
+
+    async def run():
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="Injected HTTP clients are disabled"):
+                await fetch_html("https://example.com/", client=client, resolver=public_resolver)
 
     asyncio.run(run())
