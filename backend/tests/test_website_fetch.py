@@ -326,3 +326,48 @@ def test_production_fetch_rejects_injected_http_client(monkeypatch):
                 await fetch_html("https://example.com/", client=client, resolver=public_resolver)
 
     asyncio.run(run())
+
+
+
+def test_production_fetch_constructs_client_with_configured_egress_proxy(monkeypatch):
+    """Configuration must actually route the production client through the proxy."""
+    monkeypatch.setattr(settings, "environment", "production")
+    proxy_url = "http://egress-proxy.internal:3128"
+    monkeypatch.setattr(settings, "trusted_egress_proxy_url", proxy_url)
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/html"}
+        encoding = "utf-8"
+        url = httpx.URL("https://example.com/")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def aiter_bytes(self):
+            yield b"<title>proxy-routed</title>"
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def stream(self, method, url, **kwargs):
+            assert method == "GET"
+            assert str(url) == "https://example.com/"
+            return FakeResponse()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
+
+    assert captured["proxy"] == proxy_url
+    assert captured["trust_env"] is False
+    assert captured["follow_redirects"] is False
+    assert result.body == "<title>proxy-routed</title>"
