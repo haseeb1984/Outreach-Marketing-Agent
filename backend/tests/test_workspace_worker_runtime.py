@@ -61,3 +61,33 @@ def test_worker_runtime_claims_at_most_one_job_and_delegates(monkeypatch):
         "job_queue": queue,
         "egress_guard": guard,
     }
+
+
+def test_worker_runtime_stops_processing_when_lease_renewal_fails(monkeypatch):
+    job = {"id": "job-1", "job_type": "website_growth_scan", "payload": {}}
+    queue = Queue(job)
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def blocked_process(**kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    async def lose_lease(**kwargs):
+        await started.wait()
+        kwargs["lease_lost"].set()
+
+    monkeypatch.setattr(runtime, "process_claimed_website_scan", blocked_process)
+    monkeypatch.setattr(runtime, "_renew_until_stopped", lose_lease)
+    result = asyncio.run(runtime.run_worker_once(
+        worker_id="worker-3",
+        job_queue=queue,
+        domain_store=object(),
+    ))
+
+    assert result == {"status": "lease_lost", "reason": "job_lease_renewal_failed"}
+    assert cancelled.is_set()
