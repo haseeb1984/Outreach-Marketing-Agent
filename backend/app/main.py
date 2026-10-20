@@ -18,6 +18,8 @@ async def lifespan(application: FastAPI):
     """Create an optional PostgreSQL pool without running migrations at startup."""
     application.state.db_pool = None
     application.state.domain_authorization_store = None
+    application.state.auth_store = None
+    application.state.auth_rate_limiter = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -30,6 +32,12 @@ async def lifespan(application: FastAPI):
 
         application.state.db_pool = pool
         application.state.domain_authorization_store = DomainAuthorizationStore(pool)
+        from app.services.auth_store import AuthStore
+        from app.services.auth_rate_limiter import AuthRateLimiter
+
+        application.state.auth_store = AuthStore(pool)
+        if settings.secret_key and len(settings.secret_key.encode("utf-8")) >= 32:
+            application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
         yield
     finally:
@@ -44,6 +52,11 @@ app = FastAPI(
     description="Evidence-led, human-approved influencer and outreach campaign workspace.",
     lifespan=lifespan,
 )
+
+from app.api.auth_routes import router as auth_router
+
+app.include_router(auth_router)
+
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
