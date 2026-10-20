@@ -25,7 +25,7 @@ class WorkspaceOutreachDraftStore:
         if (
             parsed.scheme.lower() != "https" or not parsed.hostname
             or parsed.username is not None or parsed.password is not None
-            or parsed.fragment
+            or parsed.query or parsed.fragment
         ):
             raise ValueError("prospect_evidence_url_must_be_https")
         draft = draft_outreach(
