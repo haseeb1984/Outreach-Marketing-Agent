@@ -4,6 +4,8 @@ No OAuth callback, provider API call, token storage, or message sending is imple
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -84,4 +86,29 @@ async def create_provider_connection_intent(
         "workspace_id": workspace_id,
         "connection": row,
         "message": "Intent saved only. Provider authorization and validation are not yet available; sending remains disabled.",
+    }
+
+
+
+@router.post("/{connection_id}/cancel")
+async def cancel_provider_connection_intent(
+    workspace_id: str, connection_id: UUID, request: Request,
+):
+    store, limiter, session = await _authorized(request, workspace_id, "admin")
+    _check_csrf(request, session)
+    await _consume(limiter, namespace="provider-connection-cancel",
+                   identifier=f"{workspace_id}:{session['user_id']}", limit=20, window=3600)
+    try:
+        row = await store.cancel_pending(
+            workspace_id=workspace_id, connection_id=connection_id,
+            user_id=session["user_id"],
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="provider_connections_unavailable") from None
+    if row is None:
+        raise HTTPException(status_code=404, detail="pending_connection_intent_not_found")
+    return {
+        "workspace_id": workspace_id,
+        "connection": row,
+        "message": "Pending intent cancelled. This endpoint does not revoke credentials at a provider because no live provider connection is supported yet.",
     }
