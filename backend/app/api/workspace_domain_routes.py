@@ -127,6 +127,7 @@ async def create_domain_challenge(
             "txt_record_value": dns_record["record_value"],
             "expires_at": challenge["expires_at"],
         },
+        status_code=201,
         headers={
             "Cache-Control": "no-store",
             "Pragma": "no-cache",
