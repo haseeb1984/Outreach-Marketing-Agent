@@ -257,3 +257,92 @@ def test_domain_listing_is_rate_limited(monkeypatch):
         response = client.get("/api/v1/workspaces/workspace-a/domains")
     assert response.status_code == 429
     assert response.json()["detail"] == "too_many_requests"
+
+
+
+class FakeWorkspaceJobQueue:
+    def __init__(self):
+        self.cancelled = None
+
+    async def list_for_workspace(self, *, workspace_id, limit=50, before=None):
+        return [{
+            "id": "00000000-0000-0000-0000-000000000099",
+            "workspace_id": workspace_id,
+            "job_type": "website_growth_scan",
+            "status": "queued",
+            "attempt_count": 0,
+            "max_attempts": 3,
+            "error_code": None,
+            "created_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
+            "started_at": None,
+            "finished_at": None,
+            "updated_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
+        }]
+
+    async def get_status(self, *, workspace_id, job_id):
+        if workspace_id != "workspace-a":
+            return None
+        return {
+            "id": str(job_id),
+            "workspace_id": workspace_id,
+            "job_type": "website_growth_scan",
+            "status": "queued",
+            "attempt_count": 0,
+            "max_attempts": 3,
+            "error_code": None,
+            "created_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
+            "started_at": None,
+            "finished_at": None,
+            "updated_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
+        }
+
+    async def cancel(self, *, workspace_id, job_id):
+        self.cancelled = (workspace_id, str(job_id))
+        return True
+
+
+def setup_workspace_jobs_app(monkeypatch, client, *, allowed=True, role="admin"):
+    setup_workspace_app(monkeypatch, client, allowed=allowed, role=role)
+    app.state.workspace_job_queue = FakeWorkspaceJobQueue()
+
+
+def test_workspace_job_list_is_authorized_and_excludes_payload(monkeypatch):
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_jobs_app(monkeypatch, client, role="viewer")
+        response = client.get("/api/v1/workspaces/workspace-a/jobs?limit=10")
+    assert response.status_code == 200
+    assert response.json()["jobs"][0]["status"] == "queued"
+    assert "payload" not in response.json()["jobs"][0]
+    assert "result" not in response.json()["jobs"][0]
+
+
+def test_workspace_job_list_hides_nonmember_workspace(monkeypatch):
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_jobs_app(monkeypatch, client, allowed=False)
+        response = client.get("/api/v1/workspaces/workspace-a/jobs")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "workspace_not_found"
+
+
+def test_workspace_job_cancel_requires_csrf_and_active_membership(monkeypatch):
+    job_id = "00000000-0000-0000-0000-000000000099"
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_jobs_app(monkeypatch, client, role="member")
+        queue = app.state.workspace_job_queue
+        response = client.post(
+            f"/api/v1/workspaces/workspace-a/jobs/{job_id}/cancel",
+            headers={"Origin": "https://app.example.test"},
+        )
+    assert response.status_code == 403
+    assert queue.cancelled is None
+
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_jobs_app(monkeypatch, client, role="member")
+        queue = app.state.workspace_job_queue
+        response = client.post(
+            f"/api/v1/workspaces/workspace-a/jobs/{job_id}/cancel",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert queue.cancelled == ("workspace-a", job_id)
