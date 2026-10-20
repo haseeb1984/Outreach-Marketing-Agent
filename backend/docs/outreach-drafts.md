@@ -64,3 +64,10 @@ Campaign website URLs are stored as metadata only; creation does not fetch them.
 - `POST /api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/status` changes lifecycle state (minimum role: `admin`; CSRF-protected and rate-limited). Allowed transitions are `draft → active/archived`, `active → paused/completed`, `paused → active/completed/archived`, and `completed → archived`. Archived campaigns are terminal. Invalid or repeated transitions return `409`. This endpoint changes metadata only; it never schedules or sends outreach.
 
 - Draft creation may include optional `prospect_id` to link the draft to an existing CRM record. The server checks that the prospect belongs to the same workspace, is not opted out, and matches the selected campaign and display name; when linked, the CRM campaign is used automatically. The database also enforces a workspace-scoped foreign key. An opted-out prospect cannot be used to create a linked draft. This link does not send a message.
+
+## WhatsApp consent evidence gate
+
+- Record operator-provided consent evidence with `POST /api/v1/workspaces/{workspace_id}/prospects/{prospect_id}/whatsapp-consent`, using `source` and a clean HTTPS `evidence_url`. The route is workspace-scoped, CSRF-protected, rate-limited, and available to workspace members.
+- Evidence is recorded with a timestamp and audit metadata. The application does **not** independently verify the linked evidence, and recording consent does not send a message.
+- WhatsApp draft creation now requires a CRM-linked prospect with recorded consent evidence, in addition to the draft generator's explicit opt-in confirmation. Opted-out prospects remain blocked.
+- Consent evidence is metadata only. Provider account connection, provider-side opt-in validation, actual delivery, unsubscribe webhook processing, and delivery status are not implemented yet.
