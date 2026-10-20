@@ -33,6 +33,8 @@ def validate_secret_reference(reference: str) -> str:
     lowered = value.lower()
     if any(marker in lowered for marker in ("password=", "token=", "secret=", "://")):
         raise InvalidSecretReference("invalid_secret_reference")
+    if any(part in {".", ".."} for part in value.replace(":", "/").split("/")):
+        raise InvalidSecretReference("invalid_secret_reference")
     return value
 
 
