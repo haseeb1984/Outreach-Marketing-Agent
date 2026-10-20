@@ -43,6 +43,11 @@ class FakeProviderConnectionStore:
         self.created = kwargs
         return {"id": "connection-id", **kwargs, "status": "pending"}
 
+    async def cancel_pending(self, **kwargs):
+        self.cancelled = kwargs
+        return {"id": str(kwargs["connection_id"]), "status": "revoked",
+                "provider": "email", "display_label": "Marketing mailbox"}
+
 
 def setup(monkeypatch, client, role="admin"):
     monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
@@ -117,3 +122,21 @@ def test_store_public_projection_drops_secret_reference_and_credentials():
     assert public["id"] == "connection-id"
     assert "secret_reference" not in public
     assert "access_token" not in public
+
+
+def test_cancel_pending_intent_requires_admin_and_csrf(monkeypatch):
+    connection_id = "00000000-0000-0000-0000-000000000099"
+    path = f"/api/v1/workspaces/workspace-a/provider-connections/{connection_id}/cancel"
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, "member")
+        denied = client.post(path, headers={"Origin": "https://app.example.test",
+                                             "X-CSRF-Token": CSRF})
+        setup(monkeypatch, client, "admin")
+        no_csrf = client.post(path, headers={"Origin": "https://app.example.test"})
+        cancelled = client.post(path, headers={"Origin": "https://app.example.test",
+                                                "X-CSRF-Token": CSRF})
+    assert denied.status_code == 404
+    assert no_csrf.status_code == 403
+    assert cancelled.status_code == 200
+    assert cancelled.json()["connection"]["status"] == "revoked"
+    assert "does not revoke credentials at a provider" in cancelled.json()["message"]
