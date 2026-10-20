@@ -99,3 +99,34 @@ async def run_worker_once(
                 await task
             except asyncio.CancelledError:
                 pass
+
+
+async def run_worker_forever(
+    *,
+    worker_id: str,
+    job_queue: Any,
+    domain_store: Any,
+    egress_guard: Callable[[], Any] | None = None,
+    lease_seconds: int = 300,
+    idle_sleep_seconds: float = 2.0,
+) -> None:
+    """Run a supervised worker loop until its task is cancelled.
+
+    Idle polling is bounded to avoid a hot loop. Cancellation is intentionally
+    propagated so process supervisors can stop the worker cleanly.
+    """
+    if not isinstance(idle_sleep_seconds, (int, float)) or isinstance(idle_sleep_seconds, bool):
+        raise ValueError("idle_sleep_seconds must be a number between 0.1 and 60")
+    if not 0.1 <= idle_sleep_seconds <= 60:
+        raise ValueError("idle_sleep_seconds must be between 0.1 and 60")
+
+    while True:
+        result = await run_worker_once(
+            worker_id=worker_id,
+            job_queue=job_queue,
+            domain_store=domain_store,
+            egress_guard=egress_guard,
+            lease_seconds=lease_seconds,
+        )
+        if result.get("status") == "idle":
+            await asyncio.sleep(idle_sleep_seconds)
