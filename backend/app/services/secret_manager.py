@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Protocol, runtime_checkable
 
-_REFERENCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{2,499}$")
+_REFERENCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{7,499}$")
 
 
 class SecretManagerError(RuntimeError):
@@ -24,7 +24,7 @@ class InvalidSecretReference(SecretManagerError):
 
 
 def validate_secret_reference(reference: str) -> str:
-    """Accept opaque identifiers only; reject inline values and URL-like userinfo."""
+    """Accept opaque identifiers only; reject inline assignments and unsafe references."""
     if not isinstance(reference, str):
         raise InvalidSecretReference("invalid_secret_reference")
     value = reference.strip()
