@@ -14,6 +14,8 @@ from app.services.website_audit import analyze_html, validate_page_url
     "https://example.com:99999/",
     "https://example.com:8080/",
     "http://example.com:8443/",
+    "https://example.com:80/",
+    "http://example.com:443/",
 ])
 def test_url_validator_rejects_unsafe_or_malformed_urls(url):
     with pytest.raises(ValueError):
