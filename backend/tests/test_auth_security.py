@@ -29,3 +29,11 @@ def test_opaque_tokens_are_high_entropy_and_only_digest_is_stored():
     assert token not in digest
     assert constant_time_token_match(token, digest)
     assert not constant_time_token_match(new_opaque_token(), digest)
+
+
+def test_dummy_password_hash_is_valid_and_not_a_user_credential():
+    from app.services.auth_security import dummy_password_hash
+
+    encoded = dummy_password_hash()
+    assert verify_password("oma-internal-dummy-password-never-use-for-login", encoded)
+    assert not verify_password("a real user's password", encoded)
