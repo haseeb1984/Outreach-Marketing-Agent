@@ -238,3 +238,67 @@ def test_fetch_html_rejects_non_global_ipv4_and_ipv6_answers(blocked_address):
         assert requested == []
 
     asyncio.run(run())
+
+
+def test_fetch_html_rejects_cross_host_redirect_when_destination_dns_is_private():
+    async def run():
+        requested = []
+        resolutions = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            if request.url.host == "example.com":
+                return httpx.Response(
+                    302,
+                    headers={"location": "https://www.example.com/private"},
+                    request=request,
+                )
+            raise AssertionError("redirect destination with private DNS must never be requested")
+
+        async def changing_resolver(host: str, port: int) -> list[str]:
+            resolutions.append((host, port))
+            if host == "example.com":
+                return ["93.184.216.34"]
+            return ["10.0.0.12"]
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="non-public"):
+                await fetch_html(
+                    "https://example.com/",
+                    client=client,
+                    resolver=changing_resolver,
+                )
+
+        assert [host for host, _ in resolutions] == ["example.com", "www.example.com"]
+        assert requested == ["https://example.com/"]
+
+    asyncio.run(run())
+
+
+def test_fetch_html_fails_closed_when_dns_returns_no_addresses():
+    async def run():
+        requested = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="must not be reached",
+                request=request,
+            )
+
+        async def empty_resolver(host: str, port: int) -> list[str]:
+            return []
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="no IP addresses"):
+                await fetch_html(
+                    "https://example.com/",
+                    client=client,
+                    resolver=empty_resolver,
+                )
+
+        assert requested == []
+
+    asyncio.run(run())
