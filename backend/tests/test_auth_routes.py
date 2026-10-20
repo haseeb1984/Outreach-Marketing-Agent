@@ -61,3 +61,89 @@ def test_verification_landing_requires_explicit_post(monkeypatch):
     assert "fetch('/api/v1/auth/verify-email'" in html
     assert "method:'POST'" in html
     assert 'form method="post"' not in html
+
+
+
+def test_http_login_sets_session_and_csrf_cookies_and_logout_revokes(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    csrf = "c" * 43
+    session_token = "s" * 43
+    user_id = "00000000-0000-0000-0000-000000000001"
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    class FakeStore:
+        revoked = False
+
+        async def authenticate_password(self, *, email, password):
+            if email == "person@example.test" and password == "correct-password":
+                return {"user_id": user_id, "email": email}
+            return None
+
+        async def create_session(self, **kwargs):
+            return {"token": session_token, "csrf_token": csrf, "expires_at": expires_at}
+
+        async def authenticate_session(self, token):
+            if token != session_token or self.revoked:
+                return None
+            return {
+                "user_id": user_id,
+                "email": "person@example.test",
+                "session_id": "session-id",
+                "expires_at": expires_at,
+                "csrf_token_sha256": auth_routes.csrf_token_digest(csrf),
+            }
+
+        async def revoke_session(self, token):
+            self.revoked = token == session_token
+            return self.revoked
+
+    class FakeLimiter:
+        async def consume(self, **kwargs):
+            return {
+                "allowed": True,
+                "remaining": 9,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+            }
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = FakeStore()
+        app.state.auth_rate_limiter = FakeLimiter()
+        login_response = client.post(
+            "/api/v1/auth/login",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test", "password": "correct-password"},
+        )
+        assert login_response.status_code == 200
+        assert login_response.json()["csrf_token"] == csrf
+        assert "__Host-oma_session" in login_response.headers.get("set-cookie", "")
+        assert "__Host-oma_csrf" in login_response.headers.get("set-cookie", "")
+
+        me_response = client.get("/api/v1/auth/me")
+        assert me_response.status_code == 200
+        assert me_response.json()["csrf_token"] == csrf
+
+        logout_response = client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": csrf},
+        )
+        assert logout_response.status_code == 200
+        assert app.state.auth_store.revoked is True
+        assert "__Host-oma_session=;" in logout_response.headers.get("set-cookie", "")
+
+
+def test_http_login_rejects_untrusted_origin(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        response = client.post(
+            "/api/v1/auth/login",
+            headers={"Origin": "https://attacker.example.test"},
+            json={"email": "person@example.test", "password": "correct-password"},
+        )
+        assert response.status_code == 403
