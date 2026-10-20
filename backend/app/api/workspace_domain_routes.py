@@ -70,8 +70,8 @@ async def list_verified_domains(workspace_id: str, request: Request):
 async def create_domain_challenge(
     workspace_id: str, payload: DomainChallengeInput, request: Request
 ):
-    _check_csrf(request, (await _authorize(request, workspace_id, "admin"))[1])
-    domain_store, _ = await _authorize(request, workspace_id, "admin")
+    domain_store, session = await _authorize(request, workspace_id, "admin")
+    _check_csrf(request, session)
     try:
         result = await domain_store.issue_challenge(
             workspace_id=workspace_id, domain=normalize_domain(payload.domain)
@@ -80,13 +80,15 @@ async def create_domain_challenge(
         raise HTTPException(status_code=422, detail="invalid_domain") from None
     except Exception:
         raise HTTPException(status_code=503, detail="domain_challenge_unavailable") from None
+    challenge = result["challenge"]
+    dns_record = result["dns_record"]
     return {
         "workspace_id": workspace_id,
-        "domain": result["domain"],
-        "method": result["method"],
-        "txt_record_name": result["txt_record_name"],
-        "txt_record_value": result["txt_record_value"],
-        "expires_at": result["expires_at"],
+        "domain": challenge["domain"],
+        "method": challenge["method"],
+        "txt_record_name": dns_record["record_name"],
+        "txt_record_value": dns_record["record_value"],
+        "expires_at": challenge["expires_at"],
     }
 
 
