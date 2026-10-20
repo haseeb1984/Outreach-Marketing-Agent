@@ -92,3 +92,28 @@ def test_connection_list_is_workspace_scoped_and_never_claims_sending(monkeypatc
     assert response.status_code == 200
     assert response.json()["connections"] == []
     assert response.json()["sending_enabled"] is False
+
+def test_store_public_projection_drops_secret_reference_and_credentials():
+    from app.services.workspace_provider_connection_store import WorkspaceProviderConnectionStore
+
+    row = {
+        "id": "connection-id",
+        "workspace_id": "workspace-a",
+        "provider": "email",
+        "display_label": "Marketing mailbox",
+        "status": "pending",
+        "secret_reference": "vault://provider/opaque-reference",
+        "access_token": "must-never-leak",
+        "created_by": USER_ID,
+        "created_at": datetime(2026, 10, 21, tzinfo=timezone.utc),
+        "updated_at": datetime(2026, 10, 21, tzinfo=timezone.utc),
+        "granted_scopes": [],
+        "token_expires_at": None,
+        "last_validated_at": None,
+        "last_error_code": None,
+        "revoked_at": None,
+    }
+    public = WorkspaceProviderConnectionStore._public(row)
+    assert public["id"] == "connection-id"
+    assert "secret_reference" not in public
+    assert "access_token" not in public
