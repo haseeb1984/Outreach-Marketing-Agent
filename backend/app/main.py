@@ -191,8 +191,9 @@ async def readiness() -> Response:
                             '008_workspace_campaigns.sql',
                             '009_workspace_prospects.sql',
                             '010_draft_prospect_link.sql',
-                            '011_whatsapp_opt_in_evidence.sql'
-                          )) = 11"""
+                            '011_whatsapp_opt_in_evidence.sql',
+                            '012_workspace_provider_connections.sql'
+                          )) = 12"""
             )
             if not schema_ready:
                 return JSONResponse(
