@@ -54,7 +54,14 @@ class AuthRateLimiter:
                      attempts = CASE
                        WHEN auth_rate_limit_buckets.window_started_at + make_interval(secs => $3) <= $2
                        THEN 1 ELSE auth_rate_limit_buckets.attempts + 1 END,
-                     updated_at = $2
+                     updated_at = GREATEST(
+                       auth_rate_limit_buckets.updated_at,
+                       $2,
+                       CASE
+                         WHEN auth_rate_limit_buckets.window_started_at + make_interval(secs => $3) <= $2
+                         THEN $2 ELSE auth_rate_limit_buckets.window_started_at
+                       END
+                     )
                    RETURNING attempts, window_started_at""",
                 digest, now, window_seconds,
             )
