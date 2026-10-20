@@ -11,49 +11,24 @@ Migration 012 stores **connection metadata only** for workspace-owned email and 
 - A connection must remain `pending` until a real provider authorization flow validates it.
 - `connected` must only be set after provider-side validation; manual metadata entry is not proof of connectivity.
 - Revoke access by changing state and scheduling deletion/revocation of the external credential in the provider/secret manager.
-- Do not log authorization codes, tokens, full callback URLs, or provider payloads containing personal data.
+- Do not log authorization codes, tokens, full callback URLs, or provider payloads.
 
-## Lifecycle
+## Secret manager adapter contract
 
-Current API behavior is limited to creating `pending` intent records and listing safe metadata. No customer-facing endpoint can set `connected`, `error`, or `revoked`. When implemented, the intended lifecycle is `pending -> connected -> revoked`; validation failures may set `error`. Revoked connections must not be reused. Reconnecting should create a new record after provider authorization.
+`app.services.secret_manager` defines the asynchronous `SecretManager` protocol with `put`, `get`, and `delete`. Its default `UnconfiguredSecretManager` fails closed for every operation; it does not silently fall back to plaintext files, environment variables, or the application database. A deployment must explicitly wire an approved managed-vault implementation before OAuth can begin.
 
-## Release gate
+Secret references are validated as opaque identifiers before persistence. The validation rejects inline credential assignments, URL-like values, whitespace, traversal-like paths, and overlong references. The adapter must additionally enforce purpose separation, access policy, encryption at rest, rotation, and audit controls. This contract alone is not a production secret vault.
 
-Before adding real connect/disconnect behavior, implement OAuth state and PKCE where supported, exact redirect URI allowlisting, CSRF protection, workspace-admin authorization, encrypted secret-manager storage, callback replay protection, provider webhook signature checks, token refresh/expiry handling, credential revocation, and integration tests. The current intent/list endpoints are not proof of a connection. Until the full release gate passes, sending remains disabled.
+## OAuth protocol primitives and release gates
 
+The OAuth security helpers generate PKCE S256 pairs, require exact configured HTTPS callback allowlisting, validate callback parameter shape, and compare nonce digests in constant time. OAuth is still **not live**: no public callback route, provider-specific adapter, token exchange, provider identity validation, refresh, or sending path is enabled.
 
-## Inspecting one connection
+Before enabling a provider, implement and test all of the following:
 
-Workspace viewers and above can retrieve a single connection's metadata with
-`GET /api/v1/workspaces/{workspace_id}/provider-connections/{connection_id}`.
-The lookup is scoped to both the workspace and connection ID; an unknown ID and an
-ID belonging to another workspace both return `404`. The response uses the same
-safe metadata allowlist as the list endpoint and always reports
-`sending_enabled: false`. It does not reveal secret-manager references or provider
-credentials, and it does not imply that the provider account is authorized.
-
-
-## Database-enforced lifecycle guard (migration 013)
-
-Migration 013 adds a PostgreSQL trigger so application code or manual SQL cannot
-mark a connection `connected` without a non-empty provider account ID, opaque secret
-reference, granted scopes, and a successful-validation timestamp. A connection in
-`error` state requires a stable error code. Revoked records cannot be reactivated;
-reconnection must create a fresh record. The guard re-checks connected-state
-invariants on every update, not just status changes.
-
-This is a defense-in-depth invariant, not proof that provider validation has already
-been implemented. The application still has no endpoint that completes OAuth or
-marks a connection connected, and message sending remains disabled.
-
-
-## OAuth transaction storage foundation (migration 014)
-
-The new `workspace_provider_oauth_transactions` table and transaction store are groundwork only; no public OAuth start/callback route is enabled. They bind a short-lived state digest to the exact pending connection, workspace, initiating user, provider, HTTPS redirect URI, PKCE S256 challenge, and nonce digest. Raw state is returned once to the caller but only its SHA-256 digest is stored. Callback processing must atomically consume state before any code exchange; expired or replayed states fail closed.
-
-The PKCE verifier must be written to an approved secret manager before creating the transaction; only its opaque reference is stored. The store never exchanges authorization codes, marks a connection connected, or sends messages. Before public OAuth routes can ship, add a vetted secret-manager adapter, exact per-provider redirect URI allowlists, provider-specific issuer/audience/nonce checks, token exchange and account validation, credential revocation, and integration tests with provider sandbox accounts. The database's HTTPS check is only a minimum format check, not the redirect allowlist.
-
-
-## Protocol primitives (no provider adapter enabled)
-
-`provider_oauth_security.py` provides RFC 7636 PKCE S256 pair generation, exact-match HTTPS callback allowlisting, strict OAuth callback parameter validation, and constant-time nonce-digest verification. These are deliberately dependency-injected primitives: deployment configuration must supply the exact allowed callback URI for each provider. A generic `https://` prefix is not sufficient authorization. No callback route is exposed until a real provider adapter, secret manager, issuer/token validation, and provider sandbox integration tests are in place.
+1. Approved secret manager adapter and deployment configuration.
+2. Exact callback URI allowlist per provider and environment.
+3. Provider-specific issuer/audience/nonce validation and OAuth error handling.
+4. Authorization-code exchange over verified TLS and account identity validation.
+5. Least-privilege scope validation and credential revocation/rotation.
+6. Provider sandbox integration tests, including rejected state, replay, expiry, wrong workspace, and failure cleanup.
+7. Security review confirming no credentials, authorization codes, or callback query values reach logs.
