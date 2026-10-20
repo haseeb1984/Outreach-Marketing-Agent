@@ -20,3 +20,14 @@ Current API behavior is limited to creating `pending` intent records and listing
 ## Release gate
 
 Before adding real connect/disconnect behavior, implement OAuth state and PKCE where supported, exact redirect URI allowlisting, CSRF protection, workspace-admin authorization, encrypted secret-manager storage, callback replay protection, provider webhook signature checks, token refresh/expiry handling, credential revocation, and integration tests. The current intent/list endpoints are not proof of a connection. Until the full release gate passes, sending remains disabled.
+
+
+## Inspecting one connection
+
+Workspace viewers and above can retrieve a single connection's metadata with
+`GET /api/v1/workspaces/{workspace_id}/provider-connections/{connection_id}`.
+The lookup is scoped to both the workspace and connection ID; an unknown ID and an
+ID belonging to another workspace both return `404`. The response uses the same
+safe metadata allowlist as the list endpoint and always reports
+`sending_enabled: false`. It does not reveal secret-manager references or provider
+credentials, and it does not imply that the provider account is authorized.
