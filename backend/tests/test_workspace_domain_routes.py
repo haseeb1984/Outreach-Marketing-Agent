@@ -195,3 +195,43 @@ def test_domain_dns_timeout_fails_closed_without_verifying(monkeypatch):
         )
     assert response.status_code == 503
     assert response.json()["detail"] == "domain_dns_lookup_unavailable"
+
+
+
+def test_domain_revocation_is_rate_limited(monkeypatch):
+    class BlockingLimiter:
+        async def consume(self, **kwargs):
+            assert kwargs["namespace"] == "domain-revoke"
+            assert kwargs["limit"] == 20
+            assert kwargs["window_seconds"] == 3600
+            from datetime import timedelta
+            return {
+                "allowed": False,
+                "remaining": 0,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=1),
+            }
+
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
+        domain_store = app.state.domain_authorization_store
+        app.state.auth_rate_limiter = BlockingLimiter()
+        response = client.delete(
+            "/api/v1/workspaces/workspace-a/domains/example.com",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+        )
+    assert response.status_code == 429
+    assert response.json()["detail"] == "too_many_requests"
+    assert domain_store.revoked is None
+
+
+def test_domain_revocation_succeeds_with_admin_csrf_and_limiter(monkeypatch):
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
+        domain_store = app.state.domain_authorization_store
+        response = client.delete(
+            "/api/v1/workspaces/workspace-a/domains/example.com",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == "revoked"
+    assert domain_store.revoked == ("workspace-a", "example.com")
