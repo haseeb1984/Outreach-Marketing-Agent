@@ -13,7 +13,7 @@ from uuid import uuid4
 import asyncpg
 import pytest
 
-from app.services.auth_security import hash_password, verify_password
+from app.services.auth_security import hash_password, token_digest, verify_password
 from app.services.auth_http_security import csrf_token_digest
 from app.services.auth_store import AuthStore
 from app.services.auth_rate_limiter import AuthRateLimiter
@@ -75,12 +75,25 @@ async def _exercise_password_reset() -> None:
         async with pool.acquire() as conn:
             stored_csrf_digest = await conn.fetchval(
                 "SELECT csrf_token_sha256 FROM auth_sessions WHERE token_sha256=$1",
-                __import__("app.services.auth_security", fromlist=["token_digest"]).token_digest(session["token"]),
+                token_digest(session["token"]),
             )
         assert stored_csrf_digest == csrf_token_digest(session["csrf_token"])
         authenticated = await store.authenticate_session(session["token"])
         assert authenticated is not None
         assert authenticated["csrf_token_sha256"] == stored_csrf_digest
+
+        # Rotation must revoke the old bearer token and bind a fresh CSRF token to the new session.
+        old_session_token = session["token"]
+        rotated = await store.rotate_session(current_token=old_session_token)
+        assert rotated is not None
+        assert rotated["token"] != old_session_token
+        assert rotated["csrf_token"] != session["csrf_token"]
+        assert await store.authenticate_session(old_session_token) is None
+        rotated_auth = await store.authenticate_session(rotated["token"])
+        assert rotated_auth is not None
+        assert rotated_auth["csrf_token_sha256"] == csrf_token_digest(rotated["csrf_token"])
+        session = rotated
+
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
         token = reset["reset_token"]
