@@ -235,3 +235,25 @@ def test_domain_revocation_succeeds_with_admin_csrf_and_limiter(monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "revoked"
     assert domain_store.revoked == ("workspace-a", "example.com")
+
+
+
+def test_domain_listing_is_rate_limited(monkeypatch):
+    class BlockingLimiter:
+        async def consume(self, **kwargs):
+            assert kwargs["namespace"] == "domain-list"
+            assert kwargs["limit"] == 120
+            assert kwargs["window_seconds"] == 3600
+            from datetime import timedelta
+            return {
+                "allowed": False,
+                "remaining": 0,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=1),
+            }
+
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="viewer")
+        app.state.auth_rate_limiter = BlockingLimiter()
+        response = client.get("/api/v1/workspaces/workspace-a/domains")
+    assert response.status_code == 429
+    assert response.json()["detail"] == "too_many_requests"
