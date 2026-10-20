@@ -32,3 +32,10 @@ Before enabling a provider, implement and test all of the following:
 5. Least-privilege scope validation and credential revocation/rotation.
 6. Provider sandbox integration tests, including rejected state, replay, expiry, wrong workspace, and failure cleanup.
 7. Security review confirming no credentials, authorization codes, or callback query values reach logs.
+
+
+## Provider adapter contract
+
+`app.services.provider_oauth_adapter` now defines the provider configuration model, adapter protocol, verified-identity result shape, and an explicit registry. Configuration validation requires HTTPS authorization/token endpoints, exact HTTPS callback allowlists, bounded provider IDs/client identifiers, and a non-empty constrained scope allowlist. An empty registry rejects all provider lookups rather than guessing an adapter.
+
+This is a contract only, not a live integration. Before a concrete adapter is registered, it must build authorization requests from server-generated state/PKCE/nonce values, exchange codes over verified TLS, validate issuer and audience where applicable, verify nonce and account identity, and return only verified account ID and granted scopes. Do not register a stub or test adapter in production.
