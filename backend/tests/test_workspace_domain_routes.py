@@ -72,33 +72,34 @@ class FakeDomainStore:
         return True
 
 
-def setup_workspace_app(monkeypatch, *, allowed=True, role="admin"):
+def setup_workspace_app(monkeypatch, client, *, allowed=True, role="admin"):
     monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
     app.state.auth_store = FakeAuthStore(allowed=allowed, role=role)
     app.state.auth_rate_limiter = AllowLimiter()
     app.state.domain_authorization_store = FakeDomainStore()
-    client = TestClient(app, base_url="https://app.example.test")
     client.cookies.set("__Host-oma_session", SESSION)
     client.cookies.set("__Host-oma_csrf", CSRF)
-    return client
 
 
 def test_workspace_domains_require_active_membership(monkeypatch):
-    with setup_workspace_app(monkeypatch, allowed=False) as client:
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, allowed=False)
         response = client.get("/api/v1/workspaces/workspace-a/domains")
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
 
 
 def test_workspace_domain_listing_allows_viewer(monkeypatch):
-    with setup_workspace_app(monkeypatch, role="viewer") as client:
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="viewer")
         response = client.get("/api/v1/workspaces/workspace-a/domains")
     assert response.status_code == 200
     assert response.json()["domains"][0]["domain"] == "example.com"
 
 
 def test_workspace_domain_challenge_requires_csrf_and_admin(monkeypatch):
-    with setup_workspace_app(monkeypatch, role="viewer") as client:
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="viewer")
         denied = client.post(
             "/api/v1/workspaces/workspace-a/domains/challenges",
             headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
@@ -106,7 +107,8 @@ def test_workspace_domain_challenge_requires_csrf_and_admin(monkeypatch):
         )
     assert denied.status_code == 404
 
-    with setup_workspace_app(monkeypatch, role="admin") as client:
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
         response = client.post(
             "/api/v1/workspaces/workspace-a/domains/challenges",
             headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
@@ -120,7 +122,8 @@ def test_workspace_domain_challenge_requires_csrf_and_admin(monkeypatch):
 
 
 def test_workspace_domain_revocation_requires_csrf(monkeypatch):
-    with setup_workspace_app(monkeypatch, role="admin") as client:
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
         response = client.delete(
             "/api/v1/workspaces/workspace-a/domains/example.com",
             headers={"Origin": "https://app.example.test"},
