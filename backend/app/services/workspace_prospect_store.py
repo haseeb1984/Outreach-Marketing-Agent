@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from uuid import UUID
+from urllib.parse import urlsplit
 
 
 STAGES = {"researched", "qualified", "drafting", "contacted", "replied", "meeting", "customer", "not_a_fit", "opted_out"}
