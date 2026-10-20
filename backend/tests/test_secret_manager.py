@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.services.secret_manager import (
@@ -42,16 +44,18 @@ def test_accepts_opaque_secret_manager_references(reference):
     assert validate_secret_reference(reference) == reference
 
 
-@pytest.mark.asyncio
-async def test_unconfigured_manager_fails_closed_for_every_operation():
-    manager = UnconfiguredSecretManager()
-    assert isinstance(manager, SecretManager)
+def test_unconfigured_manager_fails_closed_for_every_operation():
+    async def exercise():
+        manager = UnconfiguredSecretManager()
+        assert isinstance(manager, SecretManager)
 
-    with pytest.raises(SecretManagerUnavailable, match="secret_manager_not_configured"):
-        await manager.put(purpose="oauth_pkce_verifier", value="never-log-this")
+        with pytest.raises(SecretManagerUnavailable, match="secret_manager_not_configured"):
+            await manager.put(purpose="oauth_pkce_verifier", value="never-log-this")
 
-    with pytest.raises(SecretManagerUnavailable, match="secret_manager_not_configured"):
-        await manager.get(reference="vault-prod:secret-123", purpose="oauth_pkce_verifier")
+        with pytest.raises(SecretManagerUnavailable, match="secret_manager_not_configured"):
+            await manager.get(reference="vault-prod:secret-123", purpose="oauth_pkce_verifier")
 
-    with pytest.raises(SecretManagerUnavailable, match="secret_manager_not_configured"):
-        await manager.delete(reference="vault-prod:secret-123", purpose="oauth_pkce_verifier")
+        with pytest.raises(SecretManagerUnavailable, match="secret_manager_not_configured"):
+            await manager.delete(reference="vault-prod:secret-123", purpose="oauth_pkce_verifier")
+
+    asyncio.run(exercise())
