@@ -21,7 +21,7 @@ Secret references are validated as opaque identifiers before persistence. The va
 
 ## OAuth protocol primitives and release gates
 
-The OAuth security helpers generate PKCE S256 pairs, require exact configured HTTPS callback allowlisting, validate callback parameter shape, and compare nonce digests in constant time. OAuth is still **not live**: no public callback route, provider-specific adapter, token exchange, provider identity validation, refresh, or sending path is enabled.
+The OAuth security helpers generate PKCE S256 pairs, require exact configured HTTPS callback allowlisting, validate callback parameter shape, and compare nonce digests in constant time. The transaction store now requires an explicit `allowed_redirect_uris` list, validates the callback against that list before touching the database, validates opaque secret-manager references, and rejects malformed state/nonce shapes before persistence. The store persists only state and nonce digests and supports atomic one-time consumption with expiry. Focused tests verify rejection happens before database access. OAuth is still **not live**: no public callback route, provider-specific adapter, token exchange, provider identity validation, refresh, or sending path is enabled.
 
 Before enabling a provider, implement and test all of the following:
 
