@@ -20,6 +20,7 @@ async def lifespan(application: FastAPI):
     application.state.domain_authorization_store = None
     application.state.auth_store = None
     application.state.auth_rate_limiter = None
+    application.state.workspace_job_queue = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -34,8 +35,10 @@ async def lifespan(application: FastAPI):
         application.state.domain_authorization_store = DomainAuthorizationStore(pool)
         from app.services.auth_store import AuthStore
         from app.services.auth_rate_limiter import AuthRateLimiter
+        from app.services.workspace_job_queue import WorkspaceJobQueue
 
         application.state.auth_store = AuthStore(pool)
+        application.state.workspace_job_queue = WorkspaceJobQueue(pool)
         if settings.secret_key and len(settings.secret_key.encode("utf-8")) >= 32:
             application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
@@ -55,9 +58,11 @@ app = FastAPI(
 
 from app.api.auth_routes import router as auth_router
 from app.api.workspace_domain_routes import router as workspace_domain_router
+from app.api.workspace_job_routes import router as workspace_job_router
 
 app.include_router(auth_router)
 app.include_router(workspace_domain_router)
+app.include_router(workspace_job_router)
 
 
 PUBLIC_PAGES = [
