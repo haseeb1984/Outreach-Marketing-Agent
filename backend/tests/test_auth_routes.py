@@ -204,3 +204,53 @@ def test_http_login_fails_closed_when_rate_limiter_unavailable(monkeypatch):
         assert response.json()["detail"] == "authentication_temporarily_unavailable"
         assert "database details" not in response.text
 
+def test_http_session_rotation_replaces_both_cookies_and_csrf_token(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    old_csrf, new_csrf = "o" * 43, "n" * 43
+    old_session, new_session = "s" * 43, "r" * 43
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    class RotatingStore:
+        current_token = old_session
+
+        async def authenticate_session(self, token):
+            if token != self.current_token:
+                return None
+            return {
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "email": "person@example.test",
+                "session_id": "session-id",
+                "expires_at": expires_at,
+                "csrf_token_sha256": auth_routes.csrf_token_digest(old_csrf),
+            }
+
+        async def rotate_session(self, **kwargs):
+            assert kwargs["current_token"] == old_session
+            self.current_token = new_session
+            return {"token": new_session, "csrf_token": new_csrf, "expires_at": expires_at}
+
+    class AllowLimiter:
+        async def consume(self, **kwargs):
+            return {"allowed": True, "remaining": 9, "reset_at": expires_at}
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = RotatingStore()
+        app.state.auth_rate_limiter = AllowLimiter()
+        client.cookies.set("__Host-oma_session", old_session)
+        client.cookies.set("__Host-oma_csrf", old_csrf)
+
+        response = client.post(
+            "/api/v1/auth/rotate",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": old_csrf},
+        )
+        assert response.status_code == 200
+        assert response.json()["csrf_token"] == new_csrf
+        cookies = response.headers.get_list("set-cookie")
+        assert any(value.startswith("__Host-oma_session=" + new_session) for value in cookies)
+        assert any(value.startswith("__Host-oma_csrf=" + new_csrf) for value in cookies)
+        assert client.get("/api/v1/auth/me").status_code == 401
+
