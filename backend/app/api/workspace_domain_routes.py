@@ -74,7 +74,17 @@ async def _authorize(request: Request, workspace_id: str, minimum_role: str) -> 
 
 @router.get("")
 async def list_verified_domains(workspace_id: str, request: Request):
-    domain_store, _ = await _authorize(request, workspace_id, "viewer")
+    domain_store, session = await _authorize(request, workspace_id, "viewer")
+    limiter = getattr(request.app.state, "auth_rate_limiter", None)
+    if limiter is None:
+        raise HTTPException(status_code=503, detail="workspace_domains_unavailable")
+    await _consume(
+        limiter,
+        namespace="domain-list",
+        identifier=str(workspace_id) + ":" + str(session["user_id"]),
+        limit=120,
+        window=3600,
+    )
     try:
         domains = await domain_store.get_verified_domains(workspace_id=workspace_id)
     except Exception:
