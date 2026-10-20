@@ -19,7 +19,7 @@ def test_verification_url_requires_clean_https_origin(origin):
 
 
 def test_verification_url_encodes_token():
-    assert verification_url("token+/=", "https://app.example/") == "https://app.example/verify-email?token=token%2B%2F%3D"
+    assert verification_url("token+/=", "https://app.example/") == "https://app.example/api/v1/auth/verify-email?token=token%2B%2F%3D"
 
 
 def _config(**overrides):
