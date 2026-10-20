@@ -122,3 +122,46 @@ def test_process_claimed_job_records_safe_failure_code():
     ))
     assert outcome == "failed"
     assert queue.failed["error_code"] == "website_scan_rejected"
+
+
+
+def test_process_claimed_job_cancels_scan_when_lease_is_lost(monkeypatch):
+    from app.workers import website_growth_worker as worker
+
+    queue = FakeQueue()
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def lose_lease(queue, job, worker_id, lost):
+        await started.wait()
+        lost.set()
+
+    async def runner(url, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    monkeypatch.setattr(worker, "_maintain_lease", lose_lease)
+    outcome = asyncio.run(process_claimed_job(
+        queue=queue,
+        domain_store=object(),
+        job={
+            "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            "workspace_id": "trusted-db-workspace",
+            "payload": {
+                "start_url": "https://example.com",
+                "business_type": "Retail",
+                "target_market": "Pakistan",
+            },
+        },
+        worker_id="worker-lease-loss",
+        scan_runner=runner,
+    ))
+
+    assert outcome == "lease_lost"
+    assert cancelled.is_set()
+    assert queue.completed is None
+    assert queue.failed is None
