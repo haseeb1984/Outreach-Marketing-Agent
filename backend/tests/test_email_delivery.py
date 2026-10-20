@@ -59,3 +59,28 @@ def test_smtp_failure_does_not_expose_provider_exception(monkeypatch):
     assert "dummy-secret" not in str(caught.value)
     assert "private-token" not in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+def test_password_reset_email_uses_https_origin_and_hides_smtp_errors(monkeypatch):
+    delivery = SMTPEmailDelivery(_config())
+
+    def fail(_message):
+        raise RuntimeError("smtp secret and reset token must never leak")
+
+    monkeypatch.setattr(delivery, "_send_message", fail)
+    with pytest.raises(EmailDeliveryFailed) as caught:
+        asyncio.run(delivery.send_password_reset_email(
+            recipient="person@example.com",
+            token="r" * 43,
+            expires_at=datetime.now(timezone.utc),
+        ))
+    assert str(caught.value) == "smtp_delivery_failed"
+    assert caught.value.__cause__ is None
+
+    delivery = SMTPEmailDelivery(_config(public_base_url="http://insecure.example"))
+    with pytest.raises(ValueError, match="public_https_origin_required"):
+        asyncio.run(delivery.send_password_reset_email(
+            recipient="person@example.com",
+            token="r" * 43,
+            expires_at=datetime.now(timezone.utc),
+        ))
