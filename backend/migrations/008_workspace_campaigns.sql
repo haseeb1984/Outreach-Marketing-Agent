@@ -19,3 +19,22 @@ CREATE INDEX IF NOT EXISTS workspace_campaigns_recent_idx
     ON workspace_campaigns (workspace_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS workspace_campaigns_status_idx
     ON workspace_campaigns (workspace_id, status, created_at DESC);
+
+-- Link drafts to a campaign without permitting cross-workspace references.
+ALTER TABLE workspace_outreach_drafts
+    ADD COLUMN IF NOT EXISTS campaign_id UUID;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'workspace_outreach_drafts_campaign_workspace_fk'
+    ) THEN
+        ALTER TABLE workspace_outreach_drafts
+            ADD CONSTRAINT workspace_outreach_drafts_campaign_workspace_fk
+            FOREIGN KEY (workspace_id, campaign_id)
+            REFERENCES workspace_campaigns (workspace_id, id)
+            ON DELETE SET NULL (campaign_id);
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS workspace_outreach_drafts_campaign_idx
+    ON workspace_outreach_drafts (workspace_id, campaign_id, created_at DESC)
+    WHERE campaign_id IS NOT NULL;
