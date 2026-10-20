@@ -170,6 +170,9 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_outreach_drafts') IS NOT NULL
                      AND to_regclass('public.workspace_campaigns') IS NOT NULL
                      AND to_regclass('public.workspace_prospects') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns
+                                 WHERE table_schema='public' AND table_name='workspace_prospects'
+                                   AND column_name='whatsapp_opt_in_evidence_url')
                      AND to_regclass('public.security_audit_events') IS NOT NULL
                      AND to_regclass('public.auth_rate_limit_buckets') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
@@ -187,8 +190,9 @@ async def readiness() -> Response:
                             '007_workspace_outreach_drafts.sql',
                             '008_workspace_campaigns.sql',
                             '009_workspace_prospects.sql',
-                            '010_draft_prospect_link.sql'
-                          )) = 10"""
+                            '010_draft_prospect_link.sql',
+                            '011_whatsapp_opt_in_evidence.sql'
+                          )) = 11"""
             )
             if not schema_ready:
                 return JSONResponse(
