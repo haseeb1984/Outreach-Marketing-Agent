@@ -199,3 +199,42 @@ def test_fetch_html_rechecks_dns_before_following_same_host_redirect():
         assert requested == ["https://example.com/"]
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "blocked_address",
+    [
+        "::1",
+        "fe80::1",
+        "fc00::1",
+        "::ffff:127.0.0.1",
+        "169.254.169.254",
+        "0.0.0.0",
+    ],
+)
+def test_fetch_html_rejects_non_global_ipv4_and_ipv6_answers(blocked_address):
+    async def run():
+        requested = []
+
+        async def handler(request):
+            requested.append(str(request.url))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="must not be reached",
+                request=request,
+            )
+
+        async def blocked_resolver(host: str, port: int) -> list[str]:
+            return [blocked_address]
+
+        async with make_client(handler) as client:
+            with pytest.raises(ValueError, match="non-public"):
+                await fetch_html(
+                    "https://example.com/",
+                    client=client,
+                    resolver=blocked_resolver,
+                )
+        assert requested == []
+
+    asyncio.run(run())
