@@ -14,7 +14,7 @@ class WorkspaceOutreachDraftStore:
         self._pool = pool
 
     async def create(
-        self, *, workspace_id: str, user_id: str, channel: str,
+        self, *, workspace_id: str, user_id: str, channel: str, campaign_id: UUID | None = None,
         client_business: str, client_offer: str, prospect_name: str,
         prospect_evidence_url: str, verified_relevance: str,
         verified_facts: list[str], call_to_action: str,
@@ -43,13 +43,13 @@ class WorkspaceOutreachDraftStore:
             async with connection.transaction():
                 row = await connection.fetchrow(
                     """INSERT INTO workspace_outreach_drafts
-                       (workspace_id, created_by, channel, client_business, client_offer,
+                       (workspace_id, campaign_id, created_by, channel, client_business, client_offer,
                         prospect_name, prospect_evidence_url, verified_relevance,
                         verified_facts, call_to_action, subject, body,
                         whatsapp_opt_in_confirmed)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14)
                        RETURNING *""",
-                    workspace_id, UUID(str(user_id)), channel, client_business.strip(),
+                    workspace_id, campaign_id, UUID(str(user_id)), channel, client_business.strip(),
                     client_offer.strip(), prospect_name.strip(), prospect_evidence_url.strip(),
                     verified_relevance.strip(), json.dumps(draft["verified_facts_used"]),
                     call_to_action.strip(), draft["subject"], draft["body"],
