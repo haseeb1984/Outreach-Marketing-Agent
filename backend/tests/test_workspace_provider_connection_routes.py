@@ -140,3 +140,35 @@ def test_cancel_pending_intent_requires_admin_and_csrf(monkeypatch):
     assert cancelled.status_code == 200
     assert cancelled.json()["connection"]["status"] == "revoked"
     assert "does not revoke credentials at a provider" in cancelled.json()["message"]
+
+
+
+def test_connection_detail_is_workspace_scoped_and_does_not_expose_secrets(monkeypatch):
+    connection_id = "00000000-0000-0000-0000-000000000099"
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup(monkeypatch, client, "viewer")
+        store = app.state.workspace_provider_connection_store
+
+        async def get_for_workspace(*, workspace_id, connection_id):
+            if workspace_id != "workspace-a":
+                return None
+            return {
+                "id": str(connection_id),
+                "workspace_id": workspace_id,
+                "provider": "email",
+                "display_label": "Marketing mailbox",
+                "status": "pending",
+            }
+
+        store.get_for_workspace = get_for_workspace
+        response = client.get(
+            f"/api/v1/workspaces/workspace-a/provider-connections/{connection_id}"
+        )
+        missing = client.get(
+            f"/api/v1/workspaces/workspace-b/provider-connections/{connection_id}"
+        )
+    assert response.status_code == 200
+    assert response.json()["sending_enabled"] is False
+    assert response.json()["connection"]["status"] == "pending"
+    assert "secret_reference" not in response.json()["connection"]
+    assert missing.status_code == 404
