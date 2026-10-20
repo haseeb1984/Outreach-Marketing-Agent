@@ -125,6 +125,35 @@ class AuthStore:
                 )
                 return True
 
+    async def authenticate_password(self, *, email: str, password: str) -> dict[str, str] | None:
+        """Verify credentials without revealing account state or returning password hashes.
+
+        Only active, email-verified accounts can authenticate. Invalid emails, wrong
+        passwords, pending accounts, suspended accounts, and missing accounts all
+        return None so an HTTP layer can expose one generic failure response.
+        Rate limiting must be applied by the HTTP layer before calling this method.
+        """
+        from app.services.auth_security import normalize_email, verify_password
+
+        try:
+            normalized_email = normalize_email(email)
+        except ValueError:
+            return None
+        if not isinstance(password, str) or len(password) > 1024:
+            return None
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """SELECT id, email, password_hash FROM app_users
+                   WHERE email=$1 AND status='active'
+                     AND email_verified_at IS NOT NULL""",
+                normalized_email,
+            )
+        # Do not perform a password-hash check when there is no eligible account.
+        # Public routes must still rate-limit and use a generic response.
+        if row is None or not verify_password(password, row["password_hash"]):
+            return None
+        return {"user_id": str(row["id"]), "email": row["email"]}
+
     async def create_session(
         self, *, user_id: UUID | str, user_agent: str | None = None,
         lifetime_hours: int = 24,
