@@ -54,6 +54,37 @@ class SMTPEmailDelivery:
             # Return a stable error code; never chain or log the original exception here.
             raise EmailDeliveryFailed("smtp_delivery_failed") from None
 
+    async def send_password_reset_email(self, *, recipient: str, token: str, expires_at: Any) -> None:
+        self._validate_configuration()
+        if not isinstance(recipient, str) or len(recipient) > 320 or "@" not in recipient:
+            raise ValueError("invalid_recipient")
+        base = (self._settings.public_base_url or "").strip()
+        parts = urlsplit(base)
+        if (
+            parts.scheme.lower() != "https" or not parts.hostname
+            or parts.username is not None or parts.password is not None
+            or parts.query or parts.fragment
+        ):
+            raise ValueError("public_https_origin_required")
+        link = urlunsplit((
+            "https", parts.netloc, parts.path.rstrip("/") + "/reset-password",
+            urlencode({"token": token}), "",
+        ))
+        message = EmailMessage()
+        message["Subject"] = "Reset your Outreach Marketing Agent password"
+        message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
+        message["To"] = recipient
+        message.set_content(
+            "A password reset was requested for your account.\\n\\n"
+            + "Use this link to choose a new password: " + link + "\\n\\n"
+            + "This link expires at " + expires_at.isoformat()
+            + ". All existing sessions will be signed out. If you did not request this, ignore this email.\\n"
+        )
+        try:
+            await asyncio.to_thread(self._send_message, message)
+        except Exception:
+            raise EmailDeliveryFailed("smtp_delivery_failed") from None
+
     def _send_message(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self._settings.smtp_host, self._settings.smtp_port, timeout=10) as client:
             client.ehlo()
