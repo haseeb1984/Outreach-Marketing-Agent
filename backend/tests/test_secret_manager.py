@@ -36,7 +36,7 @@ def test_rejects_inline_values_and_unsafe_references(reference):
     "reference",
     [
         "vault-prod:outreach/provider/email/connection-123",
-        "sm://project/secret-id_123",
+        "sm-project:secret-id_123",
         "secret-manager-reference-001",
     ],
 )
