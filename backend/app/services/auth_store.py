@@ -133,7 +133,7 @@ class AuthStore:
         return None so an HTTP layer can expose one generic failure response.
         Rate limiting must be applied by the HTTP layer before calling this method.
         """
-        from app.services.auth_security import normalize_email, verify_password
+        from app.services.auth_security import dummy_password_hash, normalize_email, verify_password
 
         try:
             normalized_email = normalize_email(email)
@@ -148,9 +148,12 @@ class AuthStore:
                      AND email_verified_at IS NOT NULL""",
                 normalized_email,
             )
-        # Do not perform a password-hash check when there is no eligible account.
-        # Public routes must still rate-limit and use a generic response.
-        if row is None or not verify_password(password, row["password_hash"]):
+        # Match the expensive password-verification work for unknown/ineligible
+        # accounts so response timing leaks less information about account state.
+        # Public routes must still rate-limit before reaching this method.
+        stored_hash = row["password_hash"] if row is not None else dummy_password_hash()
+        password_matches = verify_password(password, stored_hash)
+        if row is None or not password_matches:
             return None
         return {"user_id": str(row["id"]), "email": row["email"]}
 
