@@ -7,7 +7,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf, _consume
 
@@ -28,6 +28,13 @@ class OutreachDraftInput(BaseModel):
     verified_facts: list[str] = Field(min_length=1, max_length=10)
     call_to_action: str = Field(min_length=1, max_length=300)
     whatsapp_opt_in_confirmed: bool = False
+
+    @field_validator("verified_facts")
+    @classmethod
+    def validate_verified_facts(cls, values: list[str]) -> list[str]:
+        if any(not item.strip() or len(item) > 500 for item in values):
+            raise ValueError("verified_facts_items_must_be_1_to_500_characters")
+        return values
 
 
 class DraftReviewInput(BaseModel):
