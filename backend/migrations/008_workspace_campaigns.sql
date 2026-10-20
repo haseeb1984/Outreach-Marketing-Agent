@@ -32,7 +32,7 @@ BEGIN
             ADD CONSTRAINT workspace_outreach_drafts_campaign_workspace_fk
             FOREIGN KEY (workspace_id, campaign_id)
             REFERENCES workspace_campaigns (workspace_id, id)
-            ON DELETE SET NULL (campaign_id);
+            ON DELETE RESTRICT;
     END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS workspace_outreach_drafts_campaign_idx
