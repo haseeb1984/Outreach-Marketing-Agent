@@ -69,3 +69,9 @@ def test_oauth_store_requires_explicit_redirect_allowlist():
     store = WorkspaceProviderOAuthTransactionStore(NoDatabasePool())
     with pytest.raises(ValueError, match="redirect_uri_allowlist_required"):
         asyncio.run(store.create(**kwargs))
+
+@pytest.mark.parametrize("state", ["short", "!" * 43, "x" * 44, None, 123])
+def test_oauth_store_consume_rejects_malformed_state_before_db(state):
+    store = WorkspaceProviderOAuthTransactionStore(NoDatabasePool())
+    assert asyncio.run(store.consume(state=state)) is None
+
