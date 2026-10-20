@@ -15,7 +15,7 @@ class WorkspaceOutreachDraftStore:
 
     async def create(
         self, *, workspace_id: str, user_id: str, channel: str, campaign_id: UUID | None = None,
-        client_business: str, client_offer: str, prospect_name: str,
+        prospect_id: UUID | None = None, client_business: str, client_offer: str, prospect_name: str,
         prospect_evidence_url: str, verified_relevance: str,
         verified_facts: list[str], call_to_action: str,
         whatsapp_opt_in_confirmed: bool = False,
@@ -41,15 +41,32 @@ class WorkspaceOutreachDraftStore:
         )
         async with self._pool.acquire() as connection:
             async with connection.transaction():
+                if prospect_id is not None:
+                    prospect = await connection.fetchrow(
+                        """SELECT id, campaign_id, display_name, opt_out
+                           FROM workspace_prospects
+                           WHERE workspace_id=$1 AND id=$2
+                           FOR UPDATE""",
+                        workspace_id, prospect_id,
+                    )
+                    if prospect is None:
+                        raise ValueError("linked_prospect_not_found")
+                    if prospect["opt_out"]:
+                        raise ValueError("prospect_opted_out")
+                    if campaign_id is not None and campaign_id != prospect["campaign_id"]:
+                        raise ValueError("prospect_campaign_mismatch")
+                    campaign_id = prospect["campaign_id"]
+                    if prospect_name.strip().casefold() != prospect["display_name"].strip().casefold():
+                        raise ValueError("prospect_name_mismatch")
                 row = await connection.fetchrow(
                     """INSERT INTO workspace_outreach_drafts
-                       (workspace_id, campaign_id, created_by, channel, client_business, client_offer,
+                       (workspace_id, campaign_id, prospect_id, created_by, channel, client_business, client_offer,
                         prospect_name, prospect_evidence_url, verified_relevance,
                         verified_facts, call_to_action, subject, body,
                         whatsapp_opt_in_confirmed)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15)
                        RETURNING *""",
-                    workspace_id, campaign_id, UUID(str(user_id)), channel, client_business.strip(),
+                    workspace_id, campaign_id, prospect_id, UUID(str(user_id)), channel, client_business.strip(),
                     client_offer.strip(), prospect_name.strip(), prospect_evidence_url.strip(),
                     verified_relevance.strip(), json.dumps(draft["verified_facts_used"]),
                     call_to_action.strip(), draft["subject"], draft["body"],
@@ -123,7 +140,7 @@ class WorkspaceOutreachDraftStore:
         if row is None:
             raise ValueError("draft_not_found")
         result = dict(row)
-        for key in ("id", "workspace_id", "campaign_id", "created_by", "reviewed_by"):
+        for key in ("id", "workspace_id", "campaign_id", "prospect_id", "created_by", "reviewed_by"):
             if result.get(key) is not None:
                 result[key] = str(result[key])
         for key in ("created_at", "updated_at", "reviewed_at"):
