@@ -92,12 +92,12 @@ class WorkspaceOutreachDraftStore:
             async with connection.transaction():
                 row = await connection.fetchrow(
                     """UPDATE workspace_outreach_drafts
-                       SET status=$4, reviewed_by=$5, review_note=$6,
+                       SET status=$3, reviewed_by=$4, review_note=$5,
                            reviewed_at=now(), updated_at=now()
                        WHERE workspace_id=$1 AND id=$2
                          AND status='draft_requires_human_review'
                        RETURNING *""",
-                    workspace_id, draft_id, reviewer_id, decision,
+                    workspace_id, draft_id, decision,
                     UUID(str(reviewer_id)), note.strip() if note else None,
                 )
         return self._public(row) if row is not None else None
