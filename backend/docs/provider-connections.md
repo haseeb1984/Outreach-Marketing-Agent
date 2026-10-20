@@ -31,3 +31,17 @@ ID belonging to another workspace both return `404`. The response uses the same
 safe metadata allowlist as the list endpoint and always reports
 `sending_enabled: false`. It does not reveal secret-manager references or provider
 credentials, and it does not imply that the provider account is authorized.
+
+
+## Database-enforced lifecycle guard (migration 013)
+
+Migration 013 adds a PostgreSQL trigger so application code or manual SQL cannot
+mark a connection `connected` without a non-empty provider account ID, opaque secret
+reference, granted scopes, and a successful-validation timestamp. A connection in
+`error` state requires a stable error code. Revoked records cannot be reactivated;
+reconnection must create a fresh record. The guard re-checks connected-state
+invariants on every update, not just status changes.
+
+This is a defense-in-depth invariant, not proof that provider validation has already
+been implemented. The application still has no endpoint that completes OAuth or
+marks a connection connected, and message sending remains disabled.
