@@ -151,6 +151,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.app_users') IS NOT NULL
                      AND to_regclass('public.workspace_memberships') IS NOT NULL
                      AND to_regclass('public.auth_sessions') IS NOT NULL
+                     AND to_regclass('public.password_reset_tokens') IS NOT NULL
                      AND to_regclass('public.security_audit_events') IS NOT NULL
                      AND to_regclass('public.auth_rate_limit_buckets') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
@@ -163,8 +164,9 @@ async def readiness() -> Response:
                             '002_workspace_jobs.sql',
                             '003_authentication_foundation.sql',
                             '004_auth_rate_limits.sql',
-                            '005_session_csrf_tokens.sql'
-                          )) = 5"""
+                            '005_session_csrf_tokens.sql',
+                            '006_password_reset_tokens.sql'
+                          )) = 6"""
             )
             if not schema_ready:
                 return JSONResponse(
