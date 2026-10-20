@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from app.services.auth_security import new_opaque_token, token_digest
+from app.services.auth_http_security import csrf_token_digest, new_csrf_token
 
 ALLOWED_ROLES = {"owner", "admin", "member", "viewer"}
 ROLE_RANK = {"viewer": 0, "member": 1, "admin": 2, "owner": 3}
@@ -164,6 +165,7 @@ class AuthStore:
         if isinstance(lifetime_hours, bool) or not isinstance(lifetime_hours, int) or not 1 <= lifetime_hours <= 720:
             raise ValueError("session_lifetime_out_of_range")
         token = new_opaque_token()
+        csrf_token = new_csrf_token()
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=lifetime_hours)
         safe_user_agent = user_agent[:500] if isinstance(user_agent, str) else None
@@ -179,12 +181,12 @@ class AuthStore:
                     raise ValueError("active_verified_user_required")
                 await connection.execute(
                     """INSERT INTO auth_sessions
-                       (user_id, token_sha256, created_at, expires_at, last_seen_at, user_agent)
-                       VALUES ($1, $2, $3, $4, $3, $5)""",
-                    UUID(str(user_id)), token_digest(token), now, expires_at, safe_user_agent,
+                       (user_id, token_sha256, csrf_token_sha256, created_at, expires_at, last_seen_at, user_agent)
+                       VALUES ($1, $2, $3, $4, $5, $4, $6)""",
+                    UUID(str(user_id)), token_digest(token), csrf_token_digest(csrf_token), now, expires_at, safe_user_agent,
                 )
         # The raw token is returned once. The database stores only its digest.
-        return {"token": token, "expires_at": expires_at}
+        return {"token": token, "csrf_token": csrf_token, "expires_at": expires_at}
 
     async def rotate_session(
         self, *, current_token: str, user_agent: str | None = None,
@@ -206,6 +208,7 @@ class AuthStore:
         except ValueError:
             return None
         replacement = new_opaque_token()
+        replacement_csrf = new_csrf_token()
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=lifetime_hours)
         safe_user_agent = user_agent[:500] if isinstance(user_agent, str) else None
@@ -233,12 +236,12 @@ class AuthStore:
                     return None
                 await connection.execute(
                     """INSERT INTO auth_sessions
-                       (user_id, token_sha256, created_at, expires_at, last_seen_at, user_agent)
-                       VALUES ($1, $2, $3, $4, $3, $5)""",
-                    current["user_id"], token_digest(replacement), now, expires_at,
+                       (user_id, token_sha256, csrf_token_sha256, created_at, expires_at, last_seen_at, user_agent)
+                       VALUES ($1, $2, $3, $4, $5, $4, $6)""",
+                    current["user_id"], token_digest(replacement), csrf_token_digest(replacement_csrf), now, expires_at,
                     safe_user_agent,
                 )
-        return {"token": replacement, "expires_at": expires_at}
+        return {"token": replacement, "csrf_token": replacement_csrf, "expires_at": expires_at}
 
     async def issue_password_reset(
         self, *, email: str, lifetime_minutes: int = 30,
@@ -362,7 +365,7 @@ class AuthStore:
         async with self._pool.acquire() as connection:
             row = await connection.fetchrow(
                 """SELECT u.id AS user_id, u.email, s.id AS session_id,
-                          s.expires_at, s.last_seen_at
+                          s.expires_at, s.last_seen_at, s.csrf_token_sha256
                    FROM auth_sessions s
                    JOIN app_users u ON u.id=s.user_id
                    WHERE s.token_sha256=$1 AND s.revoked_at IS NULL
