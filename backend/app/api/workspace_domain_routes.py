@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.auth_routes import _authenticated, _check_csrf
+from app.api.auth_routes import _authenticated, _check_csrf, _consume
 from app.services.domain_authorization import normalize_domain
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/domains", tags=["workspace domains"])
@@ -72,6 +71,16 @@ async def create_domain_challenge(
 ):
     domain_store, session = await _authorize(request, workspace_id, "admin")
     _check_csrf(request, session)
+    limiter = getattr(request.app.state, "auth_rate_limiter", None)
+    if limiter is None:
+        raise HTTPException(status_code=503, detail="workspace_domains_unavailable")
+    await _consume(
+        limiter,
+        namespace="domain-challenge",
+        identifier=str(workspace_id) + ":" + str(session["user_id"]),
+        limit=10,
+        window=3600,
+    )
     try:
         result = await domain_store.issue_challenge(
             workspace_id=workspace_id, domain=normalize_domain(payload.domain)
