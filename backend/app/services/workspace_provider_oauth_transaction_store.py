@@ -17,7 +17,6 @@ from app.services.secret_manager import InvalidSecretReference, validate_secret_
 
 _PKCE_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _OAUTH_STATE = re.compile(r"^[A-Za-z0-9_-]{43}$")
-_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 def new_oauth_state() -> str:
@@ -89,7 +88,9 @@ class WorkspaceProviderOAuthTransactionStore:
         return self._public(row)
 
     async def consume(self, *, state: str) -> dict[str, Any] | None:
-        """Atomically consume a valid state once; never return raw state or nonce."""
+        """Atomically consume a well-formed state once; reject malformed input before DB access."""
+        if not isinstance(state, str) or not _OAUTH_STATE.fullmatch(state):
+            return None
         try:
             state_digest = digest_oauth_value(state)
         except ValueError:
