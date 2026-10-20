@@ -14,7 +14,7 @@ BEGIN
       REFERENCES workspace_prospects (workspace_id, id)
       ON DELETE RESTRICT;
   END IF;
-END
+END;
 $migration$;
 CREATE INDEX IF NOT EXISTS workspace_outreach_drafts_prospect_idx
   ON workspace_outreach_drafts (workspace_id, prospect_id, created_at DESC)
