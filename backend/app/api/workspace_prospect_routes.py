@@ -5,7 +5,7 @@ from uuid import UUID
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf, _consume
 from app.services.workspace_prospect_store import STAGES
@@ -27,7 +27,7 @@ class ProspectInput(BaseModel):
     display_name: str = Field(min_length=1, max_length=200)
     organization_name: str | None = Field(default=None, max_length=200)
     website_url: str = Field(min_length=9, max_length=2048)
-    contact_email: EmailStr | None = None
+    contact_email: str | None = Field(default=None, max_length=320)
     contact_phone: str | None = Field(default=None, max_length=40)
     source_url: str = Field(min_length=9, max_length=2048)
     fit_reason: str = Field(min_length=1, max_length=2000)
@@ -44,6 +44,19 @@ class ProspectInput(BaseModel):
         if not value.strip():
             raise ValueError("field_must_not_be_blank")
         return value.strip()
+
+    @field_validator("contact_email")
+    @classmethod
+    def valid_email_shape(cls, value: str | None) -> str | None:
+        if value is not None:
+            normalized = value.strip().lower()
+            if normalized.count("@") != 1 or any(ch.isspace() for ch in normalized):
+                raise ValueError("invalid_contact_email")
+            local, domain = normalized.rsplit("@", 1)
+            if not local or "." not in domain or domain.startswith(".") or domain.endswith("."):
+                raise ValueError("invalid_contact_email")
+            return normalized
+        return None
 
     @field_validator("contact_phone")
     @classmethod
