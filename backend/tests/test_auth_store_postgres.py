@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +15,7 @@ import pytest
 
 from app.services.auth_security import hash_password, verify_password
 from app.services.auth_store import AuthStore
+from app.services.auth_rate_limiter import AuthRateLimiter
 
 
 @pytest.mark.skipif(
@@ -96,5 +96,29 @@ async def _exercise_password_reset() -> None:
             assert stored != token
         finally:
             await conn.close()
+
+        # Concurrent requests must not overrun a fixed-window limit.
+        limiter = AuthRateLimiter(pool, secret_key="integration-test-key-" + ("x" * 32))
+        rate_results = await asyncio.gather(*[
+            limiter.consume(
+                namespace="login",
+                identifier=f"{user_id.hex}@example.test",
+                limit=5,
+                window_seconds=60,
+            )
+            for _ in range(12)
+        ])
+        assert sum(result["allowed"] for result in rate_results) == 5
+        assert all(
+            result["remaining"] == 0
+            for result in rate_results
+            if not result["allowed"]
+        )
+        async with pool.acquire() as conn:
+            stored_digests = await conn.fetch(
+                "SELECT key_digest FROM auth_rate_limit_buckets"
+            )
+            assert len(stored_digests) == 1
+            assert user_id.hex not in stored_digests[0]["key_digest"]
     finally:
         await pool.close()
