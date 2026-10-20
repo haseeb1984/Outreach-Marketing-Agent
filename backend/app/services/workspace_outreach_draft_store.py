@@ -40,20 +40,28 @@ class WorkspaceOutreachDraftStore:
             whatsapp_opt_in_confirmed=whatsapp_opt_in_confirmed,
         )
         async with self._pool.acquire() as connection:
-            row = await connection.fetchrow(
-                """INSERT INTO workspace_outreach_drafts
-                   (workspace_id, created_by, channel, client_business, client_offer,
-                    prospect_name, prospect_evidence_url, verified_relevance,
-                    verified_facts, call_to_action, subject, body,
-                    whatsapp_opt_in_confirmed)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13)
-                   RETURNING *""",
-                workspace_id, UUID(str(user_id)), channel, client_business.strip(),
-                client_offer.strip(), prospect_name.strip(), prospect_evidence_url.strip(),
-                verified_relevance.strip(), json.dumps(draft["verified_facts_used"]),
-                call_to_action.strip(), draft["subject"], draft["body"],
-                whatsapp_opt_in_confirmed,
-            )
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """INSERT INTO workspace_outreach_drafts
+                       (workspace_id, created_by, channel, client_business, client_offer,
+                        prospect_name, prospect_evidence_url, verified_relevance,
+                        verified_facts, call_to_action, subject, body,
+                        whatsapp_opt_in_confirmed)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13)
+                       RETURNING *""",
+                    workspace_id, UUID(str(user_id)), channel, client_business.strip(),
+                    client_offer.strip(), prospect_name.strip(), prospect_evidence_url.strip(),
+                    verified_relevance.strip(), json.dumps(draft["verified_facts_used"]),
+                    call_to_action.strip(), draft["subject"], draft["body"],
+                    whatsapp_opt_in_confirmed,
+                )
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id, actor_user_id, event_type, outcome, metadata)
+                       VALUES ($1, $2, 'outreach_draft.created', 'success', $3::jsonb)""",
+                    workspace_id, UUID(str(user_id)),
+                    json.dumps({"draft_id": str(row["id"]), "channel": channel}),
+                )
         return self._public(row)
 
     async def list_for_workspace(
@@ -100,6 +108,14 @@ class WorkspaceOutreachDraftStore:
                     workspace_id, draft_id, decision,
                     UUID(str(reviewer_id)), note.strip() if note else None,
                 )
+                if row is not None:
+                    await connection.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id, actor_user_id, event_type, outcome, metadata)
+                           VALUES ($1, $2, 'outreach_draft.reviewed', 'success', $3::jsonb)""",
+                        workspace_id, UUID(str(reviewer_id)),
+                        json.dumps({"draft_id": str(draft_id), "decision": decision}),
+                    )
         return self._public(row) if row is not None else None
 
     @staticmethod
