@@ -162,3 +162,36 @@ def test_domain_verification_uses_server_dns_not_client_supplied_evidence(monkey
     assert response.status_code == 200
     assert response.json()["verified"] is True
     assert forged.status_code == 422
+
+
+def test_workspace_authorization_database_failure_fails_closed(monkeypatch):
+    class BrokenAuthStore(FakeAuthStore):
+        async def authorize_workspace(self, **kwargs):
+            raise RuntimeError("database details must not leak")
+
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
+        app.state.auth_store = BrokenAuthStore()
+        response = client.get("/api/v1/workspaces/workspace-a/domains")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "workspace_authorization_unavailable"
+    assert "database details" not in response.text
+
+
+def test_domain_dns_timeout_fails_closed_without_verifying(monkeypatch):
+    import dns.exception
+    from app.api import workspace_domain_routes
+
+    async def timeout_resolver(domain):
+        raise dns.exception.Timeout
+
+    monkeypatch.setattr(workspace_domain_routes, "_resolve_txt_values", timeout_resolver)
+    with TestClient(app, base_url="https://app.example.test") as client:
+        setup_workspace_app(monkeypatch, client, role="admin")
+        response = client.post(
+            "/api/v1/workspaces/workspace-a/domains/verify",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": CSRF},
+            json={"domain": "example.com"},
+        )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "domain_dns_lookup_unavailable"
