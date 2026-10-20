@@ -6,6 +6,9 @@ UPDATE auth_sessions
        csrf_token_sha256 = repeat('0', 64)
  WHERE csrf_token_sha256 IS NULL;
 ALTER TABLE auth_sessions ALTER COLUMN csrf_token_sha256 SET NOT NULL;
+-- Test setup and recovery workflows may reapply migrations to a persistent test DB.
+-- Replace this named constraint without relying on DO-block dollar quoting.
+ALTER TABLE auth_sessions DROP CONSTRAINT IF EXISTS auth_sessions_csrf_digest_format;
 ALTER TABLE auth_sessions
   ADD CONSTRAINT auth_sessions_csrf_digest_format
   CHECK (csrf_token_sha256 ~ '^[0-9a-f]{64}$');
