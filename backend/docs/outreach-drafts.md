@@ -60,3 +60,5 @@ Campaign metadata is managed separately from sending:
 - Channels: `email`, `whatsapp`, `multi_channel`. Status filters: `draft`, `active`, `paused`, `completed`, `archived`.
 
 Campaign website URLs are stored as metadata only; creation does not fetch them. URLs must be clean HTTPS URLs without credentials, query strings, or fragments. A draft may optionally include `campaign_id`; the database enforces that a linked campaign belongs to the same workspace. Deleting a campaign referenced by drafts is constrained rather than silently unlinking history.
+
+- `POST /api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/status` changes lifecycle state (minimum role: `admin`; CSRF-protected and rate-limited). Allowed transitions are `draft → active/archived`, `active → paused/completed`, `paused → active/completed/archived`, and `completed → archived`. Archived campaigns are terminal. Invalid or repeated transitions return `409`. This endpoint changes metadata only; it never schedules or sends outreach.
