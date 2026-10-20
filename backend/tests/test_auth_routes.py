@@ -337,3 +337,19 @@ def test_password_reset_confirm_updates_password_and_rejects_invalid_token(monke
         assert good.status_code == 200
         assert bad.status_code == 400
         assert "invalid_or_expired" in bad.json()["detail"]
+
+
+def test_password_reset_landing_requires_explicit_form_submission():
+    import asyncio
+
+    response = asyncio.run(auth_routes.password_reset_landing(token="r" * 43))
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    html = response.body.decode()
+    assert "password-reset/confirm" in html
+    assert "method:'POST'" in html
+    assert "autocomplete=\"new-password\"" in html
+
+    invalid = asyncio.run(auth_routes.password_reset_landing(token="short"))
+    assert invalid.status_code == 400
