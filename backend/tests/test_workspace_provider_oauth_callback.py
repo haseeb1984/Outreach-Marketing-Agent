@@ -129,6 +129,13 @@ def test_callback_rejects_scopes_outside_provider_allowlist():
         asyncio.run(service.complete(state=STATE, code="provider-code-123"))
 
 
+@pytest.mark.parametrize("scopes", [frozenset(), frozenset({""}), frozenset({"scope with spaces"})])
+def test_callback_rejects_empty_or_malformed_scope_grants(scopes):
+    service, _ = _service(scopes=scopes)
+    with pytest.raises(ProviderOAuthCallbackError, match="oauth_scopes_invalid"):
+        asyncio.run(service.complete(state=STATE, code="provider-code-123"))
+
+
 class UnavailableSecrets:
     async def get(self, *, reference, purpose):
         raise SecretManagerUnavailable("secret_manager_not_configured")
