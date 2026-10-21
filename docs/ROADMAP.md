@@ -1,21 +1,35 @@
 # Delivery and conversation roadmap
 
-Percentages represent implemented scope, not launch readiness. A phase is complete only after its automated checks pass.
+Percentages represent verified implementation scope, not launch readiness. A phase is complete only after its acceptance checks pass. See [Implementation status and release blockers](IMPLEMENTATION_STATUS.md) for the current evidence-based matrix.
 
-## Authentication and workspace security
-Session/CSRF protection and workspace roles have foundational implementation; production security review remains.
+## Implemented foundations (automated tests pass; external operation still needs staging verification)
 
-## CRM, campaigns and human approval
-Workspace-scoped prospects, evidence-backed drafts and explicit review actions exist. Research integrations remain incomplete.
+- Authentication/session and CSRF foundations, workspace roles, rate-limiting foundations, and PostgreSQL-backed identity.
+- Workspace-scoped prospect/CRM operations, campaign records, evidence-aware draft generation, explicit human review, and contact controls.
+- Durable outbound delivery queue with workspace isolation, per-draft uniqueness, idempotency keys, explicit admin send actions, and send-time approval/suppression checks.
+- TLS-only SMTP adapter and safe integration-status diagnostics. Configuration presence is not proof that provider authentication or inbox delivery works.
+- Provider-neutral signed inbound-reply webhook with bounded payloads, validation, event deduplication, persistence, and conversation history.
+- Read-only website discovery/audit/growth-report services with domain-authorization and SSRF/egress guardrails.
+- Public marketing HTML routes, canonical/robots/sitemap helpers, readiness checks, and AI-discoverability requirements.
 
-## Contact controls
-Email suppression and evidence-backed WhatsApp opt-in records exist. Jurisdiction-specific consent and external suppression synchronization remain incomplete.
+## Deferred: WhatsApp Business Platform
 
-## Outbound delivery
-A durable queue uses workspace isolation, per-draft uniqueness, idempotency keys, explicit admin send actions, and send-time approval/suppression checks. TLS-only SMTP is wired. Provider acceptance and database persistence can become ambiguous after a crash; automatic retries are disabled to reduce duplicate-outreach risk.
+WhatsApp is intentionally **PENDING** while Meta account setup and same-number Coexistence eligibility are unresolved. Do not delete or deregister the existing WhatsApp Business App number. No live WhatsApp sends are enabled.
 
-## Inbound reply inbox
-A provider-neutral signed webhook accepts bounded, validated inbound reply events, deduplicates provider event IDs, persists replies, and moves eligible CRM prospects to replied. Workspace members with viewer access can read conversation history. Configure a unique high-entropy OUTREACH_WEBHOOK_SECRET in encrypted deployment settings and adapt each provider's native webhook signature to this gateway; no provider-native adapter or live external account is configured here.
+Still required before connecting Meta: eligible Coexistence onboarding, provider-specific GET verification handshake, raw-body `X-Hub-Signature-256` validation, native payload normalization, workspace/phone asset mapping, durable inbound/status event persistence, idempotency, official outbound adapter, opt-in/template checks, and staging acceptance. Configuration-status output is diagnostic only.
 
-## Remaining
-Subscriptions, paid entitlements, scheduled sending, live provider-specific webhook adapters, outbound provider message-ID capture, influencer discovery and provider analytics are not complete. Secrets must come from environment configuration, never request payloads or logs.
+## Remaining product and launch work
+
+- **Frontend/customer dashboard:** public pages currently exist in the FastAPI backend, but a complete customer-facing responsive SaaS dashboard and onboarding flow are not verified as implemented.
+- **Subscriptions and paid entitlements:** billing provider selection, hosted checkout, signed/idempotent billing webhooks, server-side entitlements, atomic quotas, subscription lifecycle, and reconciliation remain incomplete.
+- **Research integrations:** live search/provider adapters, provider account connections, evidence capture at scale, and production analytics require implementation and staging verification.
+- **Email release verification:** actual encrypted staging SMTP configuration, provider-authenticated smoke test, deliverability evidence, and operational alerts have not been verified from this repository review.
+- **Production operations:** security review, tenant-isolation review across all resources, accessibility/manual screen-reader checks, performance measurements, backup/restore drill, incident runbook, and legal/policy launch review remain release gates.
+- **Analytics:** report only provider-verified sends, delivery, replies, clicks, conversions, and ROI where data exists; do not infer successful external events from local state alone.
+
+## Release rules
+
+1. Work on `main` only; no extra branches.
+2. Keep real credentials in encrypted environment/secret storage; never commit or log them.
+3. Keep external sending, real payments, and website writes gated until staging acceptance and explicit release approval.
+4. CI success verifies only the tested commit and checks; it does not prove production readiness or external provider operation.
