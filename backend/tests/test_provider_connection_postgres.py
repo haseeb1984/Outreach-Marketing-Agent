@@ -169,6 +169,46 @@ async def _exercise_lifecycle_guard() -> None:
             assert connected is not None
             assert connected["status"] == "connected"
             assert "secret_reference" not in connected
+
+            # Another workspace member cannot activate a connection they did not create.
+            other_user_id = uuid4()
+            await pool.execute(
+                """INSERT INTO app_users
+                   (id, email, password_hash, email_verified_at, status)
+                   VALUES ($1, $2, $3, now(), 'active')""",
+                other_user_id, f"{other_user_id.hex}@example.test",
+                hash_password("provider-lifecycle-other-user-password").encoded,
+            )
+            with pytest.raises(ValueError, match="invalid_granted_scopes"):
+                await connection_store.mark_connected_after_validation(
+                    workspace_id=workspace_id,
+                    connection_id=connected_intent,
+                    user_id=str(user_id),
+                    provider="email",
+                    provider_account_id="provider-account-verified-test",
+                    secret_reference="vault-prod:provider-credentials-test",
+                    granted_scopes=(),
+                )
+            other_intent = await pool.fetchval(
+                """INSERT INTO workspace_provider_connections
+                   (workspace_id, provider, display_label, created_by)
+                   VALUES ($1, 'email', 'Other creator test', $2) RETURNING id""",
+                workspace_id, user_id,
+            )
+            assert await connection_store.mark_connected_after_validation(
+                workspace_id=workspace_id,
+                connection_id=other_intent,
+                user_id=str(other_user_id),
+                provider="email",
+                provider_account_id="provider-account-wrong-actor",
+                secret_reference="vault-prod:provider-credentials-test",
+                granted_scopes=("messages.read",),
+            ) is None
+            assert await pool.fetchval(
+                "SELECT status FROM workspace_provider_connections WHERE id=$1",
+                other_intent,
+            ) == "pending"
+
             assert await pool.fetchval(
                 """SELECT count(*) FROM security_audit_events
                    WHERE workspace_id=$1 AND event_type='provider_connection.verified_connected'
