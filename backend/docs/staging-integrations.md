@@ -18,7 +18,7 @@ Set these environment variables in the staging API service:
 
 Use a dedicated staging sender/domain or provider sandbox and send only to an address you control. Never use production customer lists for smoke tests.
 
-After saving encrypted variables, restart/redeploy the staging API so settings are reloaded. Apply the repository migrations using the documented migration process; the API deliberately does not run migrations automatically. Check `GET /ready` and the authenticated, workspace-scoped `GET /api/v1/integrations/status?workspace_id=...` endpoint. The latter reports only missing variable *names*, whether STARTTLS is enabled, and whether a connection test has been run; it never returns credentials. A complete configuration is not proof that the username/password work.
+After saving encrypted variables, restart/redeploy the staging API so settings are reloaded. Apply the repository migrations using the documented migration process; the API deliberately does not run migrations automatically. Check `GET /ready` and the authenticated, workspace-scoped `GET /api/v1/integrations/status?workspace_id=...` endpoint. The latter reports only missing variable *names*, whether STARTTLS is enabled, and a `connection_tested=false` marker because the status read does not run a connection test and test results are not persisted; it never returns credentials. A complete configuration is not proof that the username/password work.
 
 ### SMTP smoke-test acceptance
 
@@ -62,4 +62,4 @@ Set these staging variables only in encrypted environment settings or a secret m
 
 ### Safe SMTP connection/authentication check
 
-Staging now exposes an explicit admin-only `POST /api/v1/integrations/smtp/test` endpoint. It requires an authenticated session and CSRF validation, is unavailable unless `ENVIRONMENT=staging`, validates that SMTP is configured for STARTTLS, then performs EHLO, STARTTLS, EHLO, and authentication. It does **not** send a message. Provider exception details and credentials are never returned. A successful response proves only that the configured SMTP server accepted a TLS-authenticated session at test time; the separate recipient smoke test above is still required to verify message handoff and inbox receipt.
+Staging now exposes an explicit admin-only `POST /api/v1/integrations/smtp/test` endpoint. It requires an authenticated session and CSRF validation, is unavailable unless `ENVIRONMENT=staging`, validates that SMTP is configured for STARTTLS, then performs EHLO, STARTTLS, EHLO, and authentication. It does **not** send a message. Provider exception details and credentials are never returned. A successful response proves only that the configured SMTP server accepted a TLS-authenticated session at test time. The result is returned for that request and is not persisted in integration status; the separate recipient smoke test above is still required to verify message handoff and inbox receipt.
