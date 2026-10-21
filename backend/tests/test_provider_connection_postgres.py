@@ -146,6 +146,35 @@ async def _exercise_lifecycle_guard() -> None:
             assert "nonce_sha256" in consumed
             assert await oauth_store.consume(state=state) is None
             assert await oauth_store.consume(state="x") is None
+
+            # Only the verified-metadata persistence method can move an intent into
+            # connected state through the application store, and it audits the transition.
+            from app.services.workspace_provider_connection_store import WorkspaceProviderConnectionStore
+            connected_intent = await pool.fetchval(
+                """INSERT INTO workspace_provider_connections
+                   (workspace_id, provider, display_label, created_by)
+                   VALUES ($1, 'email', 'Verified connection test', $2) RETURNING id""",
+                workspace_id, user_id,
+            )
+            connection_store = WorkspaceProviderConnectionStore(pool)
+            connected = await connection_store.mark_connected_after_validation(
+                workspace_id=workspace_id,
+                connection_id=connected_intent,
+                user_id=str(user_id),
+                provider="email",
+                provider_account_id="provider-account-verified-test",
+                secret_reference="vault-prod:provider-credentials-test",
+                granted_scopes=("messages.read",),
+            )
+            assert connected is not None
+            assert connected["status"] == "connected"
+            assert "secret_reference" not in connected
+            assert await pool.fetchval(
+                """SELECT count(*) FROM security_audit_events
+                   WHERE workspace_id=$1 AND event_type='provider_connection.verified_connected'
+                     AND metadata->>'connection_id'=$2""",
+                workspace_id, str(connected_intent),
+            ) == 1
         finally:
             await pool.close()
     finally:
