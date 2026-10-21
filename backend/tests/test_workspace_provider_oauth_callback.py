@@ -91,8 +91,7 @@ def _service(*, scopes=frozenset({"profile"}), nonce=NONCE, secret_manager=None)
     return service, store
 
 
-@pytest.mark.parametrize("unused", [None])
-def test_callback_returns_only_verified_identity_metadata(unused):
+def test_callback_returns_only_verified_identity_metadata():
     service, store = _service()
     result = asyncio.run(service.complete(state=STATE, code="provider-code-123"))
     assert result.provider == "email"
