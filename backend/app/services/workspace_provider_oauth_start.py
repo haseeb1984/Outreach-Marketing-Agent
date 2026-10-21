@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from app.services.provider_oauth_adapter import (
     ProviderAdapterUnavailable,
@@ -71,8 +72,8 @@ class WorkspaceProviderOAuthStartService:
             reference = validate_secret_reference(reference)
             await self._transactions.create(
                 workspace_id=workspace_id,
-                connection_id=connection_id,
-                user_id=user_id,
+                connection_id=UUID(str(connection_id)),
+                user_id=UUID(str(user_id)),
                 provider=provider,
                 state=state,
                 pkce_challenge=challenge,
