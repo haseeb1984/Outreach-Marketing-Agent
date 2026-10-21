@@ -4,7 +4,7 @@
 docs/
 README.md
 
-# Local frontend/build artefacts if present in the repository
+# Frontend/build artefacts if present in the repository
 node_modules/
 .next/
 dist/
@@ -22,10 +22,10 @@ coverage/
 **/.venv/
 **/venv/
 
-# Local environment files and editor noise (keep tracked examples out of deployments too)
+# Never package local environment files or examples
 **/.env
 **/.env.*
-!backend/.env.example
+
 .DS_Store
 .vscode/
 .idea/
