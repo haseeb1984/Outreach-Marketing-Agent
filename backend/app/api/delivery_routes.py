@@ -51,30 +51,100 @@ async def list_deliveries(request: Request,workspace_id: str=Query(min_length=1,
  _,_,s=await _authenticated(request); await _authorize(request,workspace_id,"viewer",s)
  return {"items":await _store(request).list_deliveries(workspace_id=workspace_id,limit=limit,offset=offset),"limit":limit,"offset":offset}
 @router.post("/deliveries/{delivery_id}/send")
-async def send_delivery(delivery_id: UUID,payload: EnqueueDelivery,request: Request):
- _,_,s=await _authenticated(request); _check_csrf(request,s); await _authorize(request,payload.workspace_id,"admin",s); store=_store(request)
- try: data=await store.claim(workspace_id=payload.workspace_id,delivery_id=delivery_id)
- except LookupError: raise HTTPException(status_code=404,detail="delivery_not_found") from None
- except ValueError as e: raise HTTPException(status_code=409,detail=str(e)) from None
- try: await SMTPEmailDelivery().send_outreach_email(recipient=data["recipient"],subject=data["subject"],body=data["body"])
- except EmailDeliveryNotConfigured:
-  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="provider_not_configured")
-  raise HTTPException(status_code=503,detail="email_provider_not_configured") from None
- except ValueError:
-  # Validation errors occur before SMTP is called and are safe to classify as failed.
-  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="invalid_message")
-  raise HTTPException(status_code=422,detail="email_message_invalid") from None
- except EmailDeliveryFailed:
-  # SMTP may have accepted the message before a timeout/disconnect. Never imply
-  # definite failure or make this delivery automatically retryable.
-  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="delivery_outcome_unknown")
-  raise HTTPException(status_code=502,detail="delivery_outcome_unknown") from None
- except Exception:
-  # An unexpected adapter failure has an ambiguous send outcome too.
-  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="delivery_outcome_unknown")
-  raise HTTPException(status_code=502,detail="delivery_outcome_unknown") from None
- if not await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id): raise HTTPException(status_code=503,detail="delivery_status_persistence_failed")
- return {"id":str(delivery_id),"status":"sent"}
+async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    store = _store(request)
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+
+    # One stable reservation per queued delivery prevents a caller from bypassing
+    # the quota by changing the request idempotency key on a retry.
+    reservation_key = f"delivery-send:{delivery_id}"
+    try:
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="email_sends",
+            idempotency_key=reservation_key,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        status_code = 429 if reason == "quota_exhausted" else 403
+        raise HTTPException(status_code=status_code, detail=reason)
+    if reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="delivery_quota_already_consumed")
+
+    reservation_id = reservation["reservation_id"]
+    try:
+        data = await store.claim(workspace_id=payload.workspace_id, delivery_id=delivery_id)
+    except LookupError:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=404, detail="delivery_not_found") from None
+    except ValueError as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=503, detail="delivery_claim_unavailable") from None
+
+    try:
+        await SMTPEmailDelivery().send_outreach_email(
+            recipient=data["recipient"], subject=data["subject"], body=data["body"]
+        )
+    except EmailDeliveryNotConfigured:
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="provider_not_configured")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=503, detail="email_provider_not_configured") from None
+    except ValueError:
+        # Validation errors occur before SMTP is called and are safe to release.
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="invalid_message")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=422, detail="email_message_invalid") from None
+    except EmailDeliveryFailed:
+        # The remote server may have accepted the message before the connection
+        # failed. Keep the quota consumed and do not make the send retryable.
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="delivery_outcome_unknown")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        )
+        raise HTTPException(status_code=502, detail="delivery_outcome_unknown") from None
+    except Exception:
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="delivery_outcome_unknown")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        )
+        raise HTTPException(status_code=502, detail="delivery_outcome_unknown") from None
+
+    if not await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id):
+        # SMTP accepted the message; do not release the quota on a persistence issue.
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        )
+        raise HTTPException(status_code=503, detail="delivery_status_persistence_failed")
+    if not await subscriptions.finish_reservation(
+        workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+    ):
+        raise HTTPException(status_code=503, detail="delivery_quota_persistence_failed")
+    return {"id": str(delivery_id), "status": "sent"}
+
 
 
 def smtp_configuration_status(configuration=settings)->dict:

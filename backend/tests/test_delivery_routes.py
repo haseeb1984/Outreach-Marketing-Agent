@@ -69,3 +69,23 @@ def test_whatsapp_configuration_status_fails_closed_until_adapter_and_assets_are
  assert len(status["missing_fields"]) == 5
  assert status["live_send_enabled"] is False
  assert status["coexistence_onboarding_required"] is True
+
+
+
+def test_send_route_reserves_server_owned_email_quota_before_provider_call():
+ from app.api import delivery_routes
+ src=inspect.getsource(delivery_routes.send_delivery)
+ assert src.index("subscriptions.reserve_usage") < src.index("store.claim")
+ assert 'feature="email_sends"' in src
+ assert 'detail="quota_exhausted"' not in src  # response uses the trusted decision reason
+ assert 'outcome="consumed"' in src
+ assert 'outcome="released"' in src
+
+
+def test_send_route_does_not_release_quota_for_ambiguous_provider_outcome():
+ from app.api import delivery_routes
+ src=inspect.getsource(delivery_routes.send_delivery)
+ ambiguous=src[src.index("except EmailDeliveryFailed"):src.index("if not await store.finish")]
+ assert 'error_code="delivery_outcome_unknown"' in ambiguous
+ assert 'outcome="consumed"' in ambiguous
+ assert 'outcome="released"' not in ambiguous
