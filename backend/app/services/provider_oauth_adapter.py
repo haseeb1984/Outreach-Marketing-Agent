@@ -101,9 +101,9 @@ class ProviderOAuthAdapter(Protocol):
 
     async def exchange_and_validate(
         self, *, code: str, pkce_verifier: str, redirect_uri: str,
-        expected_nonce: str,
+        expected_nonce_sha256: str,
     ) -> ValidatedProviderIdentity:
-        """Exchange code over verified TLS and return verified identity and granted scopes."""
+        """Exchange over verified TLS; return identity with nonce for digest verification."""
         ...
 
 
