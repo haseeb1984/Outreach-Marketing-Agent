@@ -40,6 +40,8 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
 
     actions: list[dict[str, Any]] = []
     for index, finding in enumerate(site_findings):
+        if not isinstance(finding, dict):
+            continue
         title = str(finding.get("title", "")).strip()
         evidence_url = str(finding.get("evidence_url", "")).strip()
         category = str(finding.get("category", "content")).strip().lower()
@@ -53,6 +55,8 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
         actions.append({"id": str(finding.get("id") or f"site-{index + 1}"), "source": "site_observation", "category": category, "title": title, "evidence_url": evidence_url, "recommended_action": str(finding.get("recommended_action") or "Review this finding and define a verifiable correction."), "priority_score": score, "priority": _priority_label(score), "confidence": "evidence-backed", "verification": "Repeat the same check after an approved change and compare the recorded result."})
 
     for index, gap in enumerate(competitor_gaps or []):
+        if not isinstance(gap, dict):
+            continue
         title = str(gap.get("gap", "")).strip()
         evidence_url = str(gap.get("evidence_url", "")).strip()
         if not title or not evidence_url:
