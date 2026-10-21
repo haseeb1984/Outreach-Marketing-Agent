@@ -22,6 +22,7 @@ async def lifespan(application: FastAPI):
     application.state.auth_rate_limiter = None
     application.state.prospect_store = None
     application.state.campaign_store = None
+    application.state.delivery_store = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -40,8 +41,10 @@ async def lifespan(application: FastAPI):
         application.state.auth_store = AuthStore(pool)
         from app.services.prospect_store import ProspectStore
         from app.services.campaign_store import CampaignStore
+        from app.services.delivery_store import DeliveryStore
         application.state.prospect_store = ProspectStore(pool)
         application.state.campaign_store = CampaignStore(pool)
+        application.state.delivery_store = DeliveryStore(pool)
         if settings.secret_key and len(settings.secret_key.encode('utf-8')) >= 32:
             application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
@@ -62,10 +65,12 @@ app = FastAPI(
 from app.api.auth_routes import router as auth_router
 from app.api.prospect_routes import router as prospect_router
 from app.api.campaign_routes import router as campaign_router
+from app.api.delivery_routes import router as delivery_router
 
 app.include_router(auth_router)
 app.include_router(prospect_router)
 app.include_router(campaign_router)
+app.include_router(delivery_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -160,6 +165,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.outreach_drafts') IS NOT NULL
                      AND to_regclass('public.outreach_draft_events') IS NOT NULL
                      AND to_regclass('public.outreach_contact_controls') IS NOT NULL
+                     AND to_regclass('public.outreach_deliveries') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
@@ -171,8 +177,9 @@ async def readiness() -> Response:
                             '006_password_reset_tokens.sql',
                             '007_crm_prospects.sql',
                             '008_campaigns_and_approval_queue.sql',
-                            '009_contact_controls.sql'
-                          )) = 9"""
+                            '009_contact_controls.sql',
+                            '010_outbound_delivery_queue.sql'
+                          )) = 10"""
             )
             if not schema_ready:
                 return JSONResponse(

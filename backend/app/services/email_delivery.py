@@ -85,6 +85,26 @@ class SMTPEmailDelivery:
         except Exception:
             raise EmailDeliveryFailed("smtp_delivery_failed") from None
 
+
+    async def send_outreach_email(self, *, recipient: str, subject: str, body: str) -> None:
+        """Send an explicitly approved outreach email over TLS-only SMTP."""
+        self._validate_configuration()
+        if not isinstance(recipient, str) or len(recipient) > 320 or "@" not in recipient:
+            raise ValueError("invalid_recipient")
+        if not isinstance(subject, str) or not subject.strip() or len(subject) > 300:
+            raise ValueError("invalid_subject")
+        if not isinstance(body, str) or not body.strip() or len(body) > 10000:
+            raise ValueError("invalid_body")
+        message = EmailMessage()
+        message["Subject"] = subject.strip()
+        message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
+        message["To"] = recipient
+        message.set_content(body)
+        try:
+            await asyncio.to_thread(self._send_message, message)
+        except Exception:
+            raise EmailDeliveryFailed("smtp_delivery_failed") from None
+
     def _send_message(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self._settings.smtp_host, self._settings.smtp_port, timeout=10) as client:
             client.ehlo()
