@@ -1,6 +1,7 @@
 """Explicit admin-triggered send for approved email drafts."""
 from __future__ import annotations
 from uuid import UUID
+import os
 from fastapi import APIRouter,HTTPException,Query,Request
 from pydantic import BaseModel,ConfigDict,Field
 from app.api.auth_routes import _authenticated,_check_csrf
@@ -180,7 +181,9 @@ async def test_smtp_connection(request: Request, workspace_id: str = Query(min_l
  _, _, session = await _authenticated(request)
  _check_csrf(request, session)
  await _authorize(request, workspace_id, "admin", session)
- if settings.environment.strip().lower() not in {"staging", "production"}:
+ runtime_environment = settings.environment.strip().lower()
+ platform_environment = os.getenv("VERCEL_ENV", "").strip().lower()
+ if runtime_environment not in {"staging", "production"} and platform_environment not in {"preview", "production"}:
   raise HTTPException(status_code=404, detail="smtp_connection_test_unavailable")
  try:
   await SMTPEmailDelivery().test_connection()
