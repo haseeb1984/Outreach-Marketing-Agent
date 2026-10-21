@@ -120,11 +120,20 @@ class WorkspaceProviderOAuthCallbackService:
         if not nonce_matches(identity.nonce, transaction["nonce_sha256"]):
             raise ProviderOAuthCallbackError("oauth_nonce_mismatch")
         scopes = identity.granted_scopes
-        if not isinstance(scopes, (set, frozenset, tuple, list)) or any(
-            not isinstance(scope, str) for scope in scopes
+        if (
+            not isinstance(scopes, (set, frozenset, tuple, list))
+            or not scopes
+            or any(
+                not isinstance(scope, str)
+                or re.fullmatch(r"[A-Za-z0-9:._/-]{1,120}", scope) is None
+                for scope in scopes
+            )
         ):
+            # An empty or malformed grant must never look like a usable connection.
             raise ProviderOAuthCallbackError("oauth_scopes_invalid")
         granted = frozenset(scopes)
+        if not granted:
+            raise ProviderOAuthCallbackError("oauth_scopes_invalid")
         if not granted.issubset(config.allowed_scopes):
             raise ProviderOAuthCallbackError("oauth_scopes_exceed_allowlist")
 
