@@ -10,6 +10,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 - TLS-only SMTP adapter and safe integration-status diagnostics. Configuration presence is not proof that provider authentication or inbox delivery works.
 - Provider-neutral signed inbound-reply webhook with bounded payloads, validation, event deduplication, persistence, and conversation history.
 - Read-only website discovery/audit/growth-report services with domain-authorization and SSRF/egress guardrails.
+- Responsive same-origin `/app` dashboard wired to authenticated APIs: registration/sign-in, active workspace selection, prospect and campaign creation/listing, draft review, and read-only delivery activity. UI actions respect workspace roles; automated route tests and JavaScript syntax validation pass.
 - Public marketing HTML routes, canonical/robots/sitemap helpers, readiness checks, and AI-discoverability requirements.
 
 ## Deferred: WhatsApp Business Platform
@@ -20,7 +21,7 @@ Still required before connecting Meta: eligible Coexistence onboarding, provider
 
 ## Remaining product and launch work
 
-- **Frontend/customer dashboard:** public pages currently exist in the FastAPI backend, but a complete customer-facing responsive SaaS dashboard and onboarding flow are not verified as implemented.
+- **Dashboard extensions:** workspace/project settings, invitations, account export/deletion UI, connected-provider management, and a full browser-based onboarding journey remain incomplete. The current dashboard is a functional core foundation, not a claim that the entire SaaS is launch-ready.
 - **Subscriptions and paid entitlements:** billing provider selection, hosted checkout, signed/idempotent billing webhooks, server-side entitlements, atomic quotas, subscription lifecycle, and reconciliation remain incomplete.
 - **Research integrations:** live search/provider adapters, provider account connections, evidence capture at scale, and production analytics require implementation and staging verification.
 - **Email release verification:** actual encrypted staging SMTP configuration, provider-authenticated smoke test, deliverability evidence, and operational alerts have not been verified from this repository review.
