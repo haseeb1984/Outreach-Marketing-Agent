@@ -71,3 +71,47 @@ def test_growth_report_rejects_missing_start_url_or_invalid_findings():
             crawl_report={"start_url": "https://client.example/", "aggregate_findings": {}},
             business_type="SaaS", target_market="Global", target_queries=["x"]
         )
+
+
+
+@pytest.mark.parametrize("evidence_url", [
+    "https://other.example/page",
+    "https://user:secret@client.example/page",
+    "https://client.example/page?access_token=secret",
+    "https://client.example/page#private-fragment",
+    "https://client.example:99999/page",
+    "javascript:alert(1)",
+])
+def test_growth_report_does_not_emit_untrusted_evidence_urls(evidence_url):
+    result = build_website_growth_report(
+        crawl_report={
+            "start_url": "https://client.example/",
+            "aggregate_findings": [{
+                "code": "injected_finding",
+                "title": "Untrusted supplied finding",
+                "severity": "high",
+                "evidence_urls": [evidence_url],
+            }],
+        },
+        business_type="SaaS",
+        target_market="Global",
+        target_queries=["workflow software"],
+    )
+    assert result["strategy"]["actions"] == []
+
+
+@pytest.mark.parametrize("start_url", [
+    "",
+    "javascript:alert(1)",
+    "https://user:secret@client.example/",
+    "https://client.example:99999/",
+    "https://client.example/path with spaces",
+])
+def test_growth_report_rejects_invalid_start_url(start_url):
+    with pytest.raises(ValueError, match="valid HTTP"):
+        build_website_growth_report(
+            crawl_report={"start_url": start_url, "aggregate_findings": []},
+            business_type="SaaS",
+            target_market="Global",
+            target_queries=["workflow software"],
+        )
