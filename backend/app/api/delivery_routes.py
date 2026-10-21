@@ -5,6 +5,7 @@ from fastapi import APIRouter,HTTPException,Query,Request
 from pydantic import BaseModel,ConfigDict,Field
 from app.api.auth_routes import _authenticated,_check_csrf
 from app.services.email_delivery import EmailDeliveryFailed,EmailDeliveryNotConfigured,SMTPEmailDelivery
+from app.core.config import settings
 router=APIRouter(prefix="/api/v1",tags=["outbound-delivery"])
 def _store(r: Request):
  s=getattr(r.app.state,"delivery_store",None)
@@ -54,3 +55,50 @@ async def send_delivery(delivery_id: UUID,payload: EnqueueDelivery,request: Requ
   raise HTTPException(status_code=502,detail="delivery_outcome_unknown") from None
  if not await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id): raise HTTPException(status_code=503,detail="delivery_status_persistence_failed")
  return {"id":str(delivery_id),"status":"sent"}
+
+
+def smtp_configuration_status(configuration=settings)->dict:
+ """Return safe SMTP configuration diagnostics without exposing values or testing credentials."""
+ required = {
+  "SMTP_HOST": configuration.smtp_host,
+  "SMTP_USERNAME": configuration.smtp_username,
+  "SMTP_PASSWORD": configuration.smtp_password,
+  "SMTP_FROM_EMAIL": configuration.smtp_from_email,
+ }
+ missing = sorted(name for name, value in required.items() if not isinstance(value, str) or not value.strip())
+ port = configuration.smtp_port
+ port_valid = isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
+ tls_enabled = configuration.smtp_starttls is True
+ if not port_valid:
+  missing.append("SMTP_PORT")
+ if not tls_enabled:
+  missing.append("SMTP_STARTTLS")
+ return {
+  "configuration_complete": not missing,
+  "missing_fields": sorted(set(missing)),
+  "port_valid": port_valid,
+  "starttls_enabled": tls_enabled,
+  "connection_tested": False,
+ }
+
+
+@router.get("/integrations/status")
+async def integrations_status(request: Request, workspace_id: str=Query(min_length=1,max_length=200)):
+ """Workspace-scoped integration readiness without returning any credential material."""
+ _,_,session=await _authenticated(request)
+ await _authorize(request,workspace_id,"viewer",session)
+ smtp=smtp_configuration_status()
+ return {
+  "workspace_id": workspace_id,
+  "email": {
+   "provider": "smtp",
+   **smtp,
+   "note": "Configuration presence is not proof that SMTP authentication or delivery works.",
+  },
+  "whatsapp": {
+   "provider": "official_whatsapp_business_platform",
+   "configuration_complete": False,
+   "live_send_enabled": False,
+   "reason": "official_provider_adapter_not_implemented",
+  },
+ }
