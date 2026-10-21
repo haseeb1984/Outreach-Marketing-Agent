@@ -6,6 +6,7 @@ send outreach, or promise search-ranking outcomes.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from app.services.seo_strategy import build_seo_strategy
 
@@ -20,8 +21,9 @@ def build_website_growth_report(
 ) -> dict[str, Any]:
     """Combine bounded crawler output and business context into one reviewable plan."""
     start_url = str(crawl_report.get("start_url", "")).strip()
-    if not start_url:
-        raise ValueError("crawl_report must include start_url")
+    start_host = _public_http_host(start_url)
+    if not start_host:
+        raise ValueError("crawl_report must include a valid HTTP(S) start_url")
 
     aggregated = crawl_report.get("aggregate_findings", [])
     if not isinstance(aggregated, list):
@@ -36,7 +38,13 @@ def build_website_growth_report(
             # No evidence URL means no recommendation is generated.
             continue
         evidence_url = str(evidence_urls[0]).strip()
-        if not evidence_url:
+        # Only cite URLs on the authorized crawl host. This prevents untrusted
+        # crawl payloads from smuggling external or credential-bearing evidence
+        # into the client's report.
+        if _public_http_host(evidence_url) != start_host:
+            continue
+        parsed_evidence = urlsplit(evidence_url)
+        if parsed_evidence.query or parsed_evidence.fragment:
             continue
         occurrences = finding.get("occurrences", 1)
         try:
@@ -45,9 +53,9 @@ def build_website_growth_report(
             affected_pages = 1
         severity_map = {"high": 5, "medium": 3, "low": 2}
         strategy_findings.append({
-            "id": str(finding.get("code") or "crawl-finding"),
-            "category": str(finding.get("category") or "technical_seo"),
-            "title": str(finding.get("title") or "").strip(),
+            "id": str(finding.get("code") or "crawl-finding")[:100],
+            "category": str(finding.get("category") or "technical_seo")[:80],
+            "title": str(finding.get("title") or "").strip()[:300],
             "evidence_url": evidence_url,
             "severity": severity_map.get(str(finding.get("severity", "")).lower(), 2),
             "affected_pages": affected_pages,
@@ -83,3 +91,27 @@ def build_website_growth_report(
             *crawl_report.get("limitations", []),
         ],
     }
+
+
+
+def _public_http_host(value: str) -> str | None:
+    """Return a normalized host only for well-formed HTTP(S) URLs without userinfo."""
+    if not isinstance(value, str) or not value or len(value) > 2048:
+        return None
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value):
+        return None
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        return None
+    return parsed.hostname.rstrip(".").lower()
