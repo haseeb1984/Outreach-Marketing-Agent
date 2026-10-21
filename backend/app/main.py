@@ -136,7 +136,7 @@ h1{{font-size:clamp(2rem,5vw,3.4rem);line-height:1.12;max-width:17ch;margin:.25r
 <body>
 <a class="skip" href="#main">Skip to main content</a>
 <header><a class="brand" href="/">Outreach Marketing Agent</a>
-<nav aria-label="Main navigation"><a href="/product">Product</a><a href="/pricing">Pricing</a><a href="/faq">FAQ</a><a href="/docs">API docs</a></nav></header>
+<nav aria-label="Main navigation"><a href="/product">Product</a><a href="/pricing">Pricing</a><a href="/faq">FAQ</a><a href="/app">Sign in</a><a href="/docs">API docs</a></nav></header>
 <main id="main">{body}</main>
 <footer><p><strong>Outreach Marketing Agent</strong></p>
 <p class="muted">Evidence-led research and human-reviewed outreach. Planned features are not advertised as live integrations.</p>
