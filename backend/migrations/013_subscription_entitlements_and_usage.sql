@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS feature_usage_reservations (
     status TEXT NOT NULL DEFAULT 'reserved' CHECK (status IN ('reserved','consumed','released')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(workspace_id, feature, idempotency_key),
+    UNIQUE(workspace_id, idempotency_key),
     CHECK (billing_period_ends_at > billing_period_starts_at)
 );
 CREATE INDEX IF NOT EXISTS idx_feature_usage_active_period

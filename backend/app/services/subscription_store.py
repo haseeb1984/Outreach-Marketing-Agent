@@ -83,10 +83,12 @@ class SubscriptionStore:
                 existing = await conn.fetchrow(
                     """SELECT id,feature,status,billing_period_starts_at,billing_period_ends_at
                        FROM feature_usage_reservations
-                       WHERE workspace_id=$1 AND feature=$2 AND idempotency_key=$3""",
-                    workspace_id, feature, idempotency_key,
+                       WHERE workspace_id=$1 AND idempotency_key=$2""",
+                    workspace_id, idempotency_key,
                 )
                 if existing is not None:
+                    if existing["feature"] != feature:
+                        return {"allowed": False, "reason": "idempotency_key_feature_conflict"}
                     if (existing["billing_period_starts_at"] != row["billing_period_starts_at"]
                             or existing["billing_period_ends_at"] != row["billing_period_ends_at"]):
                         return {"allowed": False, "reason": "idempotency_key_period_conflict"}
