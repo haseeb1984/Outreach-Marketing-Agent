@@ -20,6 +20,7 @@ async def lifespan(application: FastAPI):
     application.state.domain_authorization_store = None
     application.state.auth_store = None
     application.state.auth_rate_limiter = None
+    application.state.prospect_store = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -36,6 +37,8 @@ async def lifespan(application: FastAPI):
         from app.services.auth_rate_limiter import AuthRateLimiter
 
         application.state.auth_store = AuthStore(pool)
+        from app.services.prospect_store import ProspectStore
+        application.state.prospect_store = ProspectStore(pool)
         if settings.secret_key and len(settings.secret_key.encode('utf-8')) >= 32:
             application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
@@ -54,8 +57,10 @@ app = FastAPI(
 )
 
 from app.api.auth_routes import router as auth_router
+from app.api.prospect_routes import router as prospect_router
 
 app.include_router(auth_router)
+app.include_router(prospect_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -145,6 +150,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.auth_sessions') IS NOT NULL
                      AND to_regclass('public.security_audit_events') IS NOT NULL
                      AND to_regclass('public.auth_rate_limit_buckets') IS NOT NULL
+                     AND to_regclass('public.crm_prospects') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
@@ -153,8 +159,9 @@ async def readiness() -> Response:
                             '003_authentication_foundation.sql',
                             '004_auth_rate_limits.sql',
                             '005_session_csrf_tokens.sql',
-                            '006_password_reset_tokens.sql'
-                          )) = 6"""
+                            '006_password_reset_tokens.sql',
+                            '007_crm_prospects.sql'
+                          )) = 7"""
             )
             if not schema_ready:
                 return JSONResponse(
