@@ -16,12 +16,27 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
     Competitor gaps may include evidence_url, gap, business_relevance and
     recommended_action. This function does not fetch URLs or send data.
     """
-    if not business_type.strip():
-        raise ValueError("business_type is required")
-    if not target_market.strip():
-        raise ValueError("target_market is required")
-    if not target_queries or not any(q.strip() for q in target_queries):
-        raise ValueError("at least one non-empty target query is required")
+    if not isinstance(business_type, str) or not business_type.strip() or len(business_type) > 200:
+        raise ValueError("business_type must contain 1–200 characters")
+    if not isinstance(target_market, str) or not target_market.strip() or len(target_market) > 200:
+        raise ValueError("target_market must contain 1–200 characters")
+    if (
+        not isinstance(target_queries, list)
+        or not target_queries
+        or len(target_queries) > 100
+        or any(
+            not isinstance(query, str)
+            or len(query) > 200
+            or any(ord(char) < 32 and char not in "\\t" for char in query)
+            for query in target_queries
+        )
+        or not any(query.strip() for query in target_queries)
+    ):
+        raise ValueError("target_queries must contain 1–100 valid queries of at most 200 characters")
+    if not isinstance(site_findings, list):
+        raise ValueError("site_findings must be a list")
+    if competitor_gaps is not None and not isinstance(competitor_gaps, list):
+        raise ValueError("competitor_gaps must be a list")
 
     actions: list[dict[str, Any]] = []
     for index, finding in enumerate(site_findings):
