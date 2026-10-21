@@ -6,8 +6,11 @@ secret-manager operations must be implemented before that state is reachable.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from uuid import UUID
+
+from app.services.secret_manager import validate_secret_reference
 
 
 PROVIDERS = {"email", "whatsapp"}
@@ -71,6 +74,62 @@ class WorkspaceProviderConnectionStore:
                 workspace_id, connection_id,
             )
         return self._public(row) if row is not None else None
+
+    async def mark_connected_after_validation(
+        self, *, workspace_id: str, connection_id: UUID, user_id: str,
+        provider: str, provider_account_id: str, secret_reference: str,
+        granted_scopes: tuple[str, ...], token_expires_at: Any = None,
+    ) -> dict[str, Any] | None:
+        """Persist verified connection metadata after credentials are safely vaulted.
+
+        Call only after a concrete provider adapter has validated the identity and the
+        credential payload has been stored in the approved secret manager. This method
+        never accepts or persists raw provider credentials.
+        """
+        if provider not in PROVIDERS:
+            raise ValueError("invalid_provider")
+        if not isinstance(provider_account_id, str) or not provider_account_id.strip() or len(provider_account_id) > 512:
+            raise ValueError("invalid_provider_account_id")
+        if any(ord(char) < 32 for char in provider_account_id):
+            raise ValueError("invalid_provider_account_id")
+        reference = validate_secret_reference(secret_reference)
+        if not isinstance(granted_scopes, (tuple, list)) or not granted_scopes:
+            raise ValueError("invalid_granted_scopes")
+        if any(
+            not isinstance(scope, str) or not re.fullmatch(r"[A-Za-z0-9:._/-]{1,120}", scope)
+            for scope in granted_scopes
+        ) or len(set(granted_scopes)) != len(granted_scopes):
+            raise ValueError("invalid_granted_scopes")
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """UPDATE workspace_provider_connections
+                       SET status='connected', provider_account_id=$4,
+                           secret_reference=$5, granted_scopes=$6,
+                           token_expires_at=$7, last_validated_at=now(),
+                           last_error_code=NULL, revoked_at=NULL, updated_at=now()
+                       WHERE workspace_id=$1 AND id=$2 AND provider=$3
+                         AND status IN ('pending','error')
+                       RETURNING id, workspace_id, provider, display_label, status,
+                                 granted_scopes, token_expires_at, last_validated_at,
+                                 last_error_code, created_by, created_at, updated_at, revoked_at""",
+                    workspace_id, connection_id, provider, provider_account_id.strip(),
+                    reference, list(granted_scopes), token_expires_at,
+                )
+                if row is None:
+                    return None
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id, actor_user_id, event_type, outcome, metadata)
+                       VALUES ($1,$2,'provider_connection.verified_connected','success',$3::jsonb)""",
+                    workspace_id, UUID(str(user_id)),
+                    json.dumps({
+                        "connection_id": str(connection_id),
+                        "provider": provider,
+                        "granted_scope_count": len(granted_scopes),
+                    }),
+                )
+        return self._public(row)
 
     async def cancel_pending(self, *, workspace_id: str, connection_id: UUID, user_id: str) -> dict[str, Any] | None:
         """Cancel an intent that has no provider credentials attached."""
