@@ -180,8 +180,8 @@ async def test_smtp_connection(request: Request, workspace_id: str = Query(min_l
  _, _, session = await _authenticated(request)
  _check_csrf(request, session)
  await _authorize(request, workspace_id, "admin", session)
- if settings.environment.strip().lower() != "staging":
-  raise HTTPException(status_code=404, detail="staging_smtp_test_unavailable")
+ if settings.environment.strip().lower() not in {"staging", "production"}:
+  raise HTTPException(status_code=404, detail="smtp_connection_test_unavailable")
  try:
   await SMTPEmailDelivery().test_connection()
  except EmailDeliveryNotConfigured:
