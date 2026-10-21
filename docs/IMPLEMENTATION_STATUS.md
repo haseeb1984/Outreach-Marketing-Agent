@@ -1,9 +1,9 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Reviewed commit:** `d222b091161e498c5f936b7bf239a121edd281d7`  
-**Latest Backend CI:** [Run 421](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39676687442) — pending at time of review. Do not treat it as passed until GitHub reports a conclusion.  
-**Scope:** Repository tree/source and workflow metadata review. This is not a production penetration test or proof that external provider credentials work.
+**Reviewed commit:** `fb78ab4329c1fa76f89d40ed35480fa9e34a1c5a`  
+**Latest Backend CI:** [Run 428](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39679387084) — passed for Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL auth integration tests and dependency audit passed.  
+**Scope:** Repository/source review and automated CI. The dashboard route is deployed through the Vercel Git integration, but an authenticated production browser journey has not been verified. This is not a penetration test or proof that external provider credentials work.
 
 ## Evidence-based phase matrix
 
@@ -19,7 +19,7 @@
 | Website discovery and SEO growth | Domain authorization, SSRF-aware fetch/crawl, audit/strategy/report pipeline and worker tests | Read-only backend foundation implemented; live search/analytics integrations and measured client outcomes pending |
 | Subscription and billing | Migration 013 for entitlements/usage, migration 014 provider-event ledger, subscription store, billing lifecycle store, authenticated read-only `GET /api/v1/billing/entitlements` endpoint | Partial foundation only; no verified payment-provider checkout/webhook/reconciliation lifecycle established |
 | Paid entitlements and quotas | Server-side entitlement decision endpoint and persistence foundation | Not release-ready: paid operations must remain fail-closed until transactional enforcement and concurrency tests cover all paid actions/jobs |
-| Customer dashboard/onboarding | No complete standalone frontend application is present in the reviewed repository tree | Major product gap; frontend stack and functional UI workflows still need implementation |
+| Customer dashboard/onboarding | Responsive same-origin `/app` UI; registration/sign-in and reset request through existing auth APIs; authenticated active-workspace selector; prospect create/list; campaign create/list; draft list and approve/reject; read-only delivery activity; role-aware controls; noindex/no-store and security headers; `tests/test_customer_dashboard.py` | **Core dashboard/onboarding phase implemented; CI passed.** Remaining product gaps: workspace/project settings and invitations, connected-provider management, complete billing UX, and authenticated browser/accessibility acceptance.
 | WhatsApp Business Platform | No complete native Meta onboarding/webhook/send flow verified | **PENDING**; keep live sending disabled until account/Coexistence eligibility, native signature validation, event persistence, opt-in/template checks and staging acceptance |
 | Provider account connections and analytics | Partial delivery/reply foundations; no complete customer-managed account-linking and verified campaign analytics workflow established | Incomplete |
 | Production operations | CI, migrations, readiness checks and security tests exist | Staging secrets/provider smoke tests, accessibility/manual screen-reader checks, performance/load evidence, backup-restore drill, monitoring/incident runbook and policy review remain |
