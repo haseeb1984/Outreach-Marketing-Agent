@@ -7,6 +7,7 @@ transactionally and must never enable sending based solely on this result.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from app.services.provider_oauth_adapter import (
@@ -61,7 +62,6 @@ class WorkspaceProviderOAuthCallbackService:
         # atomically before processing either success or provider-denial callbacks.
         if not isinstance(state, str) or len(state) != 43:
             raise ProviderOAuthCallbackError("invalid_oauth_state")
-        import re
         if re.fullmatch(r"[A-Za-z0-9_-]{43}", state) is None:
             raise ProviderOAuthCallbackError("invalid_oauth_state")
 
@@ -98,7 +98,7 @@ class WorkspaceProviderOAuthCallbackService:
                 code=authorization_code,
                 pkce_verifier=verifier,
                 redirect_uri=redirect_uri,
-                expected_nonce=transaction["nonce_sha256"],
+                expected_nonce_sha256=transaction["nonce_sha256"],
             )
         except ProviderOAuthCallbackError:
             raise
