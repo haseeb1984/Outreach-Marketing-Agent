@@ -126,7 +126,7 @@ def test_callback_rejects_nonce_mismatch_after_exchange():
 def test_callback_rejects_control_characters_in_provider_account_id():
     service, _ = _service()
     service._adapters.get("email").identity = ValidatedProviderIdentity(
-        provider_account_id="account\\nforged",
+        provider_account_id="account\nforged",
         granted_scopes=frozenset({"profile"}),
         nonce=NONCE,
     )
