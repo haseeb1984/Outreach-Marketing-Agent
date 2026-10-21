@@ -42,14 +42,7 @@ class InboundReply(BaseModel):
   if v.tzinfo is None or v.utcoffset() is None: raise ValueError("timezone_required")
   return v
 
-def expected_signature(raw: bytes,secret: str)->str:
- return "sha256="+hmac.new(secret.encode("utf-8"),raw,hashlib.sha256).hexdigest()
-
-@router.post("/webhooks/inbound-replies",status_code=202)
-async def inbound_reply_webhook(request: Request,x_outreach_signature: str|None=Header(default=None,alias="X-Outreach-Signature")):
- secret=(settings.outreach_webhook_secret or "").strip()
- if len(secret.encode("utf-8"))<32:
-  raise HTTPException(status_code=503,detail="webhook_not_configured")
+async def _read_bounded_body(request: Request) -> bytes:
  content_length=request.headers.get("content-length")
  if content_length:
   try:
@@ -67,7 +60,17 @@ async def inbound_reply_webhook(request: Request,x_outreach_signature: str|None=
   if total_bytes>MAX_WEBHOOK_BYTES:
    raise HTTPException(status_code=413,detail="payload_too_large")
   chunks.append(chunk)
- raw=b"".join(chunks)
+ return b"".join(chunks)
+
+def expected_signature(raw: bytes,secret: str)->str:
+ return "sha256="+hmac.new(secret.encode("utf-8"),raw,hashlib.sha256).hexdigest()
+
+@router.post("/webhooks/inbound-replies",status_code=202)
+async def inbound_reply_webhook(request: Request,x_outreach_signature: str|None=Header(default=None,alias="X-Outreach-Signature")):
+ secret=(settings.outreach_webhook_secret or "").strip()
+ if len(secret.encode("utf-8"))<32:
+  raise HTTPException(status_code=503,detail="webhook_not_configured")
+ raw=await _read_bounded_body(request)
  if not x_outreach_signature or not hmac.compare_digest(expected_signature(raw,secret),x_outreach_signature):
   raise HTTPException(status_code=401,detail="invalid_webhook_signature")
  try: payload=InboundReply.model_validate(json.loads(raw))
