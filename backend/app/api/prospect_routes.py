@@ -124,7 +124,7 @@ async def create_prospect(payload: ProspectCreate, request: Request):
 async def update_prospect(prospect_id: UUID, payload: ProspectUpdate, request: Request):
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
-    await _authorize(request, payload.workspace_id, "member")
+    await _authorize(request, payload.workspace_id, "member", session)
     try:
         result = await _store(request).update_prospect(
             workspace_id=payload.workspace_id, prospect_id=prospect_id,
