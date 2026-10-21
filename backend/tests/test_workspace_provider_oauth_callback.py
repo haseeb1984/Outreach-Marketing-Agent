@@ -123,6 +123,17 @@ def test_callback_rejects_nonce_mismatch_after_exchange():
         asyncio.run(service.complete(state=STATE, code="provider-code-123"))
 
 
+def test_callback_rejects_control_characters_in_provider_account_id():
+    service, _ = _service()
+    service._adapters.get("email").identity = ValidatedProviderIdentity(
+        provider_account_id="account\\nforged",
+        granted_scopes=frozenset({"profile"}),
+        nonce=NONCE,
+    )
+    with pytest.raises(ProviderOAuthCallbackError, match="oauth_identity_invalid"):
+        asyncio.run(service.complete(state=STATE, code="provider-code-123"))
+
+
 def test_callback_rejects_scopes_outside_provider_allowlist():
     service, _ = _service(scopes=frozenset({"profile", "admin.full_access"}))
     with pytest.raises(ProviderOAuthCallbackError, match="oauth_scopes_exceed_allowlist"):
