@@ -246,3 +246,107 @@ def test_compact_report_handles_malformed_crawl_payload_without_crashing(bad_cra
     assert compact["pages_crawled"] == 0
     assert compact["aggregate_findings"] == []
     assert compact["errors_count"] == 0
+
+
+
+def test_worker_builds_and_persists_human_review_growth_strategy(monkeypatch):
+    store = Store({
+        "workspace_id": "ws-1",
+        "url": "https://client.example/",
+        "host": "client.example",
+    })
+    queue = Queue()
+    scan_job = job()
+    scan_job["payload"].update({
+        "business_type": "SaaS",
+        "target_market": "Global",
+        "target_queries": ["workflow software"],
+    })
+    builder_calls = []
+
+    async def fake_discovery(**kwargs):
+        return {
+            "authorized_domain": "client.example",
+            "discovery": {
+                "start_url": "https://client.example/",
+                "crawl": {
+                    "pages_crawled": 1,
+                    "aggregate_findings": [{
+                        "code": "missing_description",
+                        "title": "Missing meta description",
+                        "severity": "medium",
+                        "occurrences": 1,
+                        "evidence_urls": ["https://client.example/"],
+                    }],
+                    "errors": [],
+                    "robots_blocked_pages": [],
+                    "cross_host_redirects_not_crawled": [],
+                },
+            },
+        }
+
+    def fake_growth_report(**kwargs):
+        builder_calls.append(kwargs)
+        return {
+            "strategy": {
+                "business_context": {
+                    "business_type": "SaaS",
+                    "target_market": "Global",
+                },
+                "target_queries": ["workflow software"],
+                "actions": [{
+                    "id": "seo-1",
+                    "title": "Improve meta description",
+                    "priority": "medium",
+                    "priority_score": 60,
+                    "recommended_action": "Review and approve a clearer description.",
+                    "evidence_url": "https://client.example/",
+                    "confidence": "evidence-backed",
+                }],
+            },
+        }
+
+    monkeypatch.setattr(worker, "discover_authorized_website", fake_discovery)
+    monkeypatch.setattr(worker, "build_website_growth_report", fake_growth_report)
+    result = asyncio.run(worker.process_claimed_website_scan(
+        job=scan_job,
+        worker_id="worker-1",
+        domain_store=store,
+        job_queue=queue,
+        egress_guard=lambda: True,
+    ))
+
+    assert result["status"] == "succeeded"
+    assert len(builder_calls) == 1
+    assert builder_calls[0]["business_type"] == "SaaS"
+    saved = queue.completions[0]["result"]["growth_strategy"]
+    assert saved["review_required"] is True
+    assert saved["actions"][0]["evidence_url"] == "https://client.example/"
+    assert saved["actions"][0]["title"] == "Improve meta description"
+
+
+def test_worker_rejects_partial_growth_context_before_discovery(monkeypatch):
+    store = Store({
+        "workspace_id": "ws-1",
+        "url": "https://client.example/",
+        "host": "client.example",
+    })
+    queue = Queue()
+    scan_job = job()
+    scan_job["payload"]["business_type"] = "SaaS"
+
+    async def unexpected_discovery(**kwargs):
+        pytest.fail("invalid growth context must fail before crawling")
+
+    monkeypatch.setattr(worker, "discover_authorized_website", unexpected_discovery)
+    result = asyncio.run(worker.process_claimed_website_scan(
+        job=scan_job,
+        worker_id="worker-1",
+        domain_store=store,
+        job_queue=queue,
+        egress_guard=lambda: True,
+    ))
+
+    assert result == {"status": "failed", "reason": "invalid_scan_job"}
+    assert queue.failures[0]["error_code"] == "invalid_scan_job"
+    assert queue.completions == []
