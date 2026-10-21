@@ -23,3 +23,33 @@ def test_strategy_deduplicates_queries_and_skips_evidence_free_gaps():
 def test_strategy_requires_business_context_and_target_query(kwargs):
     with pytest.raises(ValueError):
         build_seo_strategy(**kwargs, site_findings=[])
+
+
+
+@pytest.mark.parametrize("target_queries", [
+    "not-a-list",
+    [],
+    ["x" * 201],
+    ["valid query", 123],
+    ["query" + chr(10) + "with-control"],
+    ["query"] * 101,
+])
+def test_strategy_rejects_malformed_or_unbounded_target_queries(target_queries):
+    with pytest.raises(ValueError, match="target_queries"):
+        build_seo_strategy(
+            business_type="SaaS",
+            target_market="Global",
+            target_queries=target_queries,
+            site_findings=[],
+        )
+
+
+def test_strategy_ignores_malformed_finding_records_without_crashing():
+    result = build_seo_strategy(
+        business_type="SaaS",
+        target_market="Global",
+        target_queries=["workflow software"],
+        site_findings=[None, "unexpected", {"title": "No evidence"}],
+        competitor_gaps=[None, "unexpected", {"gap": "No evidence"}],
+    )
+    assert result["actions"] == []

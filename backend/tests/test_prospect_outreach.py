@@ -26,3 +26,36 @@ def test_whatsapp_draft_requires_confirmed_opt_in():
     result = draft_outreach(**kwargs, whatsapp_opt_in_confirmed=True)
     assert result["channel"] == "whatsapp"
     assert result["sent"] is False
+
+
+
+@pytest.mark.parametrize("url", [
+    "http://example.com/about",
+    "https://user:password@example.com/about",
+    "https://example.com/about?token=private",
+    "https://example.com/about#contact",
+    "https://",
+    "https://example.com:99999/about",
+    "https://example.com/about path",
+])
+def test_prospect_fit_rejects_unsafe_or_ambiguous_evidence_urls(url):
+    with pytest.raises(ValueError, match="evidence_url_must_be_https"):
+        score_prospect_fit(
+            client_business="SEO agency",
+            target_customer_profile="local retailers",
+            prospect={"name": "Example Shop", "evidence_url": url},
+        )
+
+
+def test_draft_rejects_non_https_evidence_before_generating_copy():
+    with pytest.raises(ValueError, match="evidence_url_must_be_https"):
+        draft_outreach(
+            channel="email",
+            client_business="Acme SEO",
+            client_offer="technical SEO audits",
+            prospect_name="Example Shop",
+            prospect_evidence_url="http://example.com/about",
+            verified_relevance="The site lists a public store directory.",
+            verified_facts=["A store directory is available."],
+            call_to_action="a brief introductory call",
+        )

@@ -13,7 +13,8 @@ from uuid import uuid4
 import asyncpg
 import pytest
 
-from app.services.auth_security import hash_password, verify_password
+from app.services.auth_security import hash_password, token_digest, verify_password
+from app.services.auth_http_security import csrf_token_digest
 from app.services.auth_store import AuthStore
 from app.services.auth_rate_limiter import AuthRateLimiter
 
@@ -36,12 +37,18 @@ async def _exercise_password_reset() -> None:
             "002_workspace_jobs.sql",
             "003_authentication_foundation.sql",
             "004_auth_rate_limits.sql",
+            "005_session_csrf_tokens.sql",
+            "006_password_reset_tokens.sql",
+            "007_workspace_outreach_drafts.sql",
+            "008_workspace_campaigns.sql",
+            "009_workspace_prospects.sql",
+            "010_draft_prospect_link.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
         # This test must only ever run against the dedicated CI/test database.
         await connection.execute(
-            """TRUNCATE TABLE auth_rate_limit_buckets, security_audit_events,
+            """TRUNCATE TABLE workspace_prospects, workspace_campaigns, workspace_outreach_drafts, auth_rate_limit_buckets, security_audit_events,
                password_reset_tokens, email_verification_tokens, auth_sessions,
                workspace_memberships, app_users, workspace_jobs,
                domain_verification_challenges, workspace_domains, workspaces
@@ -69,6 +76,29 @@ async def _exercise_password_reset() -> None:
     try:
         store = AuthStore(pool)
         session = await store.create_session(user_id=user_id, lifetime_hours=1)
+        assert len(session["csrf_token"]) >= 32
+        async with pool.acquire() as conn:
+            stored_csrf_digest = await conn.fetchval(
+                "SELECT csrf_token_sha256 FROM auth_sessions WHERE token_sha256=$1",
+                token_digest(session["token"]),
+            )
+        assert stored_csrf_digest == csrf_token_digest(session["csrf_token"])
+        authenticated = await store.authenticate_session(session["token"])
+        assert authenticated is not None
+        assert authenticated["csrf_token_sha256"] == stored_csrf_digest
+
+        # Rotation must revoke the old bearer token and bind a fresh CSRF token to the new session.
+        old_session_token = session["token"]
+        rotated = await store.rotate_session(current_token=old_session_token)
+        assert rotated is not None
+        assert rotated["token"] != old_session_token
+        assert rotated["csrf_token"] != session["csrf_token"]
+        assert await store.authenticate_session(old_session_token) is None
+        rotated_auth = await store.authenticate_session(rotated["token"])
+        assert rotated_auth is not None
+        assert rotated_auth["csrf_token_sha256"] == csrf_token_digest(rotated["csrf_token"])
+        session = rotated
+
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
         token = reset["reset_token"]
@@ -141,6 +171,8 @@ async def _exercise_workspace_authorization() -> None:
             "002_workspace_jobs.sql",
             "003_authentication_foundation.sql",
             "004_auth_rate_limits.sql",
+            "005_session_csrf_tokens.sql",
+            "006_password_reset_tokens.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 

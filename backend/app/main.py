@@ -18,6 +18,13 @@ async def lifespan(application: FastAPI):
     """Create an optional PostgreSQL pool without running migrations at startup."""
     application.state.db_pool = None
     application.state.domain_authorization_store = None
+    application.state.auth_store = None
+    application.state.auth_rate_limiter = None
+    application.state.workspace_job_queue = None
+    application.state.workspace_outreach_draft_store = None
+    application.state.workspace_campaign_store = None
+    application.state.workspace_prospect_store = None
+    application.state.workspace_provider_connection_store = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -30,6 +37,22 @@ async def lifespan(application: FastAPI):
 
         application.state.db_pool = pool
         application.state.domain_authorization_store = DomainAuthorizationStore(pool)
+        from app.services.auth_store import AuthStore
+        from app.services.auth_rate_limiter import AuthRateLimiter
+        from app.services.workspace_job_queue import WorkspaceJobQueue
+        from app.services.workspace_outreach_draft_store import WorkspaceOutreachDraftStore
+        from app.services.workspace_campaign_store import WorkspaceCampaignStore
+        from app.services.workspace_prospect_store import WorkspaceProspectStore
+        from app.services.workspace_provider_connection_store import WorkspaceProviderConnectionStore
+
+        application.state.auth_store = AuthStore(pool)
+        application.state.workspace_job_queue = WorkspaceJobQueue(pool)
+        application.state.workspace_outreach_draft_store = WorkspaceOutreachDraftStore(pool)
+        application.state.workspace_campaign_store = WorkspaceCampaignStore(pool)
+        application.state.workspace_prospect_store = WorkspaceProspectStore(pool)
+        application.state.workspace_provider_connection_store = WorkspaceProviderConnectionStore(pool)
+        if settings.secret_key and len(settings.secret_key.encode("utf-8")) >= 32:
+            application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
         yield
     finally:
@@ -44,6 +67,23 @@ app = FastAPI(
     description="Evidence-led, human-approved influencer and outreach campaign workspace.",
     lifespan=lifespan,
 )
+
+from app.api.auth_routes import router as auth_router
+from app.api.workspace_domain_routes import router as workspace_domain_router
+from app.api.workspace_job_routes import router as workspace_job_router
+from app.api.workspace_outreach_routes import router as workspace_outreach_router
+from app.api.workspace_campaign_routes import router as workspace_campaign_router
+from app.api.workspace_prospect_routes import router as workspace_prospect_router
+from app.api.workspace_provider_connection_routes import router as workspace_provider_connection_router
+
+app.include_router(auth_router)
+app.include_router(workspace_domain_router)
+app.include_router(workspace_job_router)
+app.include_router(workspace_outreach_router)
+app.include_router(workspace_campaign_router)
+app.include_router(workspace_prospect_router)
+app.include_router(workspace_provider_connection_router)
+
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -131,16 +171,38 @@ async def readiness() -> Response:
                      AND to_regclass('public.app_users') IS NOT NULL
                      AND to_regclass('public.workspace_memberships') IS NOT NULL
                      AND to_regclass('public.auth_sessions') IS NOT NULL
+                     AND to_regclass('public.password_reset_tokens') IS NOT NULL
+                     AND to_regclass('public.workspace_outreach_drafts') IS NOT NULL
+                     AND to_regclass('public.workspace_campaigns') IS NOT NULL
+                     AND to_regclass('public.workspace_prospects') IS NOT NULL
+                     AND to_regclass('public.workspace_provider_connections') IS NOT NULL
+                     AND to_regclass('public.workspace_provider_oauth_transactions') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns
+                                 WHERE table_schema='public' AND table_name='workspace_prospects'
+                                   AND column_name='whatsapp_opt_in_evidence_url')
                      AND to_regclass('public.security_audit_events') IS NOT NULL
                      AND to_regclass('public.auth_rate_limit_buckets') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns
+                                 WHERE table_schema='public' AND table_name='auth_sessions'
+                                   AND column_name='csrf_token_sha256')
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
                             '002_workspace_jobs.sql',
                             '003_authentication_foundation.sql',
-                            '004_auth_rate_limits.sql'
-                          )) = 4"""
+                            '004_auth_rate_limits.sql',
+                            '005_session_csrf_tokens.sql',
+                            '006_password_reset_tokens.sql',
+                            '007_workspace_outreach_drafts.sql',
+                            '008_workspace_campaigns.sql',
+                            '009_workspace_prospects.sql',
+                            '010_draft_prospect_link.sql',
+                            '011_whatsapp_opt_in_evidence.sql',
+                            '012_workspace_provider_connections.sql',
+                            '013_provider_connection_lifecycle_guard.sql',
+                            '014_provider_oauth_transactions.sql'
+                          )) = 14"""
             )
             if not schema_ready:
                 return JSONResponse(

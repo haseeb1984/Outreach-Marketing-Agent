@@ -103,27 +103,49 @@ async def process_claimed_job(
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code=str(exc)[:100]
             )
+        scan_task = asyncio.create_task(scan_runner(
+            payload["start_url"],
+            workspace_id=str(job["workspace_id"]),
+            domain_store=domain_store,
+            business_type=payload["business_type"],
+            target_market=payload["target_market"],
+            target_queries=payload["target_queries"],
+            max_pages=payload["max_pages"],
+            max_depth=payload["max_depth"],
+        ))
+        lost_waiter = asyncio.create_task(lost.wait())
         try:
-            report = await scan_runner(
-                payload["start_url"],
-                workspace_id=str(job["workspace_id"]),
-                domain_store=domain_store,
-                business_type=payload["business_type"],
-                target_market=payload["target_market"],
-                target_queries=payload["target_queries"],
-                max_pages=payload["max_pages"],
-                max_depth=payload["max_depth"],
+            done, _ = await asyncio.wait(
+                {scan_task, lost_waiter}, return_when=asyncio.FIRST_COMPLETED
             )
+            if lost_waiter in done and lost.is_set() and not scan_task.done():
+                scan_task.cancel()
+                try:
+                    await scan_task
+                except asyncio.CancelledError:
+                    pass
+                return "lease_lost"
+            report = await scan_task
         except ValueError:
             # Avoid persisting potentially sensitive exception details in job metadata.
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
             )
+        except asyncio.CancelledError:
+            scan_task.cancel()
+            raise
         except Exception:
             logger.warning("website growth job failed; recording a generic failure code")
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code="website_growth_scan_failed"
             )
+        finally:
+            if not lost_waiter.done():
+                lost_waiter.cancel()
+            try:
+                await lost_waiter
+            except asyncio.CancelledError:
+                pass
         if lost.is_set():
             return "lease_lost"
         try:
@@ -154,24 +176,35 @@ async def run_worker(*, poll_seconds: float = POLL_SECONDS) -> None:
     queue = WorkspaceJobQueue(pool)
     domain_store = DomainAuthorizationStore(pool)
     logger.info("website growth worker started")
+    error_backoff = poll_seconds
     try:
         while True:
             try:
                 job = await queue.claim(worker_id=worker_id, lease_seconds=LEASE_SECONDS)
                 if job is None:
+                    error_backoff = poll_seconds
                     await asyncio.sleep(poll_seconds)
                     continue
                 outcome = await process_claimed_job(
                     queue=queue, domain_store=domain_store, job=job, worker_id=worker_id
                 )
+                error_backoff = poll_seconds
                 logger.info("website growth job finished with outcome=%s", outcome)
             except asyncio.CancelledError:
                 raise
             except Exception:
+                # Avoid hammering PostgreSQL during outages. This delay is local
+                # process state only and is capped so recovery remains responsive.
                 logger.error("worker iteration failed; retrying after a bounded delay")
-                await asyncio.sleep(poll_seconds)
+                await asyncio.sleep(error_backoff)
+                error_backoff = _next_error_backoff(error_backoff, poll_seconds)
     finally:
         await pool.close()
+
+
+def _next_error_backoff(current: float, minimum: float) -> float:
+    """Double a transient-error delay while respecting polling and hard caps."""
+    return min(30.0, max(minimum, current * 2))
 
 
 def main() -> None:

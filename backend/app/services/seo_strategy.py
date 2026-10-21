@@ -16,15 +16,32 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
     Competitor gaps may include evidence_url, gap, business_relevance and
     recommended_action. This function does not fetch URLs or send data.
     """
-    if not business_type.strip():
-        raise ValueError("business_type is required")
-    if not target_market.strip():
-        raise ValueError("target_market is required")
-    if not target_queries or not any(q.strip() for q in target_queries):
-        raise ValueError("at least one non-empty target query is required")
+    if not isinstance(business_type, str) or not business_type.strip() or len(business_type) > 200:
+        raise ValueError("business_type must contain 1–200 characters")
+    if not isinstance(target_market, str) or not target_market.strip() or len(target_market) > 200:
+        raise ValueError("target_market must contain 1–200 characters")
+    if (
+        not isinstance(target_queries, list)
+        or not target_queries
+        or len(target_queries) > 100
+        or any(
+            not isinstance(query, str)
+            or len(query) > 200
+            or any((not char.isprintable()) and char != chr(9) for char in query)
+            for query in target_queries
+        )
+        or not any(query.strip() for query in target_queries)
+    ):
+        raise ValueError("target_queries must contain 1–100 valid queries of at most 200 characters")
+    if not isinstance(site_findings, list):
+        raise ValueError("site_findings must be a list")
+    if competitor_gaps is not None and not isinstance(competitor_gaps, list):
+        raise ValueError("competitor_gaps must be a list")
 
     actions: list[dict[str, Any]] = []
     for index, finding in enumerate(site_findings):
+        if not isinstance(finding, dict):
+            continue
         title = str(finding.get("title", "")).strip()
         evidence_url = str(finding.get("evidence_url", "")).strip()
         category = str(finding.get("category", "content")).strip().lower()
@@ -38,6 +55,8 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
         actions.append({"id": str(finding.get("id") or f"site-{index + 1}"), "source": "site_observation", "category": category, "title": title, "evidence_url": evidence_url, "recommended_action": str(finding.get("recommended_action") or "Review this finding and define a verifiable correction."), "priority_score": score, "priority": _priority_label(score), "confidence": "evidence-backed", "verification": "Repeat the same check after an approved change and compare the recorded result."})
 
     for index, gap in enumerate(competitor_gaps or []):
+        if not isinstance(gap, dict):
+            continue
         title = str(gap.get("gap", "")).strip()
         evidence_url = str(gap.get("evidence_url", "")).strip()
         if not title or not evidence_url:

@@ -1,0 +1,180 @@
+import asyncio
+
+from app.services import workspace_worker_runtime as runtime
+
+
+class Queue:
+    def __init__(self, job=None):
+        self.job = job
+        self.claim_calls = []
+
+    async def claim(self, **kwargs):
+        self.claim_calls.append(kwargs)
+        return self.job
+
+
+def test_worker_runtime_returns_idle_when_queue_empty(monkeypatch):
+    queue = Queue()
+
+    async def unexpected_process(**kwargs):
+        raise AssertionError("must not process a missing job")
+
+    monkeypatch.setattr(runtime, "process_claimed_website_scan", unexpected_process)
+    result = asyncio.run(runtime.run_worker_once(
+        worker_id="worker-1",
+        job_queue=queue,
+        domain_store=object(),
+        egress_guard=lambda: True,
+    ))
+
+    assert result == {"status": "idle"}
+    assert queue.claim_calls == [{"worker_id": "worker-1", "lease_seconds": 300}]
+
+
+def test_worker_runtime_claims_at_most_one_job_and_delegates(monkeypatch):
+    job = {"id": "job-1", "job_type": "website_growth_scan", "payload": {}}
+    queue = Queue(job)
+    store = object()
+    guard = lambda: True
+    received = {}
+
+    async def fake_process(**kwargs):
+        received.update(kwargs)
+        return {"status": "failed", "reason": "invalid_scan_job"}
+
+    monkeypatch.setattr(runtime, "process_claimed_website_scan", fake_process)
+    result = asyncio.run(runtime.run_worker_once(
+        worker_id="worker-2",
+        job_queue=queue,
+        domain_store=store,
+        egress_guard=guard,
+        lease_seconds=120,
+    ))
+
+    assert result == {"status": "failed", "reason": "invalid_scan_job"}
+    assert len(queue.claim_calls) == 1
+    assert queue.claim_calls[0] == {"worker_id": "worker-2", "lease_seconds": 120}
+    assert received == {
+        "job": job,
+        "worker_id": "worker-2",
+        "domain_store": store,
+        "job_queue": queue,
+        "egress_guard": guard,
+    }
+
+
+def test_worker_runtime_stops_processing_when_lease_renewal_fails(monkeypatch):
+    job = {"id": "job-1", "job_type": "website_growth_scan", "payload": {}}
+    queue = Queue(job)
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def blocked_process(**kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    async def lose_lease(**kwargs):
+        await started.wait()
+        kwargs["lease_lost"].set()
+
+    monkeypatch.setattr(runtime, "process_claimed_website_scan", blocked_process)
+    monkeypatch.setattr(runtime, "_renew_until_stopped", lose_lease)
+    result = asyncio.run(runtime.run_worker_once(
+        worker_id="worker-3",
+        job_queue=queue,
+        domain_store=object(),
+    ))
+
+    assert result == {"status": "lease_lost", "reason": "job_lease_renewal_failed"}
+    assert cancelled.is_set()
+
+
+def test_worker_forever_repeats_after_idle_and_stops_on_cancellation(monkeypatch):
+    calls = []
+
+    async def fake_once(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return {"status": "idle"}
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(runtime, "run_worker_once", fake_once)
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-loop",
+            job_queue=Queue(),
+            domain_store=object(),
+            idle_sleep_seconds=0.1,
+        ))
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError("worker cancellation must propagate")
+
+    assert len(calls) == 2
+    assert calls[0]["worker_id"] == "worker-loop"
+
+
+def test_worker_forever_rejects_unbounded_idle_polling():
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-loop",
+            job_queue=Queue(),
+            domain_store=object(),
+            idle_sleep_seconds=0,
+        ))
+    except ValueError as exc:
+        assert "between 0.1 and 60" in str(exc)
+    else:
+        raise AssertionError("invalid idle delay should be rejected")
+
+
+def test_worker_forever_retries_transient_errors_with_bounded_backoff(monkeypatch):
+    calls = []
+    sleeps = []
+
+    async def fake_once(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("sensitive connection detail")
+        raise asyncio.CancelledError()
+
+    async def fake_sleep(delay):
+        sleeps.append(delay)
+
+    monkeypatch.setattr(runtime, "run_worker_once", fake_once)
+    monkeypatch.setattr(runtime.asyncio, "sleep", fake_sleep)
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-retry",
+            job_queue=Queue(),
+            domain_store=object(),
+            error_sleep_seconds=0.5,
+            max_error_sleep_seconds=1.0,
+        ))
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError("worker cancellation must propagate")
+
+    assert len(calls) == 2
+    assert sleeps == [0.5]
+
+
+def test_worker_forever_rejects_invalid_error_backoff():
+    try:
+        asyncio.run(runtime.run_worker_forever(
+            worker_id="worker-loop",
+            job_queue=Queue(),
+            domain_store=object(),
+            error_sleep_seconds=2,
+            max_error_sleep_seconds=1,
+        ))
+    except ValueError as exc:
+        assert "error sleep" in str(exc)
+    else:
+        raise AssertionError("invalid error backoff should be rejected")

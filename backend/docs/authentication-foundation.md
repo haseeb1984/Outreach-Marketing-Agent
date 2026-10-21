@@ -2,18 +2,24 @@
 
 Migrations `003_authentication_foundation.sql` and `004_auth_rate_limits.sql` add tables for users, workspace memberships, revocable sessions, email verification, password reset, security audit events, and keyed rate-limit buckets. The `auth_security.py` module provides bounded password hashing, email normalization, and opaque-token digest primitives. The `auth_rate_limiter.py` module atomically increments PostgreSQL fixed-window buckets while storing only an HMAC digest of a namespaced identifier. Password authentication now performs a scrypt verification against a precomputed dummy hash when no active, verified account is found, reducing account-state timing differences. This does not replace route-level rate limiting.
 
-## Not a released login system yet
+## HTTP authentication foundation (not released)
 
-These are schema and cryptographic primitives, not a finished authentication feature. There are deliberately no public register/login/logout routes in this change. Before routes are enabled, implement and test:
+The feature branch now includes HTTP routes for `POST /api/v1/auth/register`, `POST /api/v1/auth/verify-email`, `GET /api/v1/auth/verify-email` (confirmation page only), `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/rotate`, and `POST /api/v1/auth/logout`. These routes are not a production release: they fail closed unless a database, a `SECRET_KEY` of at least 32 bytes, an HTTPS `PUBLIC_BASE_URL`, and required SMTP configuration are present. Vercel deployment remains on hold.
 
-1. Email delivery and single-use verification/reset flows with short expiry and generic responses that do not reveal whether an account exists.
-2. Wire the database-backed rate limiter into login, registration, verification, and reset routes, with independent IP/account buckets, generic responses, and appropriate `429` handling. The limiter exists as a primitive but is not yet connected to public routes.
-3. Session cookie policy (Secure, HttpOnly, SameSite), CSRF defenses where cookies authenticate state-changing requests, rotation/revocation, expiry enforcement, and session fixation protections. `AuthStore.rotate_session()` now provides an atomic single-use replacement primitive; it is not yet wired to an HTTP login/privilege-change route.
-4. Password reset invalidation of active sessions and account suspension checks. `AuthStore.issue_password_reset()` issues a bounded, one-time token for verified active accounts; `reset_password()` consumes a live token, updates the password, consumes outstanding reset tokens, revokes active sessions, and writes a secret-free audit event. These methods are not yet wired to HTTP routes or email delivery.
-5. Workspace membership authorization on every workspace-scoped read/write, including jobs, domains, reports, exports, and audit events.
-6. Audit events that never include passwords, raw tokens, session cookies, or unnecessary personal data.
-7. Tests for concurrent registration uniqueness, token replay/expiry, session revocation, tenant isolation, and end-to-end abuse limits, including concurrent requests and database-backed behavior.
+Implemented controls:
+- Registration creates a pending account and sends a single-use verification email; duplicate registration returns a generic response. The verification landing page only consumes the token after an explicit POST, reducing link-scanner activation.
+- Login, registration and verification use independent database-backed IP/account rate-limit buckets. Client IP is taken from the direct connection; forwarded headers are intentionally not trusted.
+- Session cookies are Secure, HttpOnly, host-only `__Host-` cookies. A separate Secure host-only CSRF cookie is readable by the browser client; unsafe authenticated requests must also send its value in `X-CSRF-Token`, which is checked against the digest stored for the current session, and pass exact HTTPS Origin validation.
+- Session rotation atomically revokes the previous session and issues a fresh session and CSRF token. Logout validates Origin and CSRF before revoking the session. Authentication responses are marked no-store.
+- HTTP-level regression tests cover login cookies, session lookup, logout revocation, Origin enforcement, CSRF checks, and verification-page behavior.
 
-The current automated CI suite has passed on Python 3.11, 3.12, and 3.13, including the PostgreSQL authentication integration tests and dependency audit on Python 3.12. This verifies the existing primitives and regression coverage only; it does not certify a public authentication flow, because the HTTP routes remain intentionally unimplemented.
+Still incomplete before production use:
+1. Password reset request and completion routes plus secure email delivery and replay/expiry tests.
+2. A safe verification-email resend workflow and recovery for SMTP delivery failures after account creation.
+3. End-to-end PostgreSQL route tests for registration, verification, rate-limit exhaustion, rotation/replay, and session revocation.
+4. Workspace membership authorization on every workspace-scoped read/write, including jobs, domains, reports, exports, and audit events; current routes do not yet expose workspace data.
+5. Operational review of reverse-proxy/TLS behavior, rate-limit key configuration, security headers, abuse monitoring, and deployment configuration. No production database or live SMTP provider was configured or exercised by CI.
+
+Apply migrations explicitly from `backend/` only against a verified PostgreSQL environment. Never auto-run migrations on API startup. Do not expose protected business endpoints or mark the authentication phase complete until the remaining release gates pass.
 
 Apply migrations explicitly from `backend/` only against a verified PostgreSQL environment. Never auto-run migrations on API startup. This repository has not been connected to a production database by this change.
