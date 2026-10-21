@@ -107,7 +107,8 @@ def test_smtp_connection_test_endpoint_is_staging_only_admin_and_never_sends(mon
  src=inspect.getsource(delivery_routes.test_smtp_connection)
  assert "_check_csrf(request, session)" in src
  assert '_authorize(request, workspace_id, "admin", session)' in src
- assert 'settings.environment.strip().lower() not in {"staging", "production"}' in src
+ assert 'platform_environment = os.getenv("VERCEL_ENV", "").strip().lower()' in src
+ assert 'platform_environment not in {"preview", "production"}' in src
  assert "test_connection()" in src
  assert "send_outreach_email" not in src
  assert '"email_sent": False' in src
