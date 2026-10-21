@@ -27,7 +27,7 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
         or any(
             not isinstance(query, str)
             or len(query) > 200
-            or any(ord(char) < 32 and char not in "\\t" for char in query)
+            or any((not char.isprintable()) and char != chr(9) for char in query)
             for query in target_queries
         )
         or not any(query.strip() for query in target_queries)
