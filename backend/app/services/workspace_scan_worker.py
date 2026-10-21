@@ -95,6 +95,49 @@ def _compact_report(report: dict[str, Any]) -> dict[str, Any]:
         value = crawl.get(key)
         return len(value) if isinstance(value, list) else 0
 
+    growth_report = report.get("growth_report")
+    strategy = growth_report.get("strategy") if isinstance(growth_report, dict) else None
+    raw_actions = strategy.get("actions") if isinstance(strategy, dict) else None
+    growth_actions = []
+    if isinstance(raw_actions, list):
+        for action in raw_actions[:10]:
+            if not isinstance(action, dict):
+                continue
+            evidence = _safe_evidence_urls(
+                [action.get("evidence_url")], authorized_host=authorized_host
+            )
+            growth_actions.append({
+                "id": str(action.get("id", ""))[:100],
+                "title": str(action.get("title", ""))[:200],
+                "priority": str(action.get("priority", "low"))[:20],
+                "priority_score": _safe_count(action.get("priority_score", 0)),
+                "recommended_action": str(action.get("recommended_action", ""))[:500],
+                "evidence_url": evidence[0] if evidence else None,
+                "confidence": str(action.get("confidence", ""))[:80],
+                "review_required": True,
+            })
+    compact_growth_strategy = None
+    if isinstance(growth_report, dict) and isinstance(strategy, dict):
+        context = strategy.get("business_context")
+        compact_growth_strategy = {
+            "report_type": "website_growth_review",
+            "business_context": {
+                "business_type": str(context.get("business_type", ""))[:200],
+                "target_market": str(context.get("target_market", ""))[:200],
+            } if isinstance(context, dict) else {},
+            "target_queries": [
+                str(query)[:200] for query in strategy.get("target_queries", [])[:100]
+                if isinstance(query, str)
+            ] if isinstance(strategy.get("target_queries"), list) else [],
+            "actions": growth_actions,
+            "total_actions": len(raw_actions) if isinstance(raw_actions, list) else 0,
+            "review_required": True,
+            "limitations": [
+                "Only the first 10 prioritized actions are persisted in this job summary.",
+                "Recommendations require human review and do not modify the website.",
+            ],
+        }
+
     return {
         "authorized_domain": authorized_host[:253],
         "authorization": "verified_domain_record",
@@ -102,6 +145,7 @@ def _compact_report(report: dict[str, Any]) -> dict[str, Any]:
         "crawl_skipped": bool(discovery.get("crawl_skipped", False)),
         "pages_crawled": _safe_count(crawl.get("pages_crawled", 0)),
         "aggregate_findings": compact_findings,
+        "growth_strategy": compact_growth_strategy,
         "finding_types_total": len(findings),
         "errors_count": _list_count("errors"),
         "robots_blocked_count": _list_count("robots_blocked_pages"),
