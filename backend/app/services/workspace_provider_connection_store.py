@@ -1,7 +1,7 @@
 """Persistence for provider connection intents and safe connection metadata.
 
-This layer deliberately cannot mark a provider as connected: OAuth/provider validation and
-secret-manager operations must be implemented before that state is reachable.
+Connection activation is guarded by workspace, provider, state, and initiating-user checks;
+raw credentials are never accepted by this persistence layer.
 """
 from __future__ import annotations
 
@@ -109,12 +109,12 @@ class WorkspaceProviderConnectionStore:
                            token_expires_at=$7, last_validated_at=now(),
                            last_error_code=NULL, revoked_at=NULL, updated_at=now()
                        WHERE workspace_id=$1 AND id=$2 AND provider=$3
-                         AND status IN ('pending','error')
+                         AND status IN ('pending','error') AND created_by=$8
                        RETURNING id, workspace_id, provider, display_label, status,
                                  granted_scopes, token_expires_at, last_validated_at,
                                  last_error_code, created_by, created_at, updated_at, revoked_at""",
                     workspace_id, connection_id, provider, provider_account_id.strip(),
-                    reference, list(granted_scopes), token_expires_at,
+                    reference, list(granted_scopes), token_expires_at, UUID(str(user_id)),
                 )
                 if row is None:
                     return None
