@@ -353,3 +353,17 @@ def test_password_reset_landing_requires_explicit_form_submission():
 
     invalid = asyncio.run(auth_routes.password_reset_landing(token="short"))
     assert invalid.status_code == 400
+
+
+
+def test_password_reset_landing_keeps_untrusted_token_out_of_script_source():
+    import asyncio
+
+    malicious = "a" * 32 + "</script><script>alert(1)</script>"
+    response = asyncio.run(auth_routes.password_reset_landing(token=malicious))
+    html = response.body.decode()
+    assert response.status_code == 200
+    assert "</script><script>alert(1)</script>" not in html
+    assert 'name="token" value=' in html
+    assert "const token=this.elements.token.value" in html
+    assert "JSON.stringify({token:token,new_password:password})" in html
