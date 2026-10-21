@@ -13,6 +13,8 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="auth-form"' in response.text
     assert 'id="dashboard-view"' in response.text
     assert 'id="campaign-form"' in response.text
+    assert 'id="prospect-form"' in response.text
+    assert 'id="deliveries-list"' in response.text
     assert 'id="drafts-list"' in response.text
     assert "credentials:'same-origin'" in response.text
     assert response.headers["cache-control"] == "no-store"
