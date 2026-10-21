@@ -1,18 +1,14 @@
-# Browser session and CSRF security foundation
+# Browser session and CSRF security
 
-The auth_http_security.py module provides conservative primitives for future browser authentication:
-- A __Host-oma_session cookie with Secure, HttpOnly, Path=/ and SameSite=Lax; no Domain attribute is emitted.
-- Random CSRF synchronizer tokens and SHA-256 digests for server-side session association.
-- Constant-time CSRF digest comparison.
-- Exact HTTPS Origin comparison.
+The authentication router uses a __Host-oma_session cookie with Secure, HttpOnly, Path=/ and SameSite=Lax, plus a separate __Host-oma_csrf cookie. The server stores only the session token digest and CSRF token digest. State-changing authenticated routes require exact configured HTTPS Origin matching and a valid X-CSRF-Token header. Login and session rotation issue fresh session and CSRF values; logout revokes the server session and clears both cookies.
 
-These are primitives, not complete CSRF middleware. Before enabling cookie-authenticated state-changing routes:
-1. Set the cookie only after successful login and rotate the session identifier after authentication or privilege changes.
-2. Store only a CSRF digest or securely associated synchronizer token server-side; never put CSRF tokens in URLs or logs.
-3. Require exact configured HTTPS Origin validation and a valid CSRF token on every state-changing request. Review a fallback policy for requests without Origin.
-4. Apply authentication rate limits before expensive work and return generic errors.
-5. Enforce active workspace membership and role authorization on every resource operation.
-6. Add integration tests for browser cookies, CSRF failures, cross-origin attempts, session revocation, and tenant isolation.
-7. Do not enable public account or outreach endpoints until these tests and production configuration checks pass.
+Verification and reset landing pages set Referrer-Policy: no-referrer and Cache-Control: no-store. Token-consuming actions use POST so link scanners do not automatically consume one-time tokens. Reset tokens are submitted through a hidden form field, not interpolated into JavaScript source.
 
-Production secrets belong in encrypted hosting environment settings. Local secrets belong in ignored .env; only blank placeholders may be committed in .env.example. Never log cookie values, CSRF tokens, Authorization headers, passwords, verification/reset URLs, or raw database/provider exceptions.
+## Deployment checks
+
+- Configure PUBLIC_BASE_URL as the exact public HTTPS origin.
+- Use a unique high-entropy SECRET_KEY (at least 32 bytes) for keyed rate-limit identifiers.
+- Apply migrations before enabling routes. The app intentionally does not migrate the database during startup.
+- Test session rotation/revocation, CSRF failures, cross-origin requests, reset expiry/reuse, and rate-limit failures.
+- Enforce workspace membership and role checks on every private resource route. Authentication alone is not tenant authorization.
+- Never log passwords, cookies, CSRF values, verification/reset tokens, provider credentials, or raw provider/database exceptions.
