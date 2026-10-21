@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from uuid import UUID
+from urllib.parse import urlencode
 
 import pytest
 
@@ -66,7 +67,15 @@ class FakeAdapter:
         assert redirect_uri == REDIRECT
         assert requested_scopes == ("profile",)
         return self.authorization_url or (
-            f"{AUTH_ENDPOINT}?state={state}&code_challenge={pkce_challenge}"
+            f"{AUTH_ENDPOINT}?" + urlencode({
+                "state": state,
+                "code_challenge": pkce_challenge,
+                "code_challenge_method": "S256",
+                "redirect_uri": redirect_uri,
+                "nonce": nonce,
+                "response_type": "code",
+                "scope": " ".join(requested_scopes),
+            })
         )
 
     async def exchange_and_validate(self, **kwargs):
