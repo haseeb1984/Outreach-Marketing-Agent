@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from app.services.provider_oauth_adapter import (
@@ -99,6 +99,17 @@ class WorkspaceProviderOAuthStartService:
                 or parsed_url.hostname.lower() != (configured.hostname or "").lower()
                 or parsed_url.port != configured.port
                 or parsed_url.path != configured.path
+            ):
+                raise ProviderOAuthStartError("oauth_authorization_url_invalid")
+            query = parse_qs(parsed_url.query, keep_blank_values=True)
+            if (
+                query.get("state") != [state]
+                or query.get("code_challenge") != [challenge]
+                or query.get("code_challenge_method") != ["S256"]
+                or query.get("redirect_uri") != [redirect_uri]
+                or query.get("nonce") != [nonce]
+                or query.get("response_type") != ["code"]
+                or query.get("scope") != [" ".join(scopes)]
             ):
                 raise ProviderOAuthStartError("oauth_authorization_url_invalid")
             return ProviderOAuthStart(authorization_url=authorization_url, expires_in_seconds=600)
