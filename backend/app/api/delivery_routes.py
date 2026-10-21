@@ -175,11 +175,11 @@ def smtp_configuration_status(configuration=settings)->dict:
 
 
 @router.post("/integrations/smtp/test")
-async def test_smtp_connection(request: Request):
- """Explicit admin-only staging test; authenticates SMTP but never sends email."""
+async def test_smtp_connection(request: Request, workspace_id: str = Query(min_length=1, max_length=200)):
+ """Explicit workspace-admin staging test; authenticates SMTP but never sends email."""
  _, _, session = await _authenticated(request)
  _check_csrf(request, session)
- await _authorize(request, "staging", "admin", session)
+ await _authorize(request, workspace_id, "admin", session)
  if settings.environment.strip().lower() != "staging":
   raise HTTPException(status_code=404, detail="staging_smtp_test_unavailable")
  try:
