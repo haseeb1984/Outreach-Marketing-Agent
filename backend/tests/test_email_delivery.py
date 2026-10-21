@@ -59,3 +59,37 @@ def test_smtp_failure_does_not_expose_provider_exception(monkeypatch):
     assert "dummy-secret" not in str(caught.value)
     assert "private-token" not in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+
+def test_smtp_connection_uses_tls_auth_and_never_sends_email(monkeypatch):
+    import smtplib
+
+    calls = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            calls.append(("connect", host, port, timeout))
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def ehlo(self): calls.append(("ehlo",))
+        def starttls(self): calls.append(("starttls",))
+        def login(self, username, password): calls.append(("login", username, password))
+        def send_message(self, message): calls.append(("send_message",))
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    asyncio.run(SMTPEmailDelivery(_config()).test_connection())
+    assert [item[0] for item in calls] == ["connect", "ehlo", "starttls", "ehlo", "login"]
+    assert all(item[0] != "send_message" for item in calls)
+
+
+def test_smtp_connection_failure_is_sanitized(monkeypatch):
+    delivery = SMTPEmailDelivery(_config())
+    def fail():
+        raise RuntimeError("AUTH rejected for dummy-secret")
+    monkeypatch.setattr(delivery, "_test_connection", fail)
+    with pytest.raises(EmailDeliveryFailed) as caught:
+        asyncio.run(delivery.test_connection())
+    assert str(caught.value) == "smtp_connection_test_failed"
+    assert "dummy-secret" not in str(caught.value)
+    assert caught.value.__cause__ is None

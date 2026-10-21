@@ -58,3 +58,8 @@ Set these staging variables only in encrypted environment settings or a secret m
 - SMTP: configuration is environment-backed; an authenticated integration-status endpoint checks presence and TLS requirements without exposing values. It does not perform a network/authentication test.
 - WhatsApp: environment-backed Meta setup readiness is now reported without leaking values. Coexistence eligibility, Meta webhook handshake/signature verification, event persistence, tenant asset mapping, outbound Cloud API sending, and provider status handling remain unimplemented; live sending remains disabled.
 - Never treat a status check, mocked test, or CI pass as proof of successful external delivery.
+
+
+### Safe SMTP connection/authentication check
+
+Staging now exposes an explicit admin-only `POST /api/v1/integrations/smtp/test` endpoint. It requires an authenticated session and CSRF validation, is unavailable unless `ENVIRONMENT=staging`, validates that SMTP is configured for STARTTLS, then performs EHLO, STARTTLS, EHLO, and authentication. It does **not** send a message. Provider exception details and credentials are never returned. A successful response proves only that the configured SMTP server accepted a TLS-authenticated session at test time; the separate recipient smoke test above is still required to verify message handoff and inbox receipt.

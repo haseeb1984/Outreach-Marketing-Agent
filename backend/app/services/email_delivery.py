@@ -86,6 +86,22 @@ class SMTPEmailDelivery:
             raise EmailDeliveryFailed("smtp_delivery_failed") from None
 
 
+    async def test_connection(self) -> None:
+        """Verify TLS and SMTP authentication without sending any message."""
+        self._validate_configuration()
+        try:
+            await asyncio.to_thread(self._test_connection)
+        except Exception:
+            # Provider errors may contain host/account details; expose only a stable code.
+            raise EmailDeliveryFailed("smtp_connection_test_failed") from None
+
+    def _test_connection(self) -> None:
+        with smtplib.SMTP(self._settings.smtp_host, self._settings.smtp_port, timeout=10) as client:
+            client.ehlo()
+            client.starttls()
+            client.ehlo()
+            client.login(self._settings.smtp_username, self._settings.smtp_password)
+
     async def send_outreach_email(self, *, recipient: str, subject: str, body: str) -> None:
         """Send an explicitly approved outreach email over TLS-only SMTP."""
         self._validate_configuration()

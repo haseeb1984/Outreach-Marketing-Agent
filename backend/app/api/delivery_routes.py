@@ -174,6 +174,24 @@ def smtp_configuration_status(configuration=settings)->dict:
  }
 
 
+@router.post("/integrations/smtp/test")
+async def test_smtp_connection(request: Request):
+ """Explicit admin-only staging test; authenticates SMTP but never sends email."""
+ _, _, session = await _authenticated(request)
+ _check_csrf(request, session)
+ await _authorize(request, "staging", "admin", session)
+ if settings.environment.strip().lower() != "staging":
+  raise HTTPException(status_code=404, detail="staging_smtp_test_unavailable")
+ try:
+  await SMTPEmailDelivery().test_connection()
+ except EmailDeliveryNotConfigured:
+  raise HTTPException(status_code=422, detail="smtp_configuration_incomplete") from None
+ except EmailDeliveryFailed:
+  raise HTTPException(status_code=502, detail="smtp_connection_test_failed") from None
+ return {"status": "authenticated", "email_sent": False,
+         "message": "SMTP TLS connection and authentication succeeded; no email was sent."}
+
+
 @router.get("/integrations/status")
 async def integrations_status(request: Request, workspace_id: str=Query(min_length=1,max_length=200)):
  """Workspace-scoped integration readiness without returning any credential material."""

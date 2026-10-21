@@ -99,3 +99,15 @@ def test_send_route_rejects_replayed_quota_reservation_before_claiming_delivery(
  claim=src.index("store.claim")
  assert guard < claim
  assert 'detail="delivery_send_key_already_used"' in src
+
+
+
+def test_smtp_connection_test_endpoint_is_staging_only_admin_and_never_sends(monkeypatch):
+ from app.api import delivery_routes
+ src=inspect.getsource(delivery_routes.test_smtp_connection)
+ assert "_check_csrf(request, session)" in src
+ assert '_authorize(request, "staging", "admin", session)' in src
+ assert 'settings.environment.strip().lower() != "staging"' in src
+ assert "test_connection()" in src
+ assert "send_outreach_email" not in src
+ assert '"email_sent": False' in src
