@@ -153,8 +153,7 @@ async def list_current_user_workspaces(request: Request) -> dict:
     try:
         async with pool.acquire() as connection:
             rows = await connection.fetch(
-                """SELECT w.id::text AS id, COALESCE(w.name, 'Workspace') AS name,
-                          m.role AS role
+                """SELECT w.id::text AS id, 'Workspace'::text AS name, m.role AS role
                    FROM workspaces w
                    JOIN workspace_memberships m ON m.workspace_id=w.id
                    WHERE m.user_id=$1 AND m.status='active'
