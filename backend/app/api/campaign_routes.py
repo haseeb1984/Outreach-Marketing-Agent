@@ -43,6 +43,7 @@ class DraftCreate(BaseModel):
     prospect_id: UUID
     channel: str
     call_to_action: str = Field(min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=180, pattern=r"^[A-Za-z0-9._:-]+$")
 
     @field_validator("channel")
     @classmethod
@@ -96,25 +97,70 @@ async def create_draft(payload: DraftCreate, request: Request):
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
     await _authorize(request, payload.workspace_id, "member", session)
+    store = _store(request)
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+
+    # Client-supplied request key is namespaced server-side; browser plan data is never trusted.
     try:
-        draft = await _store(request).create_draft(
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="ai_draft_generations",
+            idempotency_key=f"draft-generation:{payload.idempotency_key}",
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        status_code = 429 if reason == "quota_exhausted" else 403
+        raise HTTPException(status_code=status_code, detail=reason)
+    # Replayed or already consumed keys must not generate a second draft.
+    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="draft_generation_key_already_used")
+
+    reservation_id = reservation["reservation_id"]
+    try:
+        draft = await store.create_draft(
             workspace_id=payload.workspace_id, campaign_id=payload.campaign_id,
             prospect_id=payload.prospect_id, actor_id=session["user_id"], channel=payload.channel,
             call_to_action=payload.call_to_action,
         )
     except ValueError as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
         message = str(exc)
         if "WhatsApp" in message or "verified fact" in message or "channel" in message or "prospect_email_required" in message or "contact_suppressed" in message:
             raise HTTPException(status_code=422, detail=message) from None
         raise HTTPException(status_code=422, detail="draft_inputs_invalid") from None
     except Exception as exc:
         if type(exc).__name__ == "UniqueViolationError":
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
             raise HTTPException(status_code=409, detail="pending_draft_already_exists") from None
-        raise HTTPException(status_code=503, detail="draft_create_unavailable") from None
+        # Persistence outcome may be ambiguous. Consume rather than permit quota bypass on retry.
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        finally:
+            raise HTTPException(status_code=503, detail="draft_create_unavailable") from None
     if draft is None:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
         raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
+    try:
+        finished = await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="draft_quota_persistence_failed") from None
+    if not finished:
+        raise HTTPException(status_code=503, detail="draft_quota_persistence_failed")
     return draft
-
 
 @router.get("/drafts")
 async def list_drafts(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
