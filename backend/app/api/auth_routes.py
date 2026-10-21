@@ -365,7 +365,7 @@ async def password_reset_landing(token: str = "") -> HTMLResponse:
         "<script>document.getElementById('reset-form').addEventListener('submit',async function(e){e.preventDefault();"
         "const token=this.elements.token.value;const password=this.elements.password.value;const result=document.getElementById('result');"
         "try{const r=await fetch('/api/v1/auth/password-reset/confirm',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify({token:" + "\"" + safe_token + "\"" + ",new_password:password}),credentials:'same-origin'});"
+        "body:JSON.stringify({token:token,new_password:password}),credentials:'same-origin'});"
         "const data=await r.json();result.textContent=r.ok?data.message:(r.status===400?'Reset link is invalid or expired.':'Password reset is temporarily unavailable.');"
         "if(r.ok)this.reset();}catch(_){result.textContent='Password reset is temporarily unavailable.';}});</script>"
         "</main></body></html>"
