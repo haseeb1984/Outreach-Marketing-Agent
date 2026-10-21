@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass
 
@@ -90,36 +91,33 @@ def _service(*, scopes=frozenset({"profile"}), nonce=NONCE, secret_manager=None)
     return service, store
 
 
-@pytest.mark.asyncio
-async def test_callback_returns_only_verified_identity_metadata():
+@pytest.mark.parametrize("unused", [None])
+def test_callback_returns_only_verified_identity_metadata(unused):
     service, store = _service()
-    result = await service.complete(state=STATE, code="provider-code-123")
+    result = asyncio.run(service.complete(state=STATE, code="provider-code-123"))
     assert result.provider == "email"
     assert result.provider_account_id == "provider-account-1"
     assert result.granted_scopes == ("profile",)
     assert store.consumed_states == [STATE]
 
 
-@pytest.mark.asyncio
-async def test_callback_consumes_transaction_before_processing_provider_denial():
+def test_callback_consumes_transaction_before_processing_provider_denial():
     service, store = _service()
     with pytest.raises(ProviderOAuthCallbackError, match="provider_authorization_denied"):
-        await service.complete(state=STATE, code=None, error="access_denied")
+        asyncio.run(service.complete(state=STATE, code=None, error="access_denied"))
     assert store.consumed_states == [STATE]
 
 
-@pytest.mark.asyncio
-async def test_callback_rejects_nonce_mismatch_after_exchange():
+def test_callback_rejects_nonce_mismatch_after_exchange():
     service, _ = _service(nonce="X" * 43)
     with pytest.raises(ProviderOAuthCallbackError, match="oauth_nonce_mismatch"):
-        await service.complete(state=STATE, code="provider-code-123")
+        asyncio.run(service.complete(state=STATE, code="provider-code-123"))
 
 
-@pytest.mark.asyncio
-async def test_callback_rejects_scopes_outside_provider_allowlist():
+def test_callback_rejects_scopes_outside_provider_allowlist():
     service, _ = _service(scopes=frozenset({"profile", "admin.full_access"}))
     with pytest.raises(ProviderOAuthCallbackError, match="oauth_scopes_exceed_allowlist"):
-        await service.complete(state=STATE, code="provider-code-123")
+        asyncio.run(service.complete(state=STATE, code="provider-code-123"))
 
 
 class UnavailableSecrets:
@@ -127,16 +125,14 @@ class UnavailableSecrets:
         raise SecretManagerUnavailable("secret_manager_not_configured")
 
 
-@pytest.mark.asyncio
-async def test_callback_fails_closed_if_secret_manager_is_unavailable():
+def test_callback_fails_closed_if_secret_manager_is_unavailable():
     service, _ = _service(secret_manager=UnavailableSecrets())
     with pytest.raises(ProviderOAuthCallbackError, match="oauth_provider_validation_failed"):
-        await service.complete(state=STATE, code="provider-code-123")
+        asyncio.run(service.complete(state=STATE, code="provider-code-123"))
 
 
-@pytest.mark.asyncio
-async def test_malformed_state_is_rejected_without_consuming_transaction():
+def test_malformed_state_is_rejected_without_consuming_transaction():
     service, store = _service()
     with pytest.raises(ProviderOAuthCallbackError, match="invalid_oauth_state"):
-        await service.complete(state="bad", code="provider-code-123")
+        asyncio.run(service.complete(state="bad", code="provider-code-123"))
     assert store.consumed_states == []
