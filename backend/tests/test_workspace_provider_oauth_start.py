@@ -105,6 +105,15 @@ def test_start_persists_transaction_and_returns_only_authorization_url():
         provider="email",
     ))
     assert result.authorization_url.startswith(AUTH_ENDPOINT + "?")
+    from urllib.parse import parse_qs, urlsplit
+    query = parse_qs(urlsplit(result.authorization_url).query)
+    assert query["state"] == [transactions.created[0]["state"]]
+    assert query["code_challenge"] == [transactions.created[0]["pkce_challenge"]]
+    assert query["code_challenge_method"] == ["S256"]
+    assert query["redirect_uri"] == [REDIRECT]
+    assert query["nonce"] == [transactions.created[0]["nonce"]]
+    assert query["response_type"] == ["code"]
+    assert query["scope"] == ["profile"]
     assert result.expires_in_seconds == 600
     assert len(transactions.created) == 1
     transaction = transactions.created[0]
