@@ -39,3 +39,17 @@ Before enabling a provider, implement and test all of the following:
 `app.services.provider_oauth_adapter` now defines the provider configuration model, adapter protocol, verified-identity result shape, and an explicit registry. Configuration validation requires HTTPS authorization/token endpoints, exact HTTPS callback allowlists, bounded provider IDs/client identifiers, and a non-empty constrained scope allowlist. An empty registry rejects all provider lookups rather than guessing an adapter.
 
 This is a contract only, not a live integration. Before a concrete adapter is registered, it must build authorization requests from server-generated state/PKCE/nonce values, exchange codes over verified TLS, validate issuer and audience where applicable, verify nonce and account identity, and return only verified account ID and granted scopes. Do not register a stub or test adapter in production.
+
+## Authorization-start and callback orchestration status
+
+The backend now has service-layer orchestration for authorization start and callback validation:
+
+- `WorkspaceProviderOAuthStartService` generates server-side PKCE/state/nonce material, validates requested scopes against the configured allowlist, persists a short-lived transaction, and rejects authorization URLs whose HTTPS origin/path differs from the configured provider endpoint.
+- `WorkspaceProviderOAuthCallbackService` consumes state once, validates callback shape, retrieves the PKCE verifier by purpose-bound secret reference, delegates code exchange and provider-specific identity validation to an explicitly registered adapter, and returns verified identity metadata only.
+- The orchestration services are not yet wired into public API routes or production dependency configuration. No concrete email or WhatsApp provider adapter is registered by default, and the default secret manager remains unavailable. Therefore these additions do **not** make OAuth or sending live.
+
+### Required integration gates
+
+Before adding a route that calls these services, the route must require an authenticated session, admin-level workspace membership, CSRF validation for state-changing requests, and rate limiting. It must verify that the connection intent belongs to the same workspace and provider before starting authorization. Callback completion must never trust a workspace or connection ID supplied by the browser; it must use only the consumed server-side transaction. A verified identity is not sufficient to mark a connection connected until credentials have been stored through the approved secret manager and the connection metadata update succeeds transactionally.
+
+The deployment must also validate the generated authorization URL's query parameters against the exact server-generated state, PKCE challenge/method, nonce, and redirect URI before returning it to the browser. Any callback failure must leave sending disabled, consume the transaction, and avoid exposing provider response bodies or credentials.
