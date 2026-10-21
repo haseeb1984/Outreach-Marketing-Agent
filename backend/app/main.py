@@ -185,8 +185,9 @@ async def readiness() -> Response:
                             '008_campaigns_and_approval_queue.sql',
                             '009_contact_controls.sql',
                             '010_outbound_delivery_queue.sql',
-                            '011_conversation_webhook_inbox.sql'
-                          )) = 11"""
+                            '011_conversation_webhook_inbox.sql',
+                            '012_delivery_outcome_uncertainty.sql'
+                          )) = 12"""
             )
             if not schema_ready:
                 return JSONResponse(

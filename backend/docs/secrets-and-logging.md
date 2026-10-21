@@ -17,3 +17,10 @@
 
 ## Release gate
 Before enabling account routes, add automated checks that captured application logs and client error responses contain none of the supplied canary secrets; verify rate limits, CSRF/cookie settings, token replay/expiry, tenant isolation, and production environment configuration. Do not run migrations automatically at API startup.
+
+
+## Outbound delivery outcome handling
+- A successful SMTP handoff is recorded as `sent`; missing SMTP configuration or pre-send input validation is recorded as `failed`.
+- A timeout, disconnect, or unexpected SMTP adapter exception is recorded as `uncertain`. The remote server may already have accepted the message, so the system must not automatically retry it.
+- Operators should reconcile an `uncertain` record against the provider's delivery logs/mailbox before deciding what to do. The current product does not provide an automated reconciliation API and does not claim mailbox delivery from an SMTP handoff.
+- The uncertainty state is terminal for the send endpoint: it is not claimable again. Never reset it to `queued` without external evidence that the first send was not accepted.

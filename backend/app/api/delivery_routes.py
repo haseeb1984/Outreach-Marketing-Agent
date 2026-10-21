@@ -39,11 +39,18 @@ async def send_delivery(delivery_id: UUID,payload: EnqueueDelivery,request: Requ
  except EmailDeliveryNotConfigured:
   await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="provider_not_configured")
   raise HTTPException(status_code=503,detail="email_provider_not_configured") from None
- except (EmailDeliveryFailed,ValueError):
-  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="provider_delivery_failed")
-  raise HTTPException(status_code=502,detail="email_provider_delivery_failed") from None
+ except ValueError:
+  # Validation errors occur before SMTP is called and are safe to classify as failed.
+  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="invalid_message")
+  raise HTTPException(status_code=422,detail="email_message_invalid") from None
+ except EmailDeliveryFailed:
+  # SMTP may have accepted the message before a timeout/disconnect. Never imply
+  # definite failure or make this delivery automatically retryable.
+  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="delivery_outcome_unknown")
+  raise HTTPException(status_code=502,detail="delivery_outcome_unknown") from None
  except Exception:
-  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="provider_delivery_failed")
-  raise HTTPException(status_code=502,detail="email_provider_delivery_failed") from None
+  # An unexpected adapter failure has an ambiguous send outcome too.
+  await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id,error_code="delivery_outcome_unknown")
+  raise HTTPException(status_code=502,detail="delivery_outcome_unknown") from None
  if not await store.finish(workspace_id=payload.workspace_id,delivery_id=delivery_id): raise HTTPException(status_code=503,detail="delivery_status_persistence_failed")
  return {"id":str(delivery_id),"status":"sent"}

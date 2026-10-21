@@ -14,3 +14,11 @@ def test_send_route_uses_store_claim_and_never_client_body():
  from app.api import delivery_routes
  src=inspect.getsource(delivery_routes.send_delivery)
  assert "store.claim" in src and "send_outreach_email" in src and "payload.body" not in src
+
+
+def test_ambiguous_provider_failure_is_not_reported_as_definite_failure():
+ from app.api import delivery_routes
+ src=inspect.getsource(delivery_routes.send_delivery)
+ assert 'error_code="delivery_outcome_unknown"' in src
+ assert 'detail="delivery_outcome_unknown"' in src
+ assert 'error_code="provider_delivery_failed"' not in src

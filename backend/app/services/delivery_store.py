@@ -56,6 +56,11 @@ class DeliveryStore:
             if error_code is None:
                 result=await c.execute("""UPDATE outreach_deliveries SET status='sent',sent_at=now(),updated_at=now()
                   WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id)
+            elif error_code == "delivery_outcome_unknown":
+                # SMTP/network failures can happen after a provider accepted the message.
+                # Keep this terminal and visible; blindly retrying could send duplicates.
+                result=await c.execute("""UPDATE outreach_deliveries SET status='uncertain',error_code=$3,updated_at=now()
+                  WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
             else:
                 result=await c.execute("""UPDATE outreach_deliveries SET status='failed',error_code=$3,updated_at=now()
                   WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
