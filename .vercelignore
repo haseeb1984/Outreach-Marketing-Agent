@@ -1,0 +1,31 @@
+# Repository metadata and documentation are not runtime assets
+.git/
+.github/
+docs/
+README.md
+
+# Local frontend/build artefacts if present in the repository
+node_modules/
+.next/
+dist/
+build/
+coverage/
+
+# Python test and local development artefacts
+**/tests/
+**/test_*.py
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/venv/
+
+# Local environment files and editor noise (keep tracked examples out of deployments too)
+**/.env
+**/.env.*
+!backend/.env.example
+.DS_Store
+.vscode/
+.idea/
