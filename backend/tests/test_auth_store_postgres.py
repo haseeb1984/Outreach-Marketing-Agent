@@ -38,12 +38,13 @@ async def _exercise_password_reset() -> None:
             "004_auth_rate_limits.sql",
             "005_session_csrf_tokens.sql",
             "006_password_reset_tokens.sql",
+            "007_crm_prospects.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
         # This test must only ever run against the dedicated CI/test database.
         await connection.execute(
-            """TRUNCATE TABLE auth_rate_limit_buckets, security_audit_events,
+            """TRUNCATE TABLE crm_prospects, auth_rate_limit_buckets, security_audit_events,
                password_reset_tokens, email_verification_tokens, auth_sessions,
                workspace_memberships, app_users, workspace_jobs,
                domain_verification_challenges, workspace_domains, workspaces
@@ -145,6 +146,7 @@ async def _exercise_workspace_authorization() -> None:
             "004_auth_rate_limits.sql",
             "005_session_csrf_tokens.sql",
             "006_password_reset_tokens.sql",
+            "007_crm_prospects.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
