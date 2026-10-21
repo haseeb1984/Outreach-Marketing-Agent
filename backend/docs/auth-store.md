@@ -1,16 +1,13 @@
-# Session and workspace authorization adapter
+# Authentication persistence adapter
 
-`AuthStore` provides database-backed primitives for registration, one-time email verification, creating sessions only for active verified users, authenticating non-revoked/unexpired sessions, revoking sessions, and checking active workspace membership with an explicit role hierarchy. Registration creates the user, a personal workspace, owner membership, and a hashed verification-token record in one transaction. The raw verification token is returned once to trusted server code; this method does not send email.
+AuthStore provides PostgreSQL-backed registration, single-use email verification, password authentication, session creation/rotation/revocation, password reset, and workspace membership checks. Registration atomically creates a pending user, personal workspace, owner membership, and hashed verification-token record. Session and reset tokens are returned only to trusted server code; only digests are stored.
 
-## Important constraints
-- The raw session token is returned once and only its SHA-256 digest is persisted.
-- The caller must derive user identity from `authenticate_session`, not from a request body or query parameter.
-- Every future workspace route must check membership for the requested workspace before accessing jobs, domains, reports, prospect data, or exports.
-- This adapter is not wired to FastAPI routes. Email delivery, login throttling, CSRF/session cookie policy, password reset, registration abuse controls, and security audit event integration remain unimplemented.
-- Do not claim that authentication is production-ready until these missing controls and real PostgreSQL integration tests are complete.
+The FastAPI authentication router is wired under /api/v1/auth. It adds HTTPS-origin checks, secure host-only cookies, CSRF validation on authenticated state-changing requests, database-backed rate limiting, generic responses for account-dependent registration/reset operations, and sanitized SMTP failures.
 
-## Email delivery adapter
+## Operational constraints
 
-SMTPEmailDelivery is an optional server-side adapter for verification emails. Configure SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_EMAIL, and PUBLIC_BASE_URL using deployment environment variables/secrets. It requires an HTTPS origin and STARTTLS, and fails closed when configuration is incomplete. The adapter does not log the verification token or email body.
-
-This adapter is not called automatically by registration yet. Before public routes, wire it through bounded delivery, add rate limits and generic responses, and test against a real SMTP sandbox/provider. Never return verification tokens from public API responses.
+- Apply migrations explicitly; API startup does not run SQL migrations.
+- Routes fail closed if the database/rate limiter is not configured. Rate limiting requires a secret key of at least 32 bytes.
+- SMTP delivery requires HTTPS PUBLIC_BASE_URL and configured STARTTLS credentials.
+- Every future private workspace endpoint must derive identity from the server-authenticated session and verify active workspace membership before reading or changing tenant resources.
+- This phase does not implement a complete dashboard, billing, real outreach delivery, reply synchronization, or production deployment verification.
