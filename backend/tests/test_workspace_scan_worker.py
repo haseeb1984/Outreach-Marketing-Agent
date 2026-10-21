@@ -200,3 +200,49 @@ def test_worker_fails_closed_if_egress_guard_raises(monkeypatch):
 
     assert result["reason"] == "egress_policy_unavailable"
     assert queue.failures[0]["error_code"] == "egress_policy_unavailable"
+
+
+
+def test_compact_report_omits_cross_host_and_secret_bearing_evidence_urls():
+    compact = worker._compact_report({
+        "authorized_domain": "client.example",
+        "discovery": {
+            "start_url": "https://client.example/",
+            "crawl": {
+                "pages_crawled": "3",
+                "aggregate_findings": [{
+                    "code": "title",
+                    "title": "Title finding",
+                    "occurrences": "not-a-number",
+                    "evidence_urls": [
+                        "https://client.example/products",
+                        "https://client.example/products?token=secret",
+                        "https://client.example/products#private",
+                        "https://user:secret@client.example/account",
+                        "https://attacker.example/collect",
+                        "javascript:alert(1)",
+                    ],
+                }, None, "malformed"],
+                "errors": [],
+            },
+        },
+    })
+
+    assert compact["pages_crawled"] == 3
+    assert compact["finding_types_total"] == 3
+    assert compact["aggregate_findings"][0]["occurrences"] == 0
+    assert compact["aggregate_findings"][0]["evidence_urls"] == [
+        "https://client.example/products"
+    ]
+    assert "secret" not in str(compact)
+
+
+@pytest.mark.parametrize("bad_crawl", [None, "unexpected", 123])
+def test_compact_report_handles_malformed_crawl_payload_without_crashing(bad_crawl):
+    compact = worker._compact_report({
+        "authorized_domain": "client.example",
+        "discovery": {"crawl": bad_crawl},
+    })
+    assert compact["pages_crawled"] == 0
+    assert compact["aggregate_findings"] == []
+    assert compact["errors_count"] == 0
