@@ -6,6 +6,7 @@ unsupported business claims are not added to the generated copy.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 
 def score_prospect_fit(*, client_business: str, target_customer_profile: str, prospect: dict[str, Any]) -> dict[str, Any]:
@@ -21,6 +22,7 @@ def score_prospect_fit(*, client_business: str, target_customer_profile: str, pr
     evidence_url = str(prospect.get("evidence_url", "")).strip()
     if not name or not evidence_url:
         raise ValueError("prospect name and evidence_url are required")
+    evidence_url = _validate_evidence_url(evidence_url)
     signals = _clean_list(prospect.get("observed_fit_signals", []))
     facts = _clean_list(prospect.get("verified_facts", []))
     disqualifiers = _clean_list(prospect.get("disqualifiers", []))
@@ -58,6 +60,7 @@ def draft_outreach(*, channel: str, client_business: str, client_offer: str, pro
     if missing:
         raise ValueError("missing required fields: " + ", ".join(missing))
     facts = _clean_list(verified_facts)
+    prospect_evidence_url = _validate_evidence_url(prospect_evidence_url)
     if not facts:
         raise ValueError("at least one verified fact is required")
     if channel == "whatsapp" and not whatsapp_opt_in_confirmed:
@@ -71,6 +74,31 @@ def draft_outreach(*, channel: str, client_business: str, client_offer: str, pro
         subject = None
         body = f"Hi {prospect_name.strip()}, this is a message from {client_business.strip()}. {relevance} I noticed: {fact_sentence} We help with {client_offer.strip()}. Would {call_to_action.strip()} be useful? If you prefer not to receive messages, let me know and I will stop."
     return {"channel": channel, "subject": subject, "body": body, "source_evidence_url": prospect_evidence_url.strip(), "verified_facts_used": facts[:2], "status": "draft_requires_human_review", "sent": False, "personalization_basis": "Only the supplied verified facts and relevance statement were used."}
+
+
+def _validate_evidence_url(value: str) -> str:
+    """Require a public HTTPS evidence URL without embedded credentials or tracking fragments."""
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > 2048:
+        raise ValueError("evidence_url_must_be_https")
+    candidate = value.strip()
+    try:
+        parsed = urlsplit(candidate)
+        # Accessing .port also detects malformed port syntax.
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("evidence_url_must_be_https") from exc
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or any(char.isspace() for char in candidate)
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise ValueError("evidence_url_must_be_https")
+    return candidate
 
 
 def _clean_list(value: Any) -> list[str]:
