@@ -93,3 +93,22 @@ def test_smtp_connection_failure_is_sanitized(monkeypatch):
     assert str(caught.value) == "smtp_connection_test_failed"
     assert "dummy-secret" not in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+
+def test_password_reset_email_uses_real_line_breaks(monkeypatch):
+    delivery = SMTPEmailDelivery(_config())
+    captured = {}
+
+    def capture(message):
+        captured["body"] = message.get_content()
+
+    monkeypatch.setattr(delivery, "_send_message", capture)
+    asyncio.run(delivery.send_password_reset_email(
+        recipient="person@example.com",
+        token="a-very-long-dummy-reset-token-123456789",
+        expires_at=datetime.now(timezone.utc),
+    ))
+    body = captured["body"]
+    assert "\\n\\n" in body
+    assert "\\\\n" not in body
