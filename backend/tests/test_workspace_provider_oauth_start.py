@@ -139,6 +139,21 @@ def test_start_rejects_authorization_url_host_mismatch_and_deletes_verifier():
     assert len(secrets.deleted) == 1
 
 
+
+def test_start_rejects_same_host_url_with_missing_pkce_and_nonce_parameters():
+    service, transactions, secrets = _service(
+        authorization_url=f"{AUTH_ENDPOINT}?state={'S' * 43}&code_challenge={'C' * 43}"
+    )
+    with pytest.raises(ProviderOAuthStartError, match="oauth_authorization_url_invalid"):
+        asyncio.run(service.start(
+            workspace_id="workspace-1",
+            connection_id="11111111-1111-4111-8111-111111111111",
+            user_id="22222222-2222-4222-8222-222222222222",
+            provider="email",
+        ))
+    assert len(transactions.created) == 1
+    assert len(secrets.deleted) == 1
+
 def test_start_rejects_scopes_outside_explicit_allowlist_before_storing_secret():
     service, transactions, secrets = _service(scopes=("profile", "mail.send"))
     with pytest.raises(ProviderOAuthStartError, match="oauth_scopes_not_allowlisted"):
