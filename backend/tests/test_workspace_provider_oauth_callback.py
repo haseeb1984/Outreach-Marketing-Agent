@@ -44,10 +44,16 @@ class FakeTransactionStore:
 
 
 class FakeSecretManager:
+    def __init__(self):
+        self.deleted = []
+
     async def get(self, *, reference, purpose):
         assert reference == "vault-prod:oauth/verifier-123"
         assert purpose == "provider-oauth-pkce:email:connection-1"
         return "V" * 64
+
+    async def delete(self, *, reference, purpose):
+        self.deleted.append((reference, purpose))
 
 
 @dataclass
@@ -98,6 +104,10 @@ def test_callback_returns_only_verified_identity_metadata():
     assert result.provider_account_id == "provider-account-1"
     assert result.granted_scopes == ("profile",)
     assert store.consumed_states == [STATE]
+    assert service._secrets.deleted == [(
+        "vault-prod:oauth/verifier-123",
+        "provider-oauth-pkce:email:connection-1",
+    )]
 
 
 def test_callback_consumes_transaction_before_processing_provider_denial():
