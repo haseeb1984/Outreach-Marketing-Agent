@@ -75,10 +75,10 @@ class SMTPEmailDelivery:
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
         message["To"] = recipient
         message.set_content(
-            "A password reset was requested for your account.\\n\\n"
-            + "Use this link to choose a new password: " + link + "\\n\\n"
+            "A password reset was requested for your account.\n\n"
+            + "Use this link to choose a new password: " + link + "\n\n"
             + "This link expires at " + expires_at.isoformat()
-            + ". All existing sessions will be signed out. If you did not request this, ignore this email.\\n"
+            + ". All existing sessions will be signed out. If you did not request this, ignore this email.\n"
         )
         try:
             await asyncio.to_thread(self._send_message, message)
