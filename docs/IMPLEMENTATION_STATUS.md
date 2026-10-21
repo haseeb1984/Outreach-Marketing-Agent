@@ -1,38 +1,42 @@
 # Implementation status and release blockers
 
-**Reviewed commit:** [`479b4f1`](https://github.com/haseeb1984/Outreach-Marketing-Agent/commit/479b4f1f5ec00478222e5221a3b62442c28cea7c) on `main`  
-**CI:** [Run 39535962663](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39535962663) — successful for this commit on Python 3.11, 3.12, and 3.13. PostgreSQL authentication integration tests and dependency audit ran in Python 3.12; the workflow intentionally skips those two steps on 3.11 and 3.13.  
-**Scope note:** This is a source/CI review, not a live staging, external-provider, or production penetration test.
+**Reviewed branch:** `main`  
+**Reviewed commit:** `d222b091161e498c5f936b7bf239a121edd281d7`  
+**Latest Backend CI:** [Run 421](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39676687442) — pending at time of review. Do not treat it as passed until GitHub reports a conclusion.  
+**Scope:** Repository tree/source and workflow metadata review. This is not a production penetration test or proof that external provider credentials work.
 
-## Evidence-based status
+## Evidence-based phase matrix
 
-| Area | Repository evidence | Status |
+| Phase / capability | Evidence currently in repository | Status |
 |---|---|---|
-| Authentication and workspace roles | FastAPI auth routes/stores, session/CSRF tests, PostgreSQL auth integration test | Foundation implemented; full production security review pending |
-| CRM, campaigns and approvals | Prospect/campaign stores and routes, contact controls, approval queue tests | Core backend foundation implemented; full frontend workflow not verified |
-| Email sending | Durable delivery queue, SMTP adapter, explicit admin send, suppression/approval checks | Code path implemented; actual provider smoke test and inbox placement unverified |
-| Inbound replies | Provider-neutral signed webhook, payload bounds/validation, deduplication and persistence | Generic gateway implemented; provider-native adapters still needed |
-| Website growth engine | Domain authorization, SSRF-aware fetch/crawl, audits, strategy/report pipeline, worker and tests | Read-only backend foundation implemented; search/analytics connections and real-client measurement pending |
-| Public discoverability | Public HTML routes and robots/sitemap helpers; docs define crawler safety | Backend public surface exists; complete commercial site and live crawl audit not verified |
-| WhatsApp Business | Environment-backed status only; Meta webhook/send adapter absent | **PENDING** — account setup and same-number Coexistence eligibility unresolved; live send disabled |
-| Subscription billing | No billing routes/provider lifecycle found in the reviewed application tree | Not implemented / release blocker |
-| Paid entitlements and quotas | No end-to-end verified billing-to-entitlement path established by this review | Not verified; must not grant paid access based on client values |
-| Dashboard/onboarding | No complete standalone frontend application found in reviewed tree | Not verified / product gap |
-| Analytics and provider integrations | No complete provider analytics/account-linking flow established by this review | Incomplete |
-| Production acceptance | CI passes; actual staging secrets/provider actions, accessibility manual tests, load, restore and incident drills not demonstrated | Pending |
+| Public marketing and discoverability | FastAPI HTML pages for home, product, pricing, FAQ; robots.txt, sitemap.xml and llms.txt endpoints | Foundation exists; legal/support pages and live crawl/SEO verification remain |
+| Authentication and sessions | Auth routes/store, password-reset and session/CSRF migrations, rate limiting, security tests | Backend foundation implemented; staging and full security review pending |
+| Workspaces and tenant roles | Workspace membership/role checks and authorization in backend stores/routes | Foundation implemented; comprehensive cross-tenant review across every resource remains |
+| Prospect CRM | Prospect routes/store, evidence-aware discovery and contact controls | Backend foundation implemented; live research-provider integration and end-to-end UI remain |
+| Campaigns and approvals | Campaign/draft stores, approval queue, tests | Backend foundation implemented; complete customer-facing workflow not verified |
+| Email delivery | Durable queue, SMTP adapter, send-time approval/suppression checks, idempotency | Code path exists; authenticated staging SMTP smoke test, inbox delivery and deliverability monitoring unverified |
+| Reply handling | Signed generic webhook gateway, payload validation/limits, deduplication and conversation persistence | Generic foundation exists; provider-native integration and staging acceptance pending |
+| Website discovery and SEO growth | Domain authorization, SSRF-aware fetch/crawl, audit/strategy/report pipeline and worker tests | Read-only backend foundation implemented; live search/analytics integrations and measured client outcomes pending |
+| Subscription and billing | Migration 013 for entitlements/usage, migration 014 provider-event ledger, subscription store, billing lifecycle store, authenticated read-only `GET /api/v1/billing/entitlements` endpoint | Partial foundation only; no verified payment-provider checkout/webhook/reconciliation lifecycle established |
+| Paid entitlements and quotas | Server-side entitlement decision endpoint and persistence foundation | Not release-ready: paid operations must remain fail-closed until transactional enforcement and concurrency tests cover all paid actions/jobs |
+| Customer dashboard/onboarding | No complete standalone frontend application is present in the reviewed repository tree | Major product gap; frontend stack and functional UI workflows still need implementation |
+| WhatsApp Business Platform | No complete native Meta onboarding/webhook/send flow verified | **PENDING**; keep live sending disabled until account/Coexistence eligibility, native signature validation, event persistence, opt-in/template checks and staging acceptance |
+| Provider account connections and analytics | Partial delivery/reply foundations; no complete customer-managed account-linking and verified campaign analytics workflow established | Incomplete |
+| Production operations | CI, migrations, readiness checks and security tests exist | Staging secrets/provider smoke tests, accessibility/manual screen-reader checks, performance/load evidence, backup-restore drill, monitoring/incident runbook and policy review remain |
 
-## WhatsApp deferral criteria
+## Required next implementation order
 
-Keep the integration in a pending state until the operator confirms Meta Developer App/Business Portfolio setup and a supported onboarding path explicitly preserves the existing WhatsApp Business App number. Do not deregister/migrate that number to force standard Cloud API setup. Code must remain fail-closed: no live sending until native webhook signature validation, event persistence/idempotency, tenant-scoped assets, opt-in/suppression/template rules, outbound adapter, tests, and explicit release approval are complete.
+1. Finish non-WhatsApp core backend gaps and keep the latest CI green.
+2. Select/document the frontend stack, then build the customer-facing registration/onboarding and workspace dashboard against existing authenticated APIs.
+3. Complete subscription lifecycle only after merchant/provider eligibility and launch jurisdiction are verified. Until then, keep billing non-operational and paid access fail-closed.
+4. Add provider adapters behind interfaces and verify them with operator-controlled staging accounts; never claim a config variable proves delivery.
+5. Add full tenant-isolation and quota-race coverage, then complete accessibility, performance, privacy/SEO crawl, backup/restore, monitoring and incident-readiness checks.
+6. Keep WhatsApp deferred until the operator confirms Meta account setup and an eligible onboarding route that preserves the existing WhatsApp Business App number. Do not deregister or migrate the number to force setup.
 
-## What CI does and does not prove
+## Release rules
 
-CI passing on the reviewed commit establishes that the configured automated test suite and the Python 3.12 PostgreSQL/dependency-audit steps succeeded. It does **not** establish that Meta, SMTP, payment, search, analytics, or production hosting credentials work; that a real message was delivered; that the UI is launch-ready; or that the system has passed a full security/compliance review.
-
-## Next work order
-
-1. Keep WhatsApp deferred; finish and verify the remaining non-WhatsApp core backend gaps without enabling live sends.
-2. Implement billing only after merchant/provider eligibility and required launch jurisdiction are confirmed; keep paid entitlements fail-closed until then.
-3. Complete the customer-facing dashboard and account/workspace onboarding.
-4. Wire provider adapters behind interfaces, then test in staging with operator-controlled test accounts.
-5. Complete release gates: tenant isolation/security review, accessibility, performance, backups/restore, monitoring, policies, and acceptance sign-off.
+- Work on `main` only; do not create additional branches.
+- Never commit or log credentials. Use encrypted environment/secret storage.
+- External sending, live payments and website writes remain gated until staging acceptance and explicit release approval.
+- CI success proves only the checks that ran on that commit. It does not prove external provider operation or production readiness.
+- Never fabricate delivery, conversion, SEO ranking, AI-crawler adoption or ROI metrics.
