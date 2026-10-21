@@ -1,0 +1,147 @@
+"""Workspace-authorized campaigns and human-reviewed outreach draft queue."""
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.api.auth_routes import _authenticated, _check_csrf
+
+router = APIRouter(prefix="/api/v1", tags=["campaigns"])
+
+
+def _store(request: Request):
+    store = getattr(request.app.state, "campaign_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="campaign_service_not_configured")
+    return store
+
+
+async def _authorize(request: Request, workspace_id: str, role: str, session: dict):
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    allowed = await auth_store.authorize_workspace(user_id=session["user_id"], workspace_id=workspace_id, minimum_role=role)
+    if not allowed:
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+
+
+class CampaignCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    client_business: str = Field(min_length=1, max_length=240)
+    client_offer: str = Field(min_length=1, max_length=2000)
+    target_customer_profile: str = Field(min_length=1, max_length=2000)
+
+
+class DraftCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    campaign_id: UUID
+    prospect_id: UUID
+    channel: str
+    call_to_action: str = Field(min_length=1, max_length=500)
+    whatsapp_opt_in_confirmed: bool = False
+
+    @field_validator("channel")
+    @classmethod
+    def valid_channel(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"email", "whatsapp"}:
+            raise ValueError("invalid_channel")
+        return value
+
+
+class DraftReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    decision: str
+    note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("decision")
+    @classmethod
+    def valid_decision(cls, value: str) -> str:
+        if value not in {"approved", "rejected"}:
+            raise ValueError("invalid_decision")
+        return value
+
+
+@router.post("/campaigns", status_code=201)
+async def create_campaign(payload: CampaignCreate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    try:
+        return await _store(request).create_campaign(
+            workspace_id=payload.workspace_id, created_by=session["user_id"],
+            name=payload.name, client_business=payload.client_business,
+            client_offer=payload.client_offer, target_customer_profile=payload.target_customer_profile,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="campaign_create_unavailable") from None
+
+
+@router.get("/campaigns")
+async def list_campaigns(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
+                         limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0, le=100000)):
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    return {"items": await _store(request).list_campaigns(workspace_id=workspace_id, limit=limit, offset=offset),
+            "limit": limit, "offset": offset}
+
+
+@router.post("/drafts", status_code=201)
+async def create_draft(payload: DraftCreate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    try:
+        draft = await _store(request).create_draft(
+            workspace_id=payload.workspace_id, campaign_id=payload.campaign_id,
+            prospect_id=payload.prospect_id, actor_id=session["user_id"], channel=payload.channel,
+            call_to_action=payload.call_to_action,
+            whatsapp_opt_in_confirmed=payload.whatsapp_opt_in_confirmed,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "WhatsApp" in message or "verified fact" in message or "channel" in message:
+            raise HTTPException(status_code=422, detail=message) from None
+        raise HTTPException(status_code=422, detail="draft_inputs_invalid") from None
+    except Exception as exc:
+        if type(exc).__name__ == "UniqueViolationError":
+            raise HTTPException(status_code=409, detail="pending_draft_already_exists") from None
+        raise HTTPException(status_code=503, detail="draft_create_unavailable") from None
+    if draft is None:
+        raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
+    return draft
+
+
+@router.get("/drafts")
+async def list_drafts(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
+                      status: str = Query(default="pending_approval"),
+                      limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0, le=100000)):
+    if status not in {"pending_approval", "approved", "rejected", "all"}:
+        raise HTTPException(status_code=422, detail="invalid_draft_status")
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    return {"items": await _store(request).list_drafts(workspace_id=workspace_id, status=status, limit=limit, offset=offset),
+            "limit": limit, "offset": offset, "status": status}
+
+
+@router.post("/drafts/{draft_id}/review")
+async def review_draft(draft_id: UUID, payload: DraftReview, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    try:
+        draft = await _store(request).review_draft(
+            workspace_id=payload.workspace_id, draft_id=draft_id, actor_id=session["user_id"],
+            decision=payload.decision, note=payload.note,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="draft_review_unavailable") from None
+    if draft is None:
+        raise HTTPException(status_code=409, detail="draft_not_pending_or_not_found")
+    return draft

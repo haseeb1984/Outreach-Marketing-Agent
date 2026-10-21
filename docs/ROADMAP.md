@@ -136,3 +136,11 @@ This snapshot records shipped backend service components, not phase completion. 
 ## Progress reporting
 
 Report each phase as Done / In progress / Blocked with commit or test evidence. Do not mark mocks as completed integrations. A written standard is not proof of implementation or conformance.
+
+
+## Campaign drafting and approval queue (implementation in progress)
+
+- Campaign and draft persistence is workspace-scoped; drafts retain the originating prospect evidence URL and the verified facts used.
+- Draft generation is deterministic from supplied, stored evidence and does not send messages.
+- Human approval/rejection is an auditable state transition; approval does not itself send a message.
+- WhatsApp draft creation requires explicit documented opt-in confirmation. Provider delivery, webhook synchronization, campaign scheduling, and paid entitlements remain separate unfinished phases.
