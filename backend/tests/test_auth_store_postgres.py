@@ -153,7 +153,7 @@ async def _exercise_workspace_authorization() -> None:
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
         await connection.execute(
-            """TRUNCATE TABLE outreach_draft_events, outreach_drafts, outreach_campaigns, auth_rate_limit_buckets, security_audit_events,
+            """TRUNCATE TABLE outreach_contact_controls, outreach_draft_events, outreach_drafts, outreach_campaigns, auth_rate_limit_buckets, security_audit_events,
                password_reset_tokens, email_verification_tokens, auth_sessions,
                workspace_memberships, app_users, workspace_jobs,
                domain_verification_challenges, workspace_domains, workspaces

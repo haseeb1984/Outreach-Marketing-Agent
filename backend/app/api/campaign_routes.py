@@ -104,7 +104,7 @@ async def create_draft(payload: DraftCreate, request: Request):
         )
     except ValueError as exc:
         message = str(exc)
-        if "WhatsApp" in message or "verified fact" in message or "channel" in message:
+        if "WhatsApp" in message or "verified fact" in message or "channel" in message or "prospect_email_required" in message or "contact_suppressed" in message:
             raise HTTPException(status_code=422, detail=message) from None
         raise HTTPException(status_code=422, detail="draft_inputs_invalid") from None
     except Exception as exc:

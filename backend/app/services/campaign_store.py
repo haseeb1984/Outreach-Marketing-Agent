@@ -139,7 +139,7 @@ class CampaignStore:
 
     @classmethod
     def _serialize(cls, row: dict[str, Any]) -> dict[str, Any]:
-        for key in ("id", "created_by", "reviewed_by", "campaign_id", "prospect_id"):
+        for key in ("id", "created_by", "reviewed_by", "campaign_id", "prospect_id", "updated_by"):
             if row.get(key) is not None:
                 row[key] = str(row[key])
         if "verified_facts_used" in row:
