@@ -13,17 +13,17 @@ SEO work must target measurable competitive improvement: baseline target queries
 - [x] Document architecture and compliance requirements.
 - [x] Document accessibility, SEO, responsive design, and performance acceptance criteria.
 - [x] Document commercial SaaS, tenant isolation, billing, and entitlement requirements.
-- [ ] Runnable FastAPI health endpoint and configuration.
-- [ ] Automated tests and CI.
-- [ ] Database schema and migration workflow.
+- [x] Runnable FastAPI health endpoint and environment-backed configuration.
+- [x] Automated tests and CI (GitHub Actions green on Python 3.11/3.12/3.13; PostgreSQL integration and pip-audit passed in run #371).
+- [x] Database schema and explicit migration workflow.
 - Exit: clean install, app starts, tests pass, CI is green, no secrets committed.
 
 ## Phase 2 — Identity and SaaS foundation
 - [ ] Select and document frontend stack and deployment architecture.
-- [ ] Implement customer registration, email verification, login/logout, password reset, session expiry/revocation, and account deletion/export.
+- [x] Implement customer registration, email verification, login/logout, password reset, session expiry/revocation.\n- [ ] Account deletion/export workflows.
 - [ ] Implement workspaces/tenants, memberships, roles, invitations, and server-side object authorization.
-- [ ] Add database migrations and tenant-aware data access patterns.
-- [ ] Add rate limits, security event audit logs, secret management, and baseline monitoring.
+- [x] Add database migrations and tenant-aware access patterns for workspace membership and prospect CRM.\n- [ ] Complete tenant-aware data access for every remaining resource type.
+- [x] Add authentication rate limits and security event audit logs.\n- [ ] Complete secret-management integration, baseline monitoring and account recovery hardening.
 - [ ] Add automated cross-tenant authorization tests for every resource type.
 - Exit: identity and tenant boundaries are tested; no cross-tenant leakage or critical/high security blockers.
 
