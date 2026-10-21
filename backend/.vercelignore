@@ -1,4 +1,4 @@
-# Keep production application code, requirements, and SQL migrations.
+# Keep application code, requirements, and SQL migrations.
 # Exclude tests and local development artefacts from the deployed function bundle.
 tests/
 **/tests/
@@ -10,9 +10,11 @@ tests/
 .ruff_cache/
 .venv/
 venv/
+
+# Never package local environment files or examples
 .env
 .env.*
-!.env.example
+
 .DS_Store
 .vscode/
 .idea/
