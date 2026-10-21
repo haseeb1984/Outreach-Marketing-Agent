@@ -43,7 +43,6 @@ class DraftCreate(BaseModel):
     prospect_id: UUID
     channel: str
     call_to_action: str = Field(min_length=1, max_length=500)
-    whatsapp_opt_in_confirmed: bool = False
 
     @field_validator("channel")
     @classmethod
@@ -102,7 +101,6 @@ async def create_draft(payload: DraftCreate, request: Request):
             workspace_id=payload.workspace_id, campaign_id=payload.campaign_id,
             prospect_id=payload.prospect_id, actor_id=session["user_id"], channel=payload.channel,
             call_to_action=payload.call_to_action,
-            whatsapp_opt_in_confirmed=payload.whatsapp_opt_in_confirmed,
         )
     except ValueError as exc:
         message = str(exc)
@@ -145,3 +143,45 @@ async def review_draft(draft_id: UUID, payload: DraftReview, request: Request):
     if draft is None:
         raise HTTPException(status_code=409, detail="draft_not_pending_or_not_found")
     return draft
+
+
+class ContactControlUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    email_suppressed: bool | None = None
+    whatsapp_opt_in_confirmed: bool = False
+    whatsapp_opt_in_evidence_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("whatsapp_opt_in_evidence_url")
+    @classmethod
+    def validate_evidence_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from urllib.parse import urlsplit
+        parsed = urlsplit(value.strip())
+        if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("consent_evidence_must_be_https")
+        return value.strip()
+
+
+@router.put("/prospects/{prospect_id}/contact-controls")
+async def update_contact_controls(prospect_id: UUID, payload: ContactControlUpdate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    if payload.email_suppressed is None and not payload.whatsapp_opt_in_confirmed:
+        raise HTTPException(status_code=422, detail="no_contact_control_update")
+    if payload.whatsapp_opt_in_confirmed and not payload.whatsapp_opt_in_evidence_url:
+        raise HTTPException(status_code=422, detail="whatsapp_consent_evidence_required")
+    try:
+        result = await _store(request).update_contact_controls(
+            workspace_id=payload.workspace_id, prospect_id=prospect_id,
+            actor_id=session["user_id"], email_suppressed=payload.email_suppressed,
+            whatsapp_opt_in_confirmed=payload.whatsapp_opt_in_confirmed,
+            whatsapp_opt_in_evidence_url=payload.whatsapp_opt_in_evidence_url,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="contact_controls_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=404, detail="prospect_not_found")
+    return result

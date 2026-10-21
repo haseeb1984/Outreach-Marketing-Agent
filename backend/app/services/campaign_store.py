@@ -40,7 +40,7 @@ class CampaignStore:
 
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
-                           whatsapp_opt_in_confirmed: bool) -> dict[str, Any]:
+                           ) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 campaign = await conn.fetchrow(
@@ -54,6 +54,14 @@ class CampaignStore:
                 if campaign is None or prospect is None:
                     return None
                 p = dict(prospect)
+                controls = await conn.fetchrow("SELECT * FROM outreach_contact_controls WHERE workspace_id=$1 AND prospect_id=$2", workspace_id, prospect_id)
+                if channel == "email":
+                    if not p.get("contact_email"):
+                        raise ValueError("prospect_email_required")
+                    if controls and controls["email_suppressed"]:
+                        raise ValueError("contact_suppressed")
+                if channel == "whatsapp" and (not controls or controls["whatsapp_opt_in_at"] is None or not controls["whatsapp_opt_in_evidence_url"]):
+                    raise ValueError("WhatsApp documented opt-in evidence is required")
                 facts = self._json_list(p.get("verified_facts"))
                 draft = draft_outreach(
                     channel=channel,
@@ -64,7 +72,7 @@ class CampaignStore:
                     verified_relevance=p["fit_reason"],
                     verified_facts=facts,
                     call_to_action=call_to_action,
-                    whatsapp_opt_in_confirmed=whatsapp_opt_in_confirmed,
+                    whatsapp_opt_in_confirmed=(channel != "whatsapp" or bool(controls and controls["whatsapp_opt_in_at"])),
                 )
                 row = await conn.fetchrow(
                     """INSERT INTO outreach_drafts
@@ -137,3 +145,13 @@ class CampaignStore:
         if "verified_facts_used" in row:
             row["verified_facts_used"] = cls._json_list(row["verified_facts_used"])
         return row
+
+
+    async def update_contact_controls(self, *, workspace_id: str, prospect_id: UUID, actor_id: UUID | str, email_suppressed: bool | None, whatsapp_opt_in_confirmed: bool, whatsapp_opt_in_evidence_url: str | None) -> dict[str, Any] | None:
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM crm_prospects WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL)", prospect_id, workspace_id)
+                if not exists:
+                    return None
+                row = await conn.fetchrow("""INSERT INTO outreach_contact_controls (workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,whatsapp_opt_in_evidence_url,updated_by,updated_at) VALUES ($1,$2,COALESCE($3,FALSE),CASE WHEN $4 THEN now() ELSE NULL END,CASE WHEN $4 THEN $5 ELSE NULL END,$6,now()) ON CONFLICT (workspace_id,prospect_id) DO UPDATE SET email_suppressed=COALESCE($3,outreach_contact_controls.email_suppressed),whatsapp_opt_in_at=CASE WHEN $4 THEN now() ELSE outreach_contact_controls.whatsapp_opt_in_at END,whatsapp_opt_in_evidence_url=CASE WHEN $4 THEN $5 ELSE outreach_contact_controls.whatsapp_opt_in_evidence_url END,updated_by=$6,updated_at=now() RETURNING workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,whatsapp_opt_in_evidence_url,updated_by,updated_at""", workspace_id, prospect_id, email_suppressed, whatsapp_opt_in_confirmed, whatsapp_opt_in_evidence_url, UUID(str(actor_id)))
+        return self._serialize(dict(row))

@@ -159,6 +159,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.outreach_campaigns') IS NOT NULL
                      AND to_regclass('public.outreach_drafts') IS NOT NULL
                      AND to_regclass('public.outreach_draft_events') IS NOT NULL
+                     AND to_regclass('public.outreach_contact_controls') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
@@ -169,8 +170,9 @@ async def readiness() -> Response:
                             '005_session_csrf_tokens.sql',
                             '006_password_reset_tokens.sql',
                             '007_crm_prospects.sql',
-                            '008_campaigns_and_approval_queue.sql'
-                          )) = 8"""
+                            '008_campaigns_and_approval_queue.sql',
+                            '009_contact_controls.sql'
+                          )) = 9"""
             )
             if not schema_ready:
                 return JSONResponse(

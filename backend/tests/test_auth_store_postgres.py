@@ -40,12 +40,13 @@ async def _exercise_password_reset() -> None:
             "006_password_reset_tokens.sql",
             "007_crm_prospects.sql",
             "008_campaigns_and_approval_queue.sql",
+            "009_contact_controls.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
         # This test must only ever run against the dedicated CI/test database.
         await connection.execute(
-            """TRUNCATE TABLE outreach_draft_events, outreach_drafts, outreach_campaigns, crm_prospects, auth_rate_limit_buckets, security_audit_events,
+            """TRUNCATE TABLE outreach_contact_controls, outreach_draft_events, outreach_drafts, outreach_campaigns, crm_prospects, auth_rate_limit_buckets, security_audit_events,
                password_reset_tokens, email_verification_tokens, auth_sessions,
                workspace_memberships, app_users, workspace_jobs,
                domain_verification_challenges, workspace_domains, workspaces

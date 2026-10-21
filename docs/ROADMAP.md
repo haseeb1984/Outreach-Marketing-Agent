@@ -144,3 +144,10 @@ Report each phase as Done / In progress / Blocked with commit or test evidence. 
 - Draft generation is deterministic from supplied, stored evidence and does not send messages.
 - Human approval/rejection is an auditable state transition; approval does not itself send a message.
 - WhatsApp draft creation requires explicit documented opt-in confirmation. Provider delivery, webhook synchronization, campaign scheduling, and paid entitlements remain separate unfinished phases.
+
+
+## Contact compliance foundation
+
+- Email drafts require a stored contact email and are blocked when the prospect is marked suppressed.
+- WhatsApp drafts require a persisted opt-in timestamp and HTTPS evidence URL; a client-supplied boolean alone cannot establish consent.
+- Only workspace admins can change per-prospect contact controls. Provider delivery, webhooks, jurisdiction-specific consent validation, and external suppression synchronization remain future work.
