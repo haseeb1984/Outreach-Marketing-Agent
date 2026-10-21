@@ -77,6 +77,7 @@ class WorkspaceProviderOAuthCallbackService:
                 state=state, code=code, error=error,
             )
         except ProviderOAuthSecurityError as exc:
+            await self._cleanup_verifier(transaction)
             raise ProviderOAuthCallbackError(str(exc)) from None
 
         try:
@@ -107,6 +108,9 @@ class WorkspaceProviderOAuthCallbackService:
         except Exception:
             # Provider errors may contain URLs, response bodies, codes, or credentials.
             raise ProviderOAuthCallbackError("oauth_provider_validation_failed") from None
+        finally:
+            # The state has been consumed, so this verifier must not outlive the attempt.
+            await self._cleanup_verifier(transaction)
 
         if not isinstance(identity, ValidatedProviderIdentity):
             raise ProviderOAuthCallbackError("oauth_identity_invalid")
@@ -133,3 +137,16 @@ class WorkspaceProviderOAuthCallbackService:
             provider_account_id=account_id.strip(),
             granted_scopes=tuple(sorted(granted)),
         )
+
+    async def _cleanup_verifier(self, transaction: dict[str, Any]) -> None:
+        """Best-effort deletion of one-time PKCE material without leaking secret errors."""
+        try:
+            reference = validate_secret_reference(transaction["verifier_secret_reference"])
+            await self._secrets.delete(
+                reference=reference,
+                purpose=f"provider-oauth-pkce:{transaction['provider']}:{transaction['connection_id']}",
+            )
+        except Exception:
+            # A consumed state cannot be replayed. Secret-vault cleanup failures should
+            # be monitored by the vault adapter, never exposed in callback responses.
+            pass
