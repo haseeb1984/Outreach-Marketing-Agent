@@ -11,6 +11,7 @@ from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from app.services.authorized_website_discovery import discover_authorized_website
+from app.services.website_growth_report import build_website_growth_report
 
 
 async def _guard_allows(guard: Callable[[], Any] | None) -> bool:
@@ -133,11 +134,29 @@ async def process_claimed_website_scan(
     start_url = payload.get("start_url")
     max_pages = payload.get("max_pages", 25)
     max_depth = payload.get("max_depth", 2)
+    business_type = payload.get("business_type")
+    target_market = payload.get("target_market")
+    target_queries = payload.get("target_queries")
+    growth_context_supplied = any(
+        value is not None for value in (business_type, target_market, target_queries)
+    )
+    growth_context_valid = (
+        isinstance(business_type, str) and 1 <= len(business_type.strip()) <= 200
+        and isinstance(target_market, str) and 1 <= len(target_market.strip()) <= 200
+        and isinstance(target_queries, list) and 1 <= len(target_queries) <= 100
+        and all(
+            isinstance(query, str) and 1 <= len(query.strip()) <= 200
+            and all(char.isprintable() or char == chr(9) for char in query)
+            for query in target_queries
+        )
+        and any(query.strip() for query in target_queries)
+    )
     if (
         not isinstance(workspace_id, str) or not workspace_id.strip()
         or not isinstance(start_url, str)
         or isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= 100
         or isinstance(max_depth, bool) or not isinstance(max_depth, int) or not 0 <= max_depth <= 5
+        or (growth_context_supplied and not growth_context_valid)
     ):
         status = await job_queue.fail(
             job_id=job_id, worker_id=worker_id, error_code="invalid_scan_job"
@@ -180,6 +199,24 @@ async def process_claimed_website_scan(
             max_pages=max_pages,
             max_depth=max_depth,
         )
+        # Produce an evidence-led strategy only when the job explicitly carries
+        # business context. Never invent a market or target queries.
+        if growth_context_supplied:
+            discovery = report.get("discovery")
+            if not isinstance(discovery, dict):
+                raise ValueError("discovery report is malformed")
+            crawl = discovery.get("crawl")
+            if not isinstance(crawl, dict):
+                raise ValueError("crawl report is malformed")
+            report["growth_report"] = build_website_growth_report(
+                crawl_report={
+                    **crawl,
+                    "start_url": discovery.get("start_url", start_url),
+                },
+                business_type=business_type,
+                target_market=target_market,
+                target_queries=target_queries,
+            )
         completed = await job_queue.complete(
             job_id=job_id,
             worker_id=worker_id,
