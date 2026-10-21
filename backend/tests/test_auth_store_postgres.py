@@ -36,6 +36,8 @@ async def _exercise_password_reset() -> None:
             "002_workspace_jobs.sql",
             "003_authentication_foundation.sql",
             "004_auth_rate_limits.sql",
+            "005_session_csrf_tokens.sql",
+            "006_password_reset_tokens.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
@@ -141,6 +143,8 @@ async def _exercise_workspace_authorization() -> None:
             "002_workspace_jobs.sql",
             "003_authentication_foundation.sql",
             "004_auth_rate_limits.sql",
+            "005_session_csrf_tokens.sql",
+            "006_password_reset_tokens.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
