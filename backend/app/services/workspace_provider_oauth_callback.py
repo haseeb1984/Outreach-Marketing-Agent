@@ -115,7 +115,12 @@ class WorkspaceProviderOAuthCallbackService:
         if not isinstance(identity, ValidatedProviderIdentity):
             raise ProviderOAuthCallbackError("oauth_identity_invalid")
         account_id = identity.provider_account_id
-        if not isinstance(account_id, str) or not account_id.strip() or len(account_id) > 512:
+        if (
+            not isinstance(account_id, str)
+            or not account_id.strip()
+            or len(account_id) > 512
+            or any(ord(char) < 32 or ord(char) == 127 for char in account_id)
+        ):
             raise ProviderOAuthCallbackError("oauth_identity_invalid")
         if not nonce_matches(identity.nonce, transaction["nonce_sha256"]):
             raise ProviderOAuthCallbackError("oauth_nonce_mismatch")
