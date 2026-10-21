@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
     smtp_from_name: str = "Outreach Marketing Agent"
     smtp_starttls: bool = True
+    # High-entropy shared secret for the provider-neutral inbound reply gateway.
+    outreach_webhook_secret: str | None = None
 
 
 settings = Settings()
