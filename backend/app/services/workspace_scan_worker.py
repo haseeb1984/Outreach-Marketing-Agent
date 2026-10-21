@@ -22,11 +22,60 @@ async def _guard_allows(guard: Callable[[], Any] | None) -> bool:
     return result is True
 
 
+def _safe_count(value: Any) -> int:
+    """Normalize untrusted count fields without allowing malformed crawl data to crash jobs."""
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, min(int(value), 1_000_000))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _safe_evidence_urls(value: Any, *, authorized_host: str) -> list[str]:
+    """Persist only same-host HTTP(S) evidence without query strings or fragments."""
+    if not isinstance(value, list):
+        return []
+    safe: list[str] = []
+    for item in value[:10]:
+        if not isinstance(item, str) or not item or len(item) > 2048:
+            continue
+        if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in item):
+            continue
+        try:
+            parsed = urlsplit(item)
+            _ = parsed.port
+        except ValueError:
+            continue
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or not host
+            or host != authorized_host
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            continue
+        safe.append(item[:512])
+        if len(safe) == 3:
+            break
+    return safe
+
+
 def _compact_report(report: dict[str, Any]) -> dict[str, Any]:
-    """Persist a bounded summary, not the full page-level report or raw page content."""
-    discovery = report.get("discovery") or {}
-    crawl = discovery.get("crawl") or {}
-    findings = crawl.get("aggregate_findings") or []
+    """Persist a bounded summary, excluding raw page content and unsafe evidence URLs."""
+    discovery = report.get("discovery")
+    if not isinstance(discovery, dict):
+        discovery = {}
+    crawl = discovery.get("crawl")
+    if not isinstance(crawl, dict):
+        crawl = {}
+    findings = crawl.get("aggregate_findings")
+    if not isinstance(findings, list):
+        findings = []
+    authorized_host = str(report.get("authorized_domain", "")).lower().rstrip(".")
     compact_findings = []
     for finding in findings[:10]:
         if not isinstance(finding, dict):
@@ -35,25 +84,30 @@ def _compact_report(report: dict[str, Any]) -> dict[str, Any]:
             "code": str(finding.get("code", ""))[:80],
             "title": str(finding.get("title", ""))[:120],
             "severity": str(finding.get("severity", ""))[:30],
-            "occurrences": max(0, int(finding.get("occurrences", 0))),
-            "evidence_urls": [
-                str(url)[:512] for url in (finding.get("evidence_urls") or [])[:3]
-                if isinstance(url, str)
-            ],
+            "occurrences": _safe_count(finding.get("occurrences", 0)),
+            "evidence_urls": _safe_evidence_urls(
+                finding.get("evidence_urls"), authorized_host=authorized_host
+            ),
         })
+
+    def _list_count(key: str) -> int:
+        value = crawl.get(key)
+        return len(value) if isinstance(value, list) else 0
+
     return {
-        "authorized_domain": str(report.get("authorized_domain", ""))[:253],
+        "authorized_domain": authorized_host[:253],
         "authorization": "verified_domain_record",
         "start_url": str(discovery.get("start_url", ""))[:2048],
         "crawl_skipped": bool(discovery.get("crawl_skipped", False)),
-        "pages_crawled": max(0, int(crawl.get("pages_crawled", 0))),
+        "pages_crawled": _safe_count(crawl.get("pages_crawled", 0)),
         "aggregate_findings": compact_findings,
         "finding_types_total": len(findings),
-        "errors_count": len(crawl.get("errors") or []),
-        "robots_blocked_count": len(crawl.get("robots_blocked_pages") or []),
-        "cross_host_redirects_blocked_count": len(crawl.get("cross_host_redirects_not_crawled") or []),
+        "errors_count": _list_count("errors"),
+        "robots_blocked_count": _list_count("robots_blocked_pages"),
+        "cross_host_redirects_blocked_count": _list_count("cross_host_redirects_not_crawled"),
         "limitations": [
             "Page-level content and raw HTML are not persisted in the job result.",
+            "Evidence URLs with credentials, query strings, fragments, or a different host are omitted.",
             "This summary is based on a bounded source-HTML crawl.",
         ],
     }
