@@ -110,5 +110,5 @@ def test_password_reset_email_uses_real_line_breaks(monkeypatch):
         expires_at=datetime.now(timezone.utc),
     ))
     body = captured["body"]
-    assert "\\n\\n" in body
+    assert "\n\n" in body
     assert "\\\\n" not in body
