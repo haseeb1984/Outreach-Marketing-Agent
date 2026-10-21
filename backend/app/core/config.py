@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     # High-entropy shared secret for the provider-neutral inbound reply gateway.
     outreach_webhook_secret: str | None = None
+    # Meta WhatsApp Cloud API credentials are staging/production secrets, never client-side.
+    meta_whatsapp_access_token: str | None = None
+    meta_whatsapp_app_secret: str | None = None
+    meta_whatsapp_webhook_verify_token: str | None = None
+    # Non-secret Meta asset identifiers; keep workspace-specific IDs in tenant storage for SaaS.
+    meta_whatsapp_phone_number_id: str | None = None
+    meta_whatsapp_waba_id: str | None = None
 
 
 settings = Settings()

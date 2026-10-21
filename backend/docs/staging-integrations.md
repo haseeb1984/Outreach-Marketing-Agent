@@ -38,22 +38,23 @@ WhatsApp sending remains disabled. The application must use Meta's official What
 
 An administrator must complete these steps in the provider's own console:
 
-1. Create/choose the Meta Business Portfolio and WhatsApp Business Account (WABA), and complete required business verification.
-2. Create a Meta developer app, add the WhatsApp product, and associate the correct WABA and phone number.
-3. For staging, use a provider-supported test number/recipient allowlist where available. Confirm recipient opt-in and template requirements before sending any template message.
-4. Generate a least-privilege, long-lived/system-user access token appropriate for the deployed app. Keep it only in encrypted staging environment settings; never place it in frontend code, Git, support tickets, or logs.
-5. Configure the provider's webhook callback to the staging HTTPS endpoint and set the webhook verification token and app secret as encrypted secrets. Subscribe only to the required message/status events.
-6. Verify webhook authenticity using the provider's documented signature algorithm over the **raw request body** before parsing or persisting events. The current generic inbound-reply HMAC gateway is not, by itself, a Meta webhook adapter; provider-specific verification and payload normalization must be implemented and tested before connecting Meta.
-7. Store provider account/phone identifiers scoped to the owning workspace. Do not share one tenant's phone number, token, messages, or webhook mapping with another tenant.
-8. Confirm opt-in evidence, suppression/opt-out handling, template approval, rate limits, audit trail, inbound reply mapping, duplicate-event handling, and status webhooks in staging.
-9. Test only with approved test recipients. Keep production WhatsApp sending disabled until security review and explicit release approval.
+1. Update the WhatsApp Business App on the phone and confirm the existing number remains active. Do **not** delete/deregister it to force API onboarding.
+2. Open [Meta's official Cloud API guide](https://developers.facebook.com/docs/whatsapp/cloud-api/overview), create/choose a Meta developer app, add WhatsApp, and associate the intended Business Portfolio/WABA.
+3. Because this number must remain in the Business App, use an onboarding flow that explicitly offers **WhatsApp Business App Coexistence** for that same number. If the Meta flow only offers migration/deregistration or does not show the app-link approval, stop; do not proceed with a destructive migration. Eligibility is determined by Meta and the supported onboarding path.
+4. For the SaaS's future customer onboarding, plan for [Meta Embedded Signup](https://www.postman.com/meta/whatsapp-business-platform/collection/du6gzjv/embedded-signup) and Tech Provider/Solution Partner requirements; do not hard-code the owner's WABA or phone ID as a global multi-tenant integration.
+5. For staging, use a provider-supported test number/recipient allowlist where available. Confirm recipient opt-in and template requirements before sending any template message.
+6. Generate a least-privilege, long-lived/system-user access token appropriate for the deployed app. Keep it only in encrypted staging environment settings; never place it in frontend code, Git, support tickets, or logs.
+7. Set the staging variables listed below. The integration status endpoint reports presence only; it does not prove token validity, number eligibility, or delivery.
+8. Configure a staging HTTPS callback only after a provider-specific GET verification handshake, raw-body `X-Hub-Signature-256` validation, event normalization, tenant/phone mapping, persistence, idempotency, and status handling have been implemented and tested. The current code deliberately does **not** claim that Meta webhook ingestion is ready.
+9. Confirm opt-in evidence, suppression/opt-out handling, template approval, rate limits, audit trail, inbound reply mapping, duplicate-event handling, and status webhooks in staging.
+10. Test only with approved test recipients. Keep production WhatsApp sending disabled until security review and explicit release approval.
 
 ### WhatsApp secrets/identifiers to provision later
 
-Once the official adapter is implemented, use encrypted environment settings or a secret manager for the provider token, app secret, webhook verification token, and any signing secret. Store non-secret identifiers (such as WABA ID and phone-number ID) in the provider/workspace configuration model with strict tenant authorization where possible. Do not add real values to `.env.example`; placeholders only.
+Set these staging variables only in encrypted environment settings or a secret manager: `META_WHATSAPP_ACCESS_TOKEN`, `META_WHATSAPP_APP_SECRET`, and `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`. For single-tenant staging, `META_WHATSAPP_PHONE_NUMBER_ID` and `META_WHATSAPP_WABA_ID` are non-secret identifiers. For multi-tenant production, these identifiers and credential references must be workspace-scoped in the database/secret manager, not global settings. Do not add real values to `.env.example`; placeholders only.
 
 ## Current implementation boundary
 
 - SMTP: configuration is environment-backed; an authenticated integration-status endpoint checks presence and TLS requirements without exposing values. It does not perform a network/authentication test.
-- WhatsApp: official-provider adapter and provider-specific webhook signature verification are not implemented, so live sending remains disabled.
+- WhatsApp: environment-backed Meta setup readiness is now reported without leaking values. Coexistence eligibility, Meta webhook handshake/signature verification, event persistence, tenant asset mapping, outbound Cloud API sending, and provider status handling remain unimplemented; live sending remains disabled.
 - Never treat a status check, mocked test, or CI pass as proof of successful external delivery.

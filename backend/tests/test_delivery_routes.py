@@ -44,3 +44,28 @@ def test_smtp_configuration_status_fails_closed_when_tls_or_credentials_missing(
  status=smtp_configuration_status(cfg)
  assert status["configuration_complete"] is False
  assert {"SMTP_HOST","SMTP_PASSWORD","SMTP_PORT","SMTP_STARTTLS"}.issubset(set(status["missing_fields"]))
+
+
+def test_whatsapp_configuration_status_reports_missing_names_and_never_values():
+ from types import SimpleNamespace
+ from app.api.delivery_routes import whatsapp_configuration_status
+ cfg=SimpleNamespace(meta_whatsapp_access_token="private-access-token",meta_whatsapp_app_secret="private-app-secret",
+  meta_whatsapp_webhook_verify_token="private-verify-token",meta_whatsapp_phone_number_id="12345",meta_whatsapp_waba_id="67890")
+ status=whatsapp_configuration_status(cfg)
+ assert status["configuration_complete"] is True
+ assert status["missing_fields"] == []
+ assert status["live_send_enabled"] is False
+ assert status["webhook_signature_verification_implemented"] is False
+ assert "private-access-token" not in repr(status)
+ assert "private-app-secret" not in repr(status)
+
+def test_whatsapp_configuration_status_fails_closed_until_adapter_and_assets_are_ready():
+ from types import SimpleNamespace
+ from app.api.delivery_routes import whatsapp_configuration_status
+ cfg=SimpleNamespace(meta_whatsapp_access_token=None,meta_whatsapp_app_secret=" ",
+  meta_whatsapp_webhook_verify_token=None,meta_whatsapp_phone_number_id=None,meta_whatsapp_waba_id=None)
+ status=whatsapp_configuration_status(cfg)
+ assert status["configuration_complete"] is False
+ assert len(status["missing_fields"]) == 5
+ assert status["live_send_enabled"] is False
+ assert status["coexistence_onboarding_required"] is True

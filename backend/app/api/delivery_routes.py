@@ -7,6 +7,26 @@ from app.api.auth_routes import _authenticated,_check_csrf
 from app.services.email_delivery import EmailDeliveryFailed,EmailDeliveryNotConfigured,SMTPEmailDelivery
 from app.core.config import settings
 router=APIRouter(prefix="/api/v1",tags=["outbound-delivery"])
+
+def whatsapp_configuration_status(configuration=settings)->dict:
+ """Report Meta WhatsApp setup presence only; never return credential values."""
+ required = {
+  "META_WHATSAPP_ACCESS_TOKEN": configuration.meta_whatsapp_access_token,
+  "META_WHATSAPP_APP_SECRET": configuration.meta_whatsapp_app_secret,
+  "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN": configuration.meta_whatsapp_webhook_verify_token,
+  "META_WHATSAPP_PHONE_NUMBER_ID": configuration.meta_whatsapp_phone_number_id,
+  "META_WHATSAPP_WABA_ID": configuration.meta_whatsapp_waba_id,
+ }
+ missing = sorted(name for name, value in required.items() if not isinstance(value, str) or not value.strip())
+ return {
+  "configuration_complete": not missing,
+  "missing_fields": missing,
+  "coexistence_onboarding_required": True,
+  "webhook_signature_verification_implemented": False,
+  "inbound_event_persistence_implemented": False,
+  "live_send_enabled": False,
+ }
+
 def _store(r: Request):
  s=getattr(r.app.state,"delivery_store",None)
  if s is None: raise HTTPException(status_code=503,detail="delivery_service_not_configured")
@@ -96,9 +116,8 @@ async def integrations_status(request: Request, workspace_id: str=Query(min_leng
    "note": "Configuration presence is not proof that SMTP authentication or delivery works.",
   },
   "whatsapp": {
-   "provider": "official_whatsapp_business_platform",
-   "configuration_complete": False,
-   "live_send_enabled": False,
-   "reason": "official_provider_adapter_not_implemented",
+   "provider": "meta_whatsapp_cloud_api",
+   **whatsapp_configuration_status(),
+   "reason": "official_webhook_and_send_adapter_not_implemented",
   },
  }
