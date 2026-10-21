@@ -75,8 +75,10 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
         reason = reservation.get("reason", "entitlement_denied")
         status_code = 429 if reason == "quota_exhausted" else 403
         raise HTTPException(status_code=status_code, detail=reason)
-    if reservation.get("status") == "consumed":
-        raise HTTPException(status_code=409, detail="delivery_quota_already_consumed")
+    # A reservation replay may belong to a concurrent or interrupted send. Never let
+    # a second request claim/send it or release quota reserved by the first request.
+    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="delivery_send_key_already_used")
 
     reservation_id = reservation["reservation_id"]
     try:

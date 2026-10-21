@@ -19,3 +19,8 @@
 ## Integration boundary
 
 The inbound reply endpoint is provider-neutral and requires an HMAC-SHA256 signature using `OUTREACH_WEBHOOK_SECRET` (32+ bytes). An adapter must verify the actual provider webhook signature independently before forwarding a normalized event to this endpoint. Configure secrets in encrypted host settings only. WhatsApp sending remains disabled until an official Business provider adapter and account-specific consent checks are available.
+
+
+## Quota idempotency and concurrent send protection
+
+The explicit send endpoint rejects any replayed quota reservation before it attempts to claim the delivery. This is intentional: a replay can belong to a concurrent request or a request interrupted after reservation. Allowing that replay to proceed could let a losing concurrent request release the quota reservation while the first request is already handing off to SMTP. Replays now receive HTTP 409 and require operator review; they do not trigger a second provider call or release the existing reservation.

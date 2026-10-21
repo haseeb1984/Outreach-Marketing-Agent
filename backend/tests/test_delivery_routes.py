@@ -89,3 +89,13 @@ def test_send_route_does_not_release_quota_for_ambiguous_provider_outcome():
  assert 'error_code="delivery_outcome_unknown"' in ambiguous
  assert 'outcome="consumed"' in ambiguous
  assert 'outcome="released"' not in ambiguous
+
+
+
+def test_send_route_rejects_replayed_quota_reservation_before_claiming_delivery():
+ from app.api import delivery_routes
+ src=inspect.getsource(delivery_routes.send_delivery)
+ guard=src.index('reservation.get("reason") == "idempotent_replay"')
+ claim=src.index("store.claim")
+ assert guard < claim
+ assert 'detail="delivery_send_key_already_used"' in src
