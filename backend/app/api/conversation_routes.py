@@ -50,8 +50,24 @@ async def inbound_reply_webhook(request: Request,x_outreach_signature: str|None=
  secret=(settings.outreach_webhook_secret or "").strip()
  if len(secret.encode("utf-8"))<32:
   raise HTTPException(status_code=503,detail="webhook_not_configured")
- raw=await request.body()
- if len(raw)>MAX_WEBHOOK_BYTES: raise HTTPException(status_code=413,detail="payload_too_large")
+ content_length=request.headers.get("content-length")
+ if content_length:
+  try:
+   declared_length=int(content_length)
+  except ValueError:
+   raise HTTPException(status_code=400,detail="invalid_content_length") from None
+  if declared_length<0:
+   raise HTTPException(status_code=400,detail="invalid_content_length")
+  if declared_length>MAX_WEBHOOK_BYTES:
+   raise HTTPException(status_code=413,detail="payload_too_large")
+ chunks=[]
+ total_bytes=0
+ async for chunk in request.stream():
+  total_bytes+=len(chunk)
+  if total_bytes>MAX_WEBHOOK_BYTES:
+   raise HTTPException(status_code=413,detail="payload_too_large")
+  chunks.append(chunk)
+ raw=b"".join(chunks)
  if not x_outreach_signature or not hmac.compare_digest(expected_signature(raw,secret),x_outreach_signature):
   raise HTTPException(status_code=401,detail="invalid_webhook_signature")
  try: payload=InboundReply.model_validate(json.loads(raw))
