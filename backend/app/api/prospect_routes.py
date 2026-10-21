@@ -21,8 +21,13 @@ def _store(request: Request) -> ProspectStore:
     return store
 
 
-async def _authorize(request: Request, workspace_id: str, minimum_role: str = "viewer"):
-    auth_store, _, session = await _authenticated(request)
+async def _authorize(request: Request, workspace_id: str, minimum_role: str = "viewer", session: dict | None = None):
+    if session is None:
+        auth_store, _, session = await _authenticated(request)
+    else:
+        auth_store = getattr(request.app.state, "auth_store", None)
+        if auth_store is None:
+            raise HTTPException(status_code=503, detail="authentication_not_configured")
     allowed = await auth_store.authorize_workspace(
         user_id=session["user_id"], workspace_id=workspace_id, minimum_role=minimum_role,
     )
@@ -98,7 +103,7 @@ async def list_prospects(
 async def create_prospect(payload: ProspectCreate, request: Request):
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
-    await _authorize(request, payload.workspace_id, "member")
+    await _authorize(request, payload.workspace_id, "member", session)
     try:
         prospect = await _store(request).create_prospect(
             workspace_id=payload.workspace_id, created_by=session["user_id"],
