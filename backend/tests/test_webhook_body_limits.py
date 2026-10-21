@@ -46,3 +46,22 @@ def test_inbound_webhook_rejects_oversized_declared_body_before_signature_parsin
 
     assert response.status_code == 413
     assert response.json() == {"detail": "payload_too_large"}
+
+
+def test_exact_limit_body_is_accepted():
+    request = ChunkedRequest([b"x" * MAX_WEBHOOK_BYTES])
+
+    body = asyncio.run(_read_bounded_body(request))
+
+    assert len(body) == MAX_WEBHOOK_BYTES
+
+
+def test_invalid_content_length_is_rejected():
+    request = ChunkedRequest([b"small"])
+    request.headers = {"content-length": "not-a-number"}
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(_read_bounded_body(request))
+
+    assert error.value.status_code == 400
+    assert error.value.detail == "invalid_content_length"
