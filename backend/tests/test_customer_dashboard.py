@@ -1,0 +1,28 @@
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def test_customer_dashboard_is_responsive_noindex_and_no_store():
+    with TestClient(app) as client:
+        response = client.get("/app")
+
+    assert response.status_code == 200
+    assert 'name="viewport"' in response.text
+    assert 'name="robots" content="noindex,nofollow"' in response.text
+    assert 'id="auth-form"' in response.text
+    assert 'id="dashboard-view"' in response.text
+    assert 'id="campaign-form"' in response.text
+    assert 'id="drafts-list"' in response.text
+    assert "credentials:'same-origin'" in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+
+
+def test_workspace_listing_requires_configured_authentication():
+    with TestClient(app) as client:
+        response = client.get("/api/v1/workspaces")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "authentication_not_configured"}
