@@ -123,7 +123,7 @@ def test_start_rejects_authorization_url_host_mismatch_and_deletes_verifier():
 
 def test_start_rejects_scopes_outside_explicit_allowlist_before_storing_secret():
     service, transactions, secrets = _service(scopes=("profile", "mail.send"))
-    with pytest.raises(ProviderOAuthStartError, match="oauth_authorization_start_failed"):
+    with pytest.raises(ProviderOAuthStartError, match="oauth_scopes_not_allowlisted"):
         asyncio.run(service.start(
             workspace_id="workspace-1",
             connection_id="11111111-1111-4111-8111-111111111111",
