@@ -24,6 +24,8 @@ async def lifespan(application: FastAPI):
     application.state.campaign_store = None
     application.state.delivery_store = None
     application.state.conversation_store = None
+    application.state.subscription_store = None
+    application.state.billing_lifecycle_store = None
     if settings.database_url:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
@@ -44,10 +46,14 @@ async def lifespan(application: FastAPI):
         from app.services.campaign_store import CampaignStore
         from app.services.delivery_store import DeliveryStore
         from app.services.conversation_store import ConversationStore
+        from app.services.subscription_store import SubscriptionStore
+        from app.services.billing_lifecycle_store import BillingLifecycleStore
         application.state.prospect_store = ProspectStore(pool)
         application.state.campaign_store = CampaignStore(pool)
         application.state.delivery_store = DeliveryStore(pool)
         application.state.conversation_store = ConversationStore(pool)
+        application.state.subscription_store = SubscriptionStore(pool)
+        application.state.billing_lifecycle_store = BillingLifecycleStore(pool)
         if settings.secret_key and len(settings.secret_key.encode('utf-8')) >= 32:
             application.state.auth_rate_limiter = AuthRateLimiter(pool, secret_key=settings.secret_key)
     try:
@@ -70,12 +76,14 @@ from app.api.prospect_routes import router as prospect_router
 from app.api.campaign_routes import router as campaign_router
 from app.api.delivery_routes import router as delivery_router
 from app.api.conversation_routes import router as conversation_router
+from app.api.billing_routes import router as billing_router
 
 app.include_router(auth_router)
 app.include_router(prospect_router)
 app.include_router(campaign_router)
 app.include_router(delivery_router)
 app.include_router(conversation_router)
+app.include_router(billing_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -172,6 +180,9 @@ async def readiness() -> Response:
                      AND to_regclass('public.outreach_contact_controls') IS NOT NULL
                      AND to_regclass('public.outreach_deliveries') IS NOT NULL
                      AND to_regclass('public.outreach_conversation_messages') IS NOT NULL
+                     AND to_regclass('public.workspace_subscriptions') IS NOT NULL
+                     AND to_regclass('public.feature_usage_reservations') IS NOT NULL
+                     AND to_regclass('public.billing_provider_events') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
@@ -186,8 +197,10 @@ async def readiness() -> Response:
                             '009_contact_controls.sql',
                             '010_outbound_delivery_queue.sql',
                             '011_conversation_webhook_inbox.sql',
-                            '012_delivery_outcome_uncertainty.sql'
-                          )) = 12"""
+                            '012_delivery_outcome_uncertainty.sql',
+                            '013_subscription_entitlements_and_usage.sql',
+                            '014_billing_provider_event_ledger.sql'
+                          )) = 14"""
             )
             if not schema_ready:
                 return JSONResponse(
