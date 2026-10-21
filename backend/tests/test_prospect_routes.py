@@ -98,9 +98,9 @@ def test_list_prospects_checks_workspace_membership_and_uses_workspace_filter(mo
         return FakeAuthStore(), "session-token", {"user_id": user_id}
 
     monkeypatch.setattr(prospect_routes, "_authenticated", fake_authenticated)
-    monkeypatch.setattr(app.state, "auth_store", FakeAuthStore(), raising=False)
-    monkeypatch.setattr(app.state, "prospect_store", FakeProspectStore(), raising=False)
     with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = FakeProspectStore()
         response = client.get("/api/v1/prospects", params={
             "workspace_id": "workspace-a", "stage": "qualified", "limit": 10,
         })
@@ -129,8 +129,6 @@ def test_create_prospect_uses_authenticated_user_and_requires_csrf_gate(monkeypa
 
     monkeypatch.setattr(prospect_routes, "_authenticated", fake_authenticated)
     monkeypatch.setattr(prospect_routes, "_check_csrf", lambda request, session: None)
-    monkeypatch.setattr(app.state, "auth_store", FakeAuthStore(), raising=False)
-    monkeypatch.setattr(app.state, "prospect_store", FakeProspectStore(), raising=False)
     payload = {
         "workspace_id": "workspace-a",
         "name": "Jane Example",
@@ -141,6 +139,8 @@ def test_create_prospect_uses_authenticated_user_and_requires_csrf_gate(monkeypa
         "verified_facts": ["The company provides service X."],
     }
     with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = FakeProspectStore()
         response = client.post("/api/v1/prospects", json=payload)
     assert response.status_code == 201
     assert saved["created_by"] == user_id
@@ -165,8 +165,6 @@ def test_create_prospect_rejects_cross_workspace_member(monkeypatch):
 
     monkeypatch.setattr(prospect_routes, "_authenticated", fake_authenticated)
     monkeypatch.setattr(prospect_routes, "_check_csrf", lambda request, session: None)
-    monkeypatch.setattr(app.state, "auth_store", FakeAuthStore(), raising=False)
-    monkeypatch.setattr(app.state, "prospect_store", NeverProspectStore(), raising=False)
     payload = {
         "workspace_id": "workspace-b",
         "name": "Jane Example",
@@ -176,6 +174,8 @@ def test_create_prospect_rejects_cross_workspace_member(monkeypatch):
         "fit_reason": "Public page explicitly lists a matching service.",
     }
     with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = NeverProspectStore()
         response = client.post("/api/v1/prospects", json=payload)
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
