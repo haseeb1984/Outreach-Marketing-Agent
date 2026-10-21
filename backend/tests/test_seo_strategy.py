@@ -31,7 +31,7 @@ def test_strategy_requires_business_context_and_target_query(kwargs):
     [],
     ["x" * 201],
     ["valid query", 123],
-    ["query\\nwith-control"],
+    ["query" + chr(10) + "with-control"],
     ["query"] * 101,
 ])
 def test_strategy_rejects_malformed_or_unbounded_target_queries(target_queries):
