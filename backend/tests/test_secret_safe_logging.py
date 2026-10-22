@@ -15,6 +15,17 @@ def test_redact_common_inline_credentials():
     assert "[REDACTED]" in result
 
 
+def test_redact_tokens_and_oauth_codes_in_request_urls():
+    message = (
+        "GET /verify-email?token=verify-canary&next=/app "
+        "/oauth/callback?code=oauth-canary&state=state-canary"
+    )
+    result = redact_text(message)
+    assert "verify-canary" not in result
+    assert "oauth-canary" not in result
+    assert "state-canary" not in result
+
+
 def test_sensitive_structured_fields_are_redacted_by_key():
     data = {
         "Authorization": "raw-token-value",
