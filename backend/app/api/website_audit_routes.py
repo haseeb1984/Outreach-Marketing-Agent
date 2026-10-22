@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -15,12 +16,33 @@ from app.services.website_fetch import FetchLimits
 router = APIRouter(prefix="/api/v1/website-audits", tags=["website growth"])
 
 
+def _pool(request: Request):
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="website_audit_service_not_configured")
+    return pool
+
+
 class WebsiteAuditRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
     start_url: str = Field(min_length=8, max_length=2048)
     max_pages: int = Field(default=5, ge=1, le=8)
     idempotency_key: str = Field(min_length=8, max_length=180, pattern=r"^[A-Za-z0-9._:-]+$")
+
+    @field_validator("start_url")
+    @classmethod
+    def require_https(cls, value: str) -> str:
+        try:
+            parsed = urlsplit(value.strip())
+            port = parsed.port
+        except ValueError:
+            raise ValueError("invalid_website_url") from None
+        if (parsed.scheme.lower() != "https" or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or port not in (None, 443)):
+            raise ValueError("website_url_must_be_https")
+        return value.strip()
 
 
 @router.get("")
