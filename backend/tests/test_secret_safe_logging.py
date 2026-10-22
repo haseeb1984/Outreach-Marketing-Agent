@@ -1,6 +1,6 @@
 import logging
 
-from app.services.secret_safe_logging import install_secret_redaction, redact_text
+from app.services.secret_safe_logging import install_secret_redaction, redact_text, _safe
 
 
 def test_redact_common_inline_credentials():
@@ -13,6 +13,20 @@ def test_redact_common_inline_credentials():
     assert "abc.def.ghi" not in result
     assert "secretpass" not in result
     assert "[REDACTED]" in result
+
+
+def test_sensitive_structured_fields_are_redacted_by_key():
+    data = {
+        "Authorization": "raw-token-value",
+        "headers": {"Cookie": "session=raw-cookie-value"},
+        "safe_label": "campaign-42",
+    }
+    result = _safe(data)
+    assert result["Authorization"] == "[REDACTED]"
+    assert result["headers"]["Cookie"] == "[REDACTED]"
+    assert result["safe_label"] == "campaign-42"
+    assert "raw-token-value" not in repr(result)
+    assert "raw-cookie-value" not in repr(result)
 
 
 def test_log_record_redacts_message_and_drops_exception_traceback(caplog):
