@@ -304,69 +304,6 @@ def faq_page() -> HTMLResponse:
 
 
 
-@app.get("/app", response_class=HTMLResponse, include_in_schema=False)
-def app_portal() -> HTMLResponse:
-    """Accessible same-origin entry point for account flows; it never handles secrets server-side."""
-    body = r"""
-<section class="hero">
-<p class="eyebrow">Account portal</p><h1>Access your workspace</h1>
-<p>Sign in or create an account to begin. New accounts must verify their email before signing in.</p>
-</section>
-<section class="grid" aria-label="Account actions">
-<article class="card">
-<h2>Sign in</h2>
-<form id="login-form">
-<label for="login-email">Work email</label><input id="login-email" name="email" type="email" autocomplete="username" maxlength="320" required>
-<label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
-<button class="button" type="submit">Sign in</button>
-</form>
-<p><a href="#reset">Forgot your password?</a></p>
-</article>
-<article class="card">
-<h2>Create account</h2>
-<form id="register-form">
-<label for="register-email">Work email</label><input id="register-email" name="email" type="email" autocomplete="email" maxlength="320" required>
-<label for="register-password">Password (12 characters minimum)</label><input id="register-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required>
-<button class="button" type="submit">Create account</button>
-</form>
-<h3>Verification email missing?</h3>
-<form id="resend-form"><label for="resend-email">Work email</label><input id="resend-email" name="email" type="email" autocomplete="email" maxlength="320" required><button type="submit">Resend verification</button></form>
-</article>
-<article class="card" id="reset">
-<h2>Reset password</h2>
-<form id="reset-request-form"><label for="reset-email">Work email</label><input id="reset-email" name="email" type="email" autocomplete="email" maxlength="320" required><button type="submit">Send reset link</button></form>
-</article>
-</section>
-<section class="card" aria-labelledby="session-heading"><h2 id="session-heading">Session</h2><p id="session-status" role="status" aria-live="polite">You are not signed in.</p><button id="signout" type="button" hidden>Sign out</button></section>
-<script>
-(function(){
-const status=document.getElementById('session-status');
-let csrfToken=null;
-async function post(path,data){
- const response=await fetch('/api/v1/auth/'+path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Origin':location.origin,...(csrfToken?{'X-CSRF-Token':csrfToken}:{})},body:JSON.stringify(data)});
- let result={};try{result=await response.json()}catch(_){}
- if(!response.ok)throw new Error(response.status===401?'Email or password is incorrect.':response.status===403?'Request rejected. Refresh the page and try again.':response.status===429?'Too many attempts. Please wait and try again.':response.status===503?'This service is temporarily unavailable. Please try again later.':'Please check the details and try again.');
- return result;
-}
-function message(text){status.textContent=text;}
-function bind(formId,handler){document.getElementById(formId).addEventListener('submit',async function(event){event.preventDefault();const button=this.querySelector('button[type=submit]');button.disabled=true;try{await handler(new FormData(this));}catch(error){message(error.message||'Request failed. Please try again.');}finally{button.disabled=false;}});}
-bind('login-form',async data=>{const result=await post('login',{email:data.get('email'),password:data.get('password')});csrfToken=result.csrf_token;message('Signed in as '+result.user.email+'. Workspace features will appear here as they become available.');document.getElementById('signout').hidden=false;});
-bind('register-form',async data=>{const result=await post('register',{email:data.get('email'),password:data.get('password')});message(result.message||'If registration can proceed, a verification email will be sent.');});
-bind('resend-form',async data=>{const result=await post('resend-verification',{email:data.get('email')});message(result.message||'If the account needs verification, an email will be sent.');});
-bind('reset-request-form',async data=>{const result=await post('password-reset/request',{email:data.get('email')});message(result.message||'If the account is eligible, a password-reset email will be sent.');});
-document.getElementById('signout').addEventListener('click',async function(){this.disabled=true;try{await post('logout',{});csrfToken=null;message('Signed out.');this.hidden=true;}catch(error){message(error.message||'Sign out failed.');}finally{this.disabled=false;}});
-fetch('/api/v1/auth/me',{credentials:'same-origin',cache:'no-store'}).then(async response=>{if(!response.ok)return null;return response.json();}).then(result=>{if(result&&result.user){csrfToken=result.csrf_token;message('Signed in as '+result.user.email+'.');document.getElementById('signout').hidden=false;}}).catch(()=>{});
-})();
-</script>
-"""
-    return _page(
-        "Account portal",
-        "Sign in, create an account, resend email verification, or request a password reset for Outreach Marketing Agent.",
-        "/app",
-        body,
-    )
-
-
 @app.get("/llms.txt", response_class=PlainTextResponse, include_in_schema=False)
 def llms_txt() -> PlainTextResponse:
     content = """# Outreach Marketing Agent
