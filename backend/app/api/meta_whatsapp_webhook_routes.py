@@ -38,7 +38,7 @@ async def verify_meta_webhook(
         raise HTTPException(status_code=503, detail="meta_webhook_verification_not_configured")
     if hub_mode != "subscribe" or not hub_verify_token or not hmac.compare_digest(expected, hub_verify_token):
         raise HTTPException(status_code=403, detail="meta_webhook_verification_rejected")
-    if not hub_challenge or len(hub_challenge) > 512 or not hub_challenge.isdigit():
+    if not hub_challenge or len(hub_challenge) > 512:
         raise HTTPException(status_code=400, detail="invalid_meta_webhook_challenge")
     return PlainTextResponse(hub_challenge, headers={"Cache-Control": "no-store"})
 
