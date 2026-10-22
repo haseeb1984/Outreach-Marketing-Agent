@@ -13,6 +13,9 @@ type Delivery = { id: string; subject?: string; channel?: string; status: string
 type Counts = Record<string, number>;
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
+type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
+type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
+type WebsiteAudit = { report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice: string };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
 async function api<T>(path: string, csrf: string | null, options: RequestInit = {}): Promise<T> {
@@ -59,6 +62,12 @@ export default function DashboardPage() {
   const [researchQuery, setResearchQuery] = useState("");
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
   const [researchBusy, setResearchBusy] = useState(false);
+  const [domainName, setDomainName] = useState("");
+  const [domainChallenge, setDomainChallenge] = useState<DomainChallenge | null>(null);
+  const [domainBusy, setDomainBusy] = useState(false);
+  const [auditUrl, setAuditUrl] = useState("");
+  const [auditReport, setAuditReport] = useState<WebsiteAudit | null>(null);
+  const [auditBusy, setAuditBusy] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
