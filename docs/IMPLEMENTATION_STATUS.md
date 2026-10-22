@@ -80,3 +80,6 @@
 
 
 - WhatsApp policy foundation follow-up on 2026-10-23: migration `026_whatsapp_template_and_window_policy.sql` adds an account-scoped provider-template registry and latest inbound timestamp fields for 24-hour customer-service-window checks. The webhook worker records latest inbound activity for mapped contacts. Added `app/services/whatsapp_send_policy.py`, a fail-closed eligibility evaluator that checks active account, contact stage, documented opt-in, account-specific opt-out, the 24-hour window, and an approved/verified provider template when outside that window. Readiness and PostgreSQL migration setup now include migration 026. **This evaluator is not yet wired into an outbound WhatsApp sender; no WhatsApp messages are sent by it, and live sending remains disabled.** No tests or deployment were run.
+
+
+- Consent isolation hardening on 2026-10-23: recording a renewed WhatsApp opt-in now requires an active WhatsApp account ID, verifies that the account belongs to the workspace, and updates only that account's preference row. This avoids unintentionally clearing opt-out status across other sender accounts. This is an API/store code change; it has not been test-run.
