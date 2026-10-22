@@ -127,7 +127,7 @@ class SMTPAccountStore:
                 """INSERT INTO workspace_email_accounts
                    (id,workspace_id,label,smtp_host,smtp_port,smtp_username,encrypted_password,
                     from_email,from_name,starttls,status,created_by)
-                   VALUES ($1,$2,$3,$4,587,$5,$6,$7,$8,TRUE,'active',$9)
+                   VALUES ($1,$2,$3,$4,587,$5,$6,$7,$8,TRUE,'pending_test',$9)
                    RETURNING id,workspace_id,label,smtp_host,smtp_port,smtp_username,
                              from_email,from_name,starttls,status,created_at,updated_at""",
                 account_id, workspace_id, label, host, username, encrypted, sender, name,
@@ -146,7 +146,7 @@ class SMTPAccountStore:
             )
         return [self._serialize(dict(row)) for row in rows]
 
-    async def get_config(self, *, workspace_id: str, account_id: UUID) -> SMTPAccountConfig:
+    async def get_config(self, *, workspace_id: str, account_id: UUID, allow_pending_test: bool = False) -> SMTPAccountConfig:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT id,workspace_id,smtp_host,smtp_port,smtp_username,encrypted_password,
@@ -154,7 +154,7 @@ class SMTPAccountStore:
                    FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2""",
                 account_id, workspace_id,
             )
-        if row is None or row["status"] != "active":
+        if row is None or row["status"] not in ({"active", "pending_test"} if allow_pending_test else {"active"}):
             raise LookupError("email_account_not_available")
         password = _decrypt_password(row["encrypted_password"], row["workspace_id"], row["id"])
         return SMTPAccountConfig(
@@ -163,6 +163,15 @@ class SMTPAccountStore:
             smtp_from_email=row["from_email"], smtp_from_name=row["from_name"],
             smtp_starttls=row["starttls"], public_base_url=settings.public_base_url,
         )
+
+    async def activate_after_test(self, *, workspace_id: str, account_id: UUID) -> bool:
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                """UPDATE workspace_email_accounts SET status='active',updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status='pending_test'""",
+                account_id, workspace_id,
+            )
+        return result.endswith(" 1")
 
     async def disable(self, *, workspace_id: str, account_id: UUID) -> bool:
         async with self._pool.acquire() as conn:
