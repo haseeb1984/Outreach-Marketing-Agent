@@ -431,7 +431,10 @@ def llms_txt() -> PlainTextResponse:
 - [Home](/): Product purpose and current development status.
 - [Product](/product): Planned capabilities and availability notice.
 - [Pricing](/pricing): Current billing availability; subscriptions are not open yet.
-- [FAQ](/faq): Answers about product status, security, and AI crawler discoverability.\n- [Privacy](/privacy): Data processing and security overview.\n- [Terms](/terms): Preliminary responsible-use terms.\n- [Contact](/contact): Current support contact status.
+- [FAQ](/faq): Answers about product status, security, and AI crawler discoverability.
+- [Privacy](/privacy): Data processing and security overview.
+- [Terms](/terms): Preliminary responsible-use terms.
+- [Contact](/contact): Current support contact status.
 - [API documentation](/docs): Current FastAPI API documentation.
 
 ## Product principles
