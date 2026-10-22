@@ -241,7 +241,7 @@ async def disable_whatsapp_account(
     try:
         async with _pool(request).acquire() as connection:
             row = await connection.fetchrow(
-                """UPDATE workspace_whatsapp_accounts SET status='disabled', updated_at=now()
+                """UPDATE workspace_whatsapp_accounts SET status='disabled', encrypted_access_token=NULL, updated_at=now()
                    WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
                    RETURNING id""",
                 account_id, workspace_id,
