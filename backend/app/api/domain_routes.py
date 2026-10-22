@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-from urllib.parse import urlsplit
-from uuid import UUID
-
 import dns.exception
 import dns.resolver
 from fastapi import APIRouter, HTTPException, Request
