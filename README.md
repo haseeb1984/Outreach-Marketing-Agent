@@ -56,7 +56,7 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 - Frontend: responsive web application; select and document the implementation stack before substantial UI work.
 - Background work: durable job queue and scheduler; do not rely on in-process background tasks for critical sending, AI work, or billing reconciliation.
 - Integrations: OAuth/provider adapters; official WhatsApp Business Platform/Cloud API only.
-- Billing: provider-agnostic adapter, with the actual provider selected only after verifying merchant eligibility, jurisdiction, supported currencies and operational requirements.
+- Billing: Paddle Billing is the selected provider, behind a server-side adapter. Checkout and signed subscription webhook source are implemented; merchant eligibility, product/price catalog, sandbox acceptance, entitlement enforcement across paid operations, and production readiness remain release gates.
 - AI: provider-agnostic LLM interface, structured outputs, validation, evidence checks, and safe fallbacks.
 - Deployment: document free-tier quotas, paid limits, production costs, and scaling constraints. Never commit credentials.
 
