@@ -169,8 +169,11 @@ export default function DashboardPage() {
     const inboxResult = await Promise.allSettled([api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token)]);
     const loadedConversations = inboxResult[0].status === "fulfilled" ? (inboxResult[0].value.items || []) : [];
     setWhatsappConversations(loadedConversations);
-    setSelectedWhatsAppConversation(current => loadedConversations.some(item => item.id === current) ? current : "");
-    if (!loadedConversations.some(item => item.id === selectedWhatsAppConversation)) setWhatsappMessages([]);
+    setSelectedWhatsAppConversation(current => {
+      if (loadedConversations.some(item => item.id === current)) return current;
+      setWhatsappMessages([]);
+      return "";
+    });
 
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
