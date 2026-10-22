@@ -18,13 +18,17 @@ class ProspectStore:
             raise ValueError("pagination_out_of_range")
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
-                """SELECT id, workspace_id, name, company, role, contact_email,
-                          website_url, evidence_url, evidence_observed_at, fit_reason,
-                          verified_facts, stage, notes, created_by, created_at, updated_at
-                   FROM crm_prospects
-                   WHERE workspace_id=$1 AND archived_at IS NULL
-                     AND ($2::text IS NULL OR stage=$2)
-                   ORDER BY updated_at DESC, id
+                """SELECT p.id, p.workspace_id, p.name, p.company, p.role, p.contact_email,
+                          p.website_url, p.evidence_url, p.evidence_observed_at, p.fit_reason,
+                          p.verified_facts, p.stage, p.notes, p.created_by, p.created_at, p.updated_at,
+                          COALESCE(cc.email_suppressed, FALSE) AS email_suppressed,
+                          (cc.whatsapp_opt_in_at IS NOT NULL AND cc.whatsapp_opt_in_evidence_url IS NOT NULL) AS whatsapp_opt_in_documented
+                   FROM crm_prospects p
+                   LEFT JOIN outreach_contact_controls cc
+                     ON cc.workspace_id=p.workspace_id AND cc.prospect_id=p.id
+                   WHERE p.workspace_id=$1 AND p.archived_at IS NULL
+                     AND ($2::text IS NULL OR p.stage=$2)
+                   ORDER BY p.updated_at DESC, p.id
                    LIMIT $3 OFFSET $4""",
                 workspace_id, stage, limit, offset,
             )
