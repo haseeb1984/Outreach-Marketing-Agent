@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
@@ -28,13 +29,14 @@ class FakeLimiter:
         }
 
 
+@contextmanager
 def _client(monkeypatch):
     monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
-    client = TestClient(app, base_url="https://app.example.test")
-    app.state.auth_store = FakeStore()
-    app.state.auth_rate_limiter = FakeLimiter()
-    client.cookies.set("__Host-oma_session", "session-token")
-    return client
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = FakeStore()
+        app.state.auth_rate_limiter = FakeLimiter()
+        client.cookies.set("__Host-oma_session", "session-token")
+        yield client
 
 
 def test_provider_status_requires_auth_and_never_returns_secrets(monkeypatch):
