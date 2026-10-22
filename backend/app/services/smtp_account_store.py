@@ -177,7 +177,7 @@ class SMTPAccountStore:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 """UPDATE workspace_email_accounts SET status='disabled',updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND status='active'""",
+                   WHERE id=$1 AND workspace_id=$2 AND status IN ('active','pending_test')""",
                 account_id, workspace_id,
             )
         return result.endswith(" 1")
