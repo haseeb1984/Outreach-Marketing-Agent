@@ -76,6 +76,7 @@ export default function DashboardPage() {
   const [projectBrandVoice, setProjectBrandVoice] = useState("");
   const [projectCompetitors, setProjectCompetitors] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [researchQuery, setResearchQuery] = useState("");
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
@@ -185,6 +186,7 @@ export default function DashboardPage() {
         setEmail(session.user.email);
         setCsrf(session.csrf_token);
         setWorkspaces(result.items || []);
+        setWorkspaceName(result.items?.[0]?.name || "");
         const first = result.items?.[0]?.id || "";
         setWorkspaceId(first);
         if (first) await loadWorkspaceData(first, session.csrf_token);
@@ -226,6 +228,22 @@ export default function DashboardPage() {
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Workspace member could not be removed.");
+    } finally { setBusy(false); }
+  }
+
+  async function saveWorkspaceName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ workspace_id: string; name: string }>("/api/v1/workspaces/settings", csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, name: workspaceName }),
+      });
+      setWorkspaceName(result.name);
+      setWorkspaces(current => current.map(workspace => workspace.id === workspaceId ? { ...workspace, name: result.name } : workspace));
+      setNotice("Workspace name updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Workspace settings could not be saved.");
     } finally { setBusy(false); }
   }
 
@@ -577,8 +595,9 @@ export default function DashboardPage() {
       <ErrorNotice message={error} />
       {notice && <p className="notice" role="status" aria-live="polite">{notice}</p>}
       {loading ? <section className="card" aria-live="polite">Loading secure workspace data…</section> : <>
-        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; setWorkspaceId(id); await refresh(id, csrf); }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
+        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); await refresh(id, csrf); }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
+          {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
           <div className="actions"><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || !workspaceId}>Refresh workspace</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
         </section>
         {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <section className="section" aria-labelledby="invitations-title"><h2 id="invitations-title">Team invitations</h2>
