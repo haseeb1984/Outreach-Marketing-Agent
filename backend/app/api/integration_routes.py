@@ -19,15 +19,11 @@ from app.services.email_delivery import (
 router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
 
 
-def _configured(*values: str | None) -> bool:
-    return all(isinstance(value, str) and bool(value.strip()) for value in values)
-
-
-def _require_workspace_role(request: Request, session: dict, workspace_id: str, role: str):
+async def _require_workspace_role(request: Request, session: dict, workspace_id: str, role: str):
     store = getattr(request.app.state, "auth_store", None)
     if store is None:
         raise HTTPException(status_code=503, detail="authentication_not_configured")
-    return store.authorize_workspace(
+    return await store.authorize_workspace(
         user_id=session["user_id"], workspace_id=workspace_id, minimum_role=role
     )
 
