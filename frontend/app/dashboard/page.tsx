@@ -14,6 +14,7 @@ type Counts = Record<string, number>;
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
+type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -63,6 +64,14 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [selectedEmailAccountId, setSelectedEmailAccountId] = useState("");
+  const [emailAccountLabel, setEmailAccountLabel] = useState("");
+  const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpFromEmail, setSmtpFromEmail] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("Outreach Marketing Agent");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [projectName, setProjectName] = useState("");
@@ -143,6 +152,10 @@ export default function DashboardPage() {
     setInvitations(invitationResult[0].status === "fulfilled" ? (invitationResult[0].value.items || []) : []);
     const memberResult = await Promise.allSettled([api<{ items: WorkspaceMember[] }>("/api/v1/workspaces/members?workspace_id=" + encodeURIComponent(selectedId), token)]);
     setMembers(memberResult[0].status === "fulfilled" ? (memberResult[0].value.items || []) : []);
+    const emailAccountResult = await Promise.allSettled([api<{ items: EmailAccount[] }>("/api/v1/integrations/email-accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    const loadedEmailAccounts = emailAccountResult[0].status === "fulfilled" ? (emailAccountResult[0].value.items || []) : [];
+    setEmailAccounts(loadedEmailAccounts);
+    setSelectedEmailAccountId(current => loadedEmailAccounts.some(account => account.id === current && account.status === "active") ? current : (loadedEmailAccounts.find(account => account.status === "active")?.id || ""));
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
