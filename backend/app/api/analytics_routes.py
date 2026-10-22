@@ -63,7 +63,16 @@ async def analytics_summary(
                      WHERE workspace_id=$1 AND status IN ('queued','processing')) AS deliveries_pending,
                     (SELECT count(*) FROM outreach_conversation_messages
                      WHERE workspace_id=$1 AND direction='inbound'
-                       AND occurred_at >= now() - ($2::int * interval '1 day')) AS inbound_replies
+                       AND occurred_at >= now() - ($2::int * interval '1 day')) AS inbound_replies,
+                    (SELECT count(*) FROM whatsapp_inbound_messages messages
+                     JOIN whatsapp_conversations conversations
+                       ON conversations.id=messages.conversation_id
+                      AND conversations.workspace_id=messages.workspace_id
+                     WHERE messages.workspace_id=$1
+                       AND messages.received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_inbound_messages,
+                    (SELECT count(*) FROM whatsapp_delivery_status_events
+                     WHERE workspace_id=$1
+                       AND received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_status_events
                 """,
                 workspace_id,
                 since_days,
@@ -78,7 +87,9 @@ async def analytics_summary(
         "counts": counts,
         "definitions": {
             "emails_marked_sent": "Application records marked sent after the SMTP adapter returned successfully; this is not proof of inbox delivery.",
-            "inbound_replies": "Persisted inbound reply events received during the selected period.",
+            "inbound_replies": "Persisted generic inbound reply events received during the selected period; WhatsApp webhook messages are counted separately.",
+            "whatsapp_inbound_messages": "Persisted inbound messages received from mapped WhatsApp accounts during the selected period; not necessarily qualified replies.",
+            "whatsapp_status_events": "Persisted WhatsApp provider status event records received during the selected period; event counts are not unique campaign conversions.",
             "prospects_converted": "Prospects explicitly moved to the converted CRM stage; not independently verified revenue.",
         },
         "unavailable_metrics": [
