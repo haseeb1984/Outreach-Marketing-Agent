@@ -10,6 +10,8 @@ import base64
 import os
 import re
 from uuid import UUID, uuid4
+
+import httpx
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -41,6 +43,17 @@ def _encrypt(token: str, workspace_id: str, account_id: UUID) -> bytes:
     nonce = os.urandom(12)
     aad = ("workspace-whatsapp-account:" + workspace_id + ":" + str(account_id)).encode()
     return nonce + AESGCM(_key()).encrypt(nonce, token.encode("utf-8"), aad)
+
+
+def _decrypt(ciphertext: bytes, workspace_id: str, account_id: UUID) -> str:
+    raw = bytes(ciphertext)
+    if len(raw) < 29:
+        raise HTTPException(status_code=503, detail="whatsapp_credential_decryption_failed")
+    aad = ("workspace-whatsapp-account:" + workspace_id + ":" + str(account_id)).encode()
+    try:
+        return AESGCM(_key()).decrypt(raw[:12], raw[12:], aad).decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_credential_decryption_failed") from None
 
 
 def _pool(request: Request):
@@ -138,6 +151,82 @@ async def create_whatsapp_account(payload: WhatsAppAccountCreate, request: Reque
         if type(exc).__name__ == "UniqueViolationError":
             raise HTTPException(status_code=409, detail="whatsapp_account_or_phone_already_registered") from None
         raise HTTPException(status_code=503, detail="whatsapp_account_create_unavailable") from None
+
+
+@router.post("/{account_id}/verify")
+async def verify_whatsapp_account(
+    account_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict[str, Any]:
+    """Verify that Meta recognizes this token, phone-number ID and WABA relationship."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, "admin", session)
+    version = (settings.meta_graph_api_version or "").strip()
+    if not re.fullmatch(r"v[0-9]{2,3}\.0", version):
+        raise HTTPException(status_code=503, detail="meta_graph_api_version_not_configured")
+    try:
+        async with _pool(request).acquire() as connection:
+            row = await connection.fetchrow(
+                """SELECT waba_id, phone_number_id, encrypted_access_token, status
+                   FROM workspace_whatsapp_accounts WHERE id=$1 AND workspace_id=$2""",
+                account_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="whatsapp_account_not_found")
+        if row["status"] == "disabled":
+            raise HTTPException(status_code=409, detail="whatsapp_account_disabled")
+        token = _decrypt(row["encrypted_access_token"], workspace_id, account_id)
+        headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+        base = "https://graph.facebook.com/" + version
+        timeout = httpx.Timeout(8.0, connect=4.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+            phone_response = await client.get(
+                base + "/" + row["phone_number_id"],
+                params={"fields": "id,display_phone_number,verified_name"},
+                headers=headers,
+            )
+            if phone_response.status_code != 200:
+                raise HTTPException(status_code=422, detail="meta_phone_number_verification_failed")
+            phone_data = phone_response.json()
+            if not isinstance(phone_data, dict) or phone_data.get("id") != row["phone_number_id"]:
+                raise HTTPException(status_code=422, detail="meta_phone_number_id_mismatch")
+            waba_response = await client.get(
+                base + "/" + row["waba_id"] + "/phone_numbers",
+                params={"fields": "id", "limit": "100"},
+                headers=headers,
+            )
+            if waba_response.status_code != 200:
+                raise HTTPException(status_code=422, detail="meta_waba_verification_failed")
+            waba_data = waba_response.json()
+            phone_items = waba_data.get("data", []) if isinstance(waba_data, dict) else []
+            if not isinstance(phone_items, list) or not any(
+                isinstance(item, dict) and item.get("id") == row["phone_number_id"]
+                for item in phone_items
+            ):
+                raise HTTPException(status_code=422, detail="meta_phone_not_in_waba")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="meta_verification_unavailable") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_account_verification_unavailable") from None
+
+    async with _pool(request).acquire() as connection:
+        await connection.execute(
+            """UPDATE workspace_whatsapp_accounts SET status='active', updated_at=now()
+               WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'""",
+            account_id, workspace_id,
+        )
+    return {
+        "verified": True,
+        "account_id": str(account_id),
+        "status": "active",
+        "display_phone_number": phone_data.get("display_phone_number"),
+        "verified_name": phone_data.get("verified_name"),
+        "notice": "Meta account ownership was checked. This does not enable sending; consent, template and delivery safeguards remain required.",
+    }
 
 
 @router.delete("/{account_id}")
