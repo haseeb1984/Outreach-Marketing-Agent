@@ -163,12 +163,20 @@ class CampaignStore:
         return row
 
 
-    async def update_contact_controls(self, *, workspace_id: str, prospect_id: UUID, actor_id: UUID | str, email_suppressed: bool | None, whatsapp_opt_in_confirmed: bool, whatsapp_opt_in_evidence_url: str | None) -> dict[str, Any] | None:
+    async def update_contact_controls(self, *, workspace_id: str, prospect_id: UUID, actor_id: UUID | str, email_suppressed: bool | None, whatsapp_opt_in_confirmed: bool, whatsapp_account_id: UUID | None, whatsapp_opt_in_evidence_url: str | None) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM crm_prospects WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL)", prospect_id, workspace_id)
                 if not exists:
                     return None
+                if whatsapp_opt_in_confirmed:
+                    account_exists = await conn.fetchval(
+                        """SELECT EXISTS(SELECT 1 FROM workspace_whatsapp_accounts
+                           WHERE id=$1 AND workspace_id=$2 AND status='active')""",
+                        whatsapp_account_id, workspace_id,
+                    )
+                    if not account_exists:
+                        raise ValueError("whatsapp_account_not_active")
                 row = await conn.fetchrow("""INSERT INTO outreach_contact_controls (workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,whatsapp_opt_in_evidence_url,updated_by,updated_at) VALUES ($1,$2,COALESCE($3,FALSE),CASE WHEN $4 THEN now() ELSE NULL END,CASE WHEN $4 THEN $5 ELSE NULL END,$6,now()) ON CONFLICT (workspace_id,prospect_id) DO UPDATE SET email_suppressed=COALESCE($3,outreach_contact_controls.email_suppressed),whatsapp_opt_in_at=CASE WHEN $4 THEN now() ELSE outreach_contact_controls.whatsapp_opt_in_at END,whatsapp_opt_in_evidence_url=CASE WHEN $4 THEN $5 ELSE outreach_contact_controls.whatsapp_opt_in_evidence_url END,updated_by=$6,updated_at=now() RETURNING workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,whatsapp_opt_in_evidence_url,updated_by,updated_at""", workspace_id, prospect_id, email_suppressed, whatsapp_opt_in_confirmed, whatsapp_opt_in_evidence_url, UUID(str(actor_id)))
                 if whatsapp_opt_in_confirmed:
                     await conn.execute(
@@ -177,8 +185,9 @@ class CampaignStore:
                            FROM crm_prospects prospect
                            WHERE prospect.id=$1 AND prospect.workspace_id=$2
                              AND prospect.workspace_id=pref.workspace_id
+                             AND pref.account_id=$3
                              AND pref.wa_id=regexp_replace(COALESCE(prospect.contact_phone_e164,''), '[^0-9]', '', 'g')
                              AND pref.opted_out_at IS NOT NULL""",
-                        prospect_id, workspace_id,
+                        prospect_id, workspace_id, whatsapp_account_id,
                     )
         return self._serialize(dict(row))
