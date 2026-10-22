@@ -112,8 +112,10 @@ async def create_email_account(payload: EmailAccountCreate, request: Request) ->
 async def test_email_account(account_id: UUID, request: Request, workspace_id: str = Query(min_length=1, max_length=200)) -> dict:
     await _authorize(request, workspace_id, "admin", csrf=True)
     try:
-        configuration = await _store(request).get_config(workspace_id=workspace_id, account_id=account_id)
+        store = _store(request)
+        configuration = await store.get_config(workspace_id=workspace_id, account_id=account_id, allow_pending_test=True)
         await SMTPEmailDelivery(configuration).test_connection()
+        await store.activate_after_test(workspace_id=workspace_id, account_id=account_id)
         return {"workspace_id": workspace_id, "account_id": str(account_id), "ok": True,
                 "message": "SMTP TLS connection and authentication succeeded. No email was sent."}
     except LookupError:
