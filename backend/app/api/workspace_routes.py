@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -35,7 +35,7 @@ async def create_workspace(payload: WorkspaceCreate, request: Request) -> dict:
     auth_store = getattr(request.app.state, "auth_store", None)
     if auth_store is None:
         raise HTTPException(status_code=503, detail="authentication_not_configured")
-    user_id = session["user_id"]
+    user_id = UUID(str(session["user_id"]))
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
