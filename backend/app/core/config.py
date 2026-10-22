@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     frontend_public_url: str | None = None
     # Brave Search API key is server-only; absence disables live prospect research.
     brave_search_api_key: str | None = None
+    # URL-safe base64-encoded 32-byte key for encrypting connected provider credentials.
+    provider_credential_encryption_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
