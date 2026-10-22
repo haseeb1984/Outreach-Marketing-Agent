@@ -11,13 +11,18 @@ import re
 from typing import Any
 
 _SENSITIVE_ASSIGNMENT = re.compile(
-    r"(?i)(\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"(?i)(\\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
     r"auth(?:orization)?|cookie|set-cookie|client[_-]?secret|webhook[_-]?secret|"
-    r"database[_-]?url|smtp[_-]?(?:username|password)|token)\b\s*[:=]\s*)"
-    r"([^\s,;]+|\"[^\"]*\"|'[^']*')"
+    r"database[_-]?url|smtp[_-]?(?:username|password)|token)\\b\\s*[:=]\\s*)"
+    r"""("[^"]*"|'[^']*'|[^\\s,;]+)"""
 )
-_BEARER = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
-_URL_CREDENTIALS = re.compile(r"(://[^:/\s]+:)[^@/\s]+(@)")
+_BEARER = re.compile(r"(?i)\\b(Bearer|Basic)\\s+[A-Za-z0-9._~+/=-]+")
+_URL_CREDENTIALS = re.compile(r"(://[^:/\\s]+:)[^@/\\s]+(@)")
+_SENSITIVE_KEY = re.compile(
+    r"(?i)(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"authorization|auth|cookie|client[_-]?secret|webhook[_-]?secret|database[_-]?url|"
+    r"smtp[_-]?(username|password)|token|private[_-]?key|credential)"
+)
 
 
 def _configured_secrets() -> tuple[str, ...]:
@@ -40,13 +45,15 @@ def redact_text(value: str) -> str:
     """Redact known environment secrets and common inline credential patterns."""
     for secret in _configured_secrets():
         value = value.replace(secret, "[REDACTED]")
-    value = _SENSITIVE_ASSIGNMENT.sub(r"\1[REDACTED]", value)
-    value = _BEARER.sub(r"\1 [REDACTED]", value)
-    value = _URL_CREDENTIALS.sub(r"\1[REDACTED]\2", value)
+    value = _SENSITIVE_ASSIGNMENT.sub(r"\\1[REDACTED]", value)
+    value = _BEARER.sub(r"\\1 [REDACTED]", value)
+    value = _URL_CREDENTIALS.sub(r"\\1[REDACTED]\\2", value)
     return value
 
 
-def _safe(value: Any) -> Any:
+def _safe(value: Any, *, sensitive_key: bool = False) -> Any:
+    if sensitive_key:
+        return "[REDACTED]"
     if isinstance(value, str):
         return redact_text(value)
     if isinstance(value, tuple):
@@ -54,7 +61,10 @@ def _safe(value: Any) -> Any:
     if isinstance(value, list):
         return [_safe(item) for item in value]
     if isinstance(value, dict):
-        return {redact_text(str(key)): _safe(item) for key, item in value.items()}
+        return {
+            redact_text(str(key)): _safe(item, sensitive_key=bool(_SENSITIVE_KEY.search(str(key))))
+            for key, item in value.items()
+        }
     return value
 
 
