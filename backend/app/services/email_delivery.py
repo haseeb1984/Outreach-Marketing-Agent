@@ -67,7 +67,7 @@ class SMTPEmailDelivery:
         ):
             raise ValueError("public_https_origin_required")
         link = urlunsplit((
-            "https", parts.netloc, parts.path.rstrip("/") + "/reset-password",
+            "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/auth/reset-password",
             urlencode({"token": token}), "",
         ))
         message = EmailMessage()
