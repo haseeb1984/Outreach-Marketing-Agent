@@ -90,7 +90,7 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
                 "X-CSRF-Token": "c" * 43,
             },
         )
-    assert accepted.status_code == 200
+    assert accepted.status_code == 200, accepted.text
     assert accepted.json()["ok"] is True
     assert "No email was sent." in accepted.json()["message"]
     assert calls == ["tested"]
