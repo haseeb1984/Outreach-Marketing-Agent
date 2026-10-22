@@ -218,6 +218,10 @@ async def update_project(project_id: UUID, payload: ProjectUpdate, request: Requ
     values = [project_id, payload.workspace_id]
     for field, value in changes.items():
         column = columns[field]
+        if value is None and field not in {"website_url", "competitors"}:
+            raise HTTPException(status_code=422, detail="project_field_cannot_be_null")
+        if field == "competitors" and value is None:
+            value = []
         if field == "competitors":
             value = json.dumps(value)
         values.append(value)
