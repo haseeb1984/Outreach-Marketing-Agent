@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
     smtp_from_name: str = "Outreach Marketing Agent"
     smtp_starttls: bool = True
+    # Paddle Billing credentials and server-owned plan catalog. Keep all values in deployment secrets/env.
+    paddle_api_key: str | None = None
+    paddle_webhook_secret: str | None = None
+    paddle_environment: str = "sandbox"
+    # JSON object keyed by plan slug: {"price_id":"pri_...","entitlements":{"feature":{"enabled":true,"monthly_limit":100}}}
+    paddle_plans_json: str | None = None
     # High-entropy shared secret for the provider-neutral inbound reply gateway.
     outreach_webhook_secret: str | None = None
     # Meta WhatsApp Cloud API credentials are staging/production secrets, never client-side.
