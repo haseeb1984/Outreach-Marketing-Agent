@@ -62,3 +62,12 @@
 - WhatsApp event-processing implementation: migration `023_whatsapp_conversations_and_status.sql` adds tenant-scoped conversation, inbound-message and delivery-status tables. `app/services/whatsapp_event_processor.py` claims inbox events with PostgreSQL row locks, maps only active phone-number IDs to a workspace, deduplicates provider message IDs, matches known CRM contacts by normalized phone, records inbound text/statuses and marks known CRM prospects as replied. Unmapped accounts are explicitly marked rather than attached to another tenant. This is a callable worker service; a durable scheduler/queue trigger and end-to-end verification remain pending. No tests were run.
 
 - Worker entry point added at `backend/scripts/process_whatsapp_webhooks.py`. It runs one bounded batch (up to 25 inbox events), emits only aggregate counters, rejects missing/non-PostgreSQL database configuration without exposing the DSN, and exits non-zero on processing failures. It is ready for a trusted scheduler invocation, but no scheduler has been configured or executed from this change.
+
+
+## Implementation update — 2026-10-23 (GitHub-only; no tests or deployment run)
+
+- Added `backend/app/api/whatsapp_inbox_routes.py` with authenticated, workspace-authorized, read-only endpoints for listing WhatsApp conversations and their inbound messages. Queries explicitly scope conversations, accounts, prospects and messages to the authorized workspace.
+- Registered the inbox API in FastAPI and added a dashboard inbox showing recent conversations and inbound messages. No reply/send action was added.
+- Hardened the webhook worker retry loop so a failed iteration cannot accidentally increment the previous event's retry counter. Status persistence now uses `ON CONFLICT DO NOTHING`; nullable-timestamp duplicate handling still merits a schema-level follow-up before production.
+- The inbox worker remains a one-shot command and has **not** been scheduled. Configure it through a trusted scheduler/worker after reviewing runtime/database capacity. Webhook processing and dashboard code were not tested in this update.
+- WhatsApp outbound messaging remains deliberately disabled. Before enabling it, implement revocable consent/opt-out records, approved-template and 24-hour-window enforcement, durable outbound idempotency, provider failure handling, and rate/entitlement checks.
