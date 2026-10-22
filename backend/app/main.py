@@ -227,7 +227,7 @@ def root() -> HTMLResponse:
 <h1>Plan better partnerships with evidence, not guesswork.</h1>
 <p>Outreach Marketing Agent is being built as a multi-project workspace for researching relevant public-facing prospects, preparing personalized outreach, reviewing replies, and measuring outcomes.</p>
 <p><a class="button" href="/product">Explore the planned product</a></p>
-<p class="muted">The full SaaS platform is in development. Account registration, paid subscriptions, and provider sending integrations are not yet available.</p>
+<p class="muted">Account registration and the initial workspace foundation are available. Paid subscriptions, verified production billing, and live provider sending integrations are not yet available; do not treat the platform as fully launched.</p>
 </section>
 <section aria-labelledby="principles"><h2 id="principles">Built around trust and relevance</h2>
 <div class="grid">
@@ -258,7 +258,7 @@ def product_page() -> HTMLResponse:
 <article class="card"><h3>Paid SaaS plans</h3><p>Planned subscriptions with server-verified entitlements, usage limits, billing lifecycle handling, and secure hosted checkout.</p></article>
 <article class="card"><h3>Responsible marketing</h3><p>Planned evidence-based content planning, AI crawler discoverability, approval-controlled publishing, and measured growth analytics.</p></article>
 </div></section>
-<p><strong>Availability notice:</strong> These are planned capabilities. They must not be treated as available until implemented, tested, and explicitly released.</p>
+<p><strong>Availability notice:</strong> Account and workspace foundations exist, but this is not a full production SaaS launch. Research-provider coverage, production billing, live email/WhatsApp sending, analytics integrations, and the complete end-to-end customer workflow must be verified before being described as generally available.</p>
 """
     return _page(
         "Product overview",
@@ -290,7 +290,7 @@ def pricing_page() -> HTMLResponse:
 def faq_page() -> HTMLResponse:
     body = """
 <section class="hero"><p class="eyebrow">FAQ</p><h1>Frequently asked questions</h1>
-<h2>Can I create an account or buy a subscription now?</h2><p>Not yet. Account management, production billing, and paid feature entitlements are planned and must pass release checks before launch.</p>
+<h2>Can I create an account or buy a subscription now?</h2><p>Account registration and the initial workspace foundation are available. Paid subscriptions, production checkout, and live paid entitlements are not yet available and must pass release checks before launch.</p>
 <h2>Will the AI send outreach automatically?</h2><p>The initial design uses human-reviewed drafts. Any future sending automation must be explicitly enabled, compliant with provider rules, rate-limited, auditable, and stopped by opt-out or safety controls.</p>
 <h2>Can AI search agents discover the website?</h2><p>The site is being prepared for crawlable public content, sitemap and robots rules, and a maintained llms.txt directory. These help communicate the site's public content but cannot guarantee that any crawler will visit, index, cite, or recommend it.</p>
 <h2>Will the platform store payment card details?</h2><p>The intended billing design uses a provider-hosted checkout or approved tokenization and does not store raw card numbers or CVV in this application.</p>
