@@ -5,10 +5,11 @@ not imply that billing, account management, or outreach integrations are already
 """
 from contextlib import asynccontextmanager
 from html import escape
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import asyncpg
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from app.core.config import settings
@@ -69,6 +70,37 @@ app = FastAPI(
     version="0.1.0",
     description="Evidence-led, human-approved influencer and outreach campaign workspace.",
     lifespan=lifespan,
+)
+
+
+def _cors_origins() -> list[str]:
+    """Normalize exact HTTPS frontend origins for credentialed browser requests."""
+    configured = [item.strip() for item in (settings.frontend_origins or "").split(",") if item.strip()]
+    if not configured and settings.public_base_url:
+        configured = [settings.public_base_url.strip()]
+    origins: list[str] = []
+    for value in configured:
+        try:
+            parsed = urlsplit(value)
+            if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+                continue
+            if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+                continue
+            port = parsed.port
+            origin = "https://" + parsed.hostname.lower() + (f":{port}" if port is not None and port != 443 else "")
+            if origin not in origins:
+                origins.append(origin)
+        except ValueError:
+            continue
+    return origins
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
 from app.api.auth_routes import router as auth_router
