@@ -70,6 +70,43 @@ class DeliveryStore:
                   WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
         return result.endswith(" 1")
 
+    async def reconcile_stale_processing(self, *, older_than_seconds: int = 900, limit: int = 100) -> int:
+        """Move abandoned in-flight sends to an operator-visible uncertain state.
+
+        Never automatically requeue a timed-out send: the provider may have accepted it
+        before the worker disappeared. A bounded update avoids a large table-wide lock.
+        """
+        if isinstance(older_than_seconds, bool) or not isinstance(older_than_seconds, int) or not 60 <= older_than_seconds <= 86400:
+            raise ValueError("stale_processing_age_out_of_range")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("reconciliation_limit_out_of_range")
+        async with self._pool.acquire() as c:
+            result = await c.execute(
+                """WITH stale AS (
+                       SELECT id
+                       FROM outreach_deliveries
+                       WHERE status='processing'
+                         AND processing_at IS NOT NULL
+                         AND processing_at < now() - ($1 * interval '1 second')
+                       ORDER BY processing_at ASC, id
+                       FOR UPDATE SKIP LOCKED
+                       LIMIT $2
+                   )
+                   UPDATE outreach_deliveries AS q
+                   SET status='uncertain',
+                       error_code='worker_lost_outcome_unknown',
+                       updated_at=now()
+                   FROM stale
+                   WHERE q.id=stale.id AND q.status='processing'""",
+                older_than_seconds,
+                limit,
+            )
+        # asyncpg command tags end with the affected row count.
+        try:
+            return int(result.rsplit(" ", 1)[-1])
+        except (AttributeError, ValueError):
+            return 0
+
     @staticmethod
     def _serialize(r: dict[str,Any])->dict[str,Any]:
         for k in ("id","draft_id","queued_by","email_account_id"):
