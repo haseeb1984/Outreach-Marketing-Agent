@@ -54,7 +54,7 @@ def test_log_record_redacts_message_and_drops_exception_traceback(caplog):
     assert "canary-token" not in output
     assert "traceback_redacted" in output
 
-    
+
 def test_redact_json_string_fields_in_log_messages():
     message = '{"password":"json-canary","api_key":"key-canary","safe":"campaign-42"}'
     result = redact_text(message)
