@@ -285,8 +285,9 @@ async def readiness() -> Response:
                             '021_workspace_whatsapp_accounts.sql',
                             '022_prospect_whatsapp_phone.sql',
                             '023_whatsapp_conversations_and_status.sql',
-                            '024_whatsapp_contact_preferences.sql'
-                          )) = 19"""
+                            '024_whatsapp_contact_preferences.sql',
+                            '025_whatsapp_status_event_dedup.sql'
+                          )) = 20"""
             )
             if not schema_ready:
                 return JSONResponse(
