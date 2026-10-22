@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     trusted_egress_proxy_url: str | None = None
     # Set to the real HTTPS origin in each deployment to enable canonical URLs/sitemap.
     public_base_url: str | None = None
+    # Comma-separated exact HTTPS origins for the Hostinger frontend; no wildcard origins.
+    frontend_origins: str = ""
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
