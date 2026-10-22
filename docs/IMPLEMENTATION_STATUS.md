@@ -51,7 +51,7 @@
 - **Important limitation:** this is webhook intake only. It does not yet map phone-number IDs to workspace-owned accounts, process message/status events into CRM conversations, validate opt-in/template eligibility, or enable outbound WhatsApp sends. Those remain open implementation work.
 - This update was committed directly to `main`. Automated tests, deployment, and live Meta webhook acceptance were intentionally not run, so runtime correctness is not claimed.
 
-- Follow-up implementation: added migration `021_workspace_whatsapp_accounts.sql` and admin-authorized account management APIs. Access tokens are AES-GCM encrypted with the environment-managed provider credential key, never returned to the client, and new accounts remain `pending_verification`. The PostgreSQL migration setup now includes migrations 020 and 021. No tests were run.
+- Follow-up implementation: added migration `021_workspace_whatsapp_accounts.sql` and admin-authorized account management APIs. Access tokens are AES-GCM encrypted with the environment-managed provider credential key, never returned to the client, and new accounts remain `pending_verification`. The PostgreSQL migration setup now includes migrations 020 through 022. No tests were run.
 
 - Additional implementation: added workspace-admin UI to register/list/disable Meta WhatsApp accounts. The access token input is cleared after a successful save; API responses do not return credentials. Added crawlable `/privacy`, `/terms`, and `/contact` pages, footer navigation and sitemap entries. These are preliminary product notices, not a substitute for operator-specific legal review or a real support contact.
 
