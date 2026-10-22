@@ -40,11 +40,12 @@ class EnqueueDelivery(BaseModel):
  model_config=ConfigDict(extra="forbid")
  workspace_id: str=Field(min_length=1,max_length=200)
  idempotency_key: str=Field(min_length=8,max_length=200,pattern=r"^[A-Za-z0-9._:-]+$")
+ email_account_id: UUID|None=None
 @router.post("/drafts/{draft_id}/enqueue",status_code=201)
 async def enqueue_delivery(draft_id: UUID,payload: EnqueueDelivery,request: Request):
  _,_,s=await _authenticated(request); _check_csrf(request,s); await _authorize(request,payload.workspace_id,"admin",s)
- try: return await _store(request).enqueue(workspace_id=payload.workspace_id,draft_id=draft_id,actor_id=s["user_id"],idempotency_key=payload.idempotency_key)
- except LookupError: raise HTTPException(status_code=404,detail="draft_not_found") from None
+ try: return await _store(request).enqueue(workspace_id=payload.workspace_id,draft_id=draft_id,actor_id=s["user_id"],idempotency_key=payload.idempotency_key,email_account_id=payload.email_account_id)
+ except LookupError as exc: raise HTTPException(status_code=404,detail=str(exc)) from None
  except ValueError as e: raise HTTPException(status_code=409 if str(e)=="idempotency_key_conflict" else 422,detail=str(e)) from None
  except Exception: raise HTTPException(status_code=503,detail="delivery_enqueue_unavailable") from None
 @router.get("/deliveries")
