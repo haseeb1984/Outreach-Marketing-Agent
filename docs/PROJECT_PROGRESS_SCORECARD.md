@@ -45,7 +45,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [~] Email queue/send and SMTP diagnostics exist in code; live deliverability has not been verified here.
 - [x] Meta WhatsApp webhook intake, signature validation, durable event storage and account mapping foundations exist.
 - [~] WhatsApp account administration, inbound inbox and contact consent safeguards exist in code; runtime acceptance is pending.
-- [~] A fail-closed policy evaluator and provider-template registry foundation now check active account, documented opt-in, account-specific opt-out, the 24-hour customer-service window, and approved/verified templates. The evaluator is not yet wired into an outbound sender.
+- [~] A fail-closed policy evaluator and provider-template registry foundation now check active account, documented opt-in, account-specific opt-out, the 24-hour customer-service window, and approved/verified templates. Re-consent requires selecting an active WhatsApp account so it cannot clear opt-outs for other accounts. The evaluator is not yet wired into an outbound sender.
 - [ ] WhatsApp outbound sending is intentionally disabled until the policy is integrated, durable provider sends/error reconciliation are implemented, and the end-to-end flow is verified.
 
 ### Phase 4 — Outreach and reply management: 70%
@@ -76,7 +76,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 
 - Analytics API now counts inbound messages from mapped WhatsApp conversations and persisted WhatsApp delivery-status events over the selected period.
 - Dashboard analytics adds separate **WhatsApp inbound** and **WhatsApp status events** metrics.
-- Consent and opt-out safeguards, migrations 024/025 and readiness/test migration setup were committed in the preceding implementation round.
+- Consent and opt-out safeguards, migrations 024/025/026 and readiness/test migration setup were committed in the preceding implementation rounds.
 
 ## Next implementation order
 
