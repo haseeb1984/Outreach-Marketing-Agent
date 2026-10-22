@@ -185,8 +185,8 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
                     """INSERT INTO security_audit_events
                        (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
                        VALUES ($1,$2,'workspace.invitation.accepted','success',$3::jsonb,$4)""",
-                    invitation["workspace_id"], UUID(str(session["user_id"]),
-                    '{"role":"' + invitation["role"] + '"}', now,
+                    invitation["workspace_id"], UUID(str(session["user_id"])),
+                    '{"role":"' + invitation["role"] + '"}, now,
                 )
                 return {"workspace_id": invitation["workspace_id"], "role": invitation["role"], "message": "Workspace invitation accepted."}
     except HTTPException:
