@@ -69,6 +69,21 @@ class ProspectCreate(BaseModel):
         return list(dict.fromkeys(item.strip() for item in value))
 
 
+class ContactControlsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    email_suppressed: bool | None = None
+    whatsapp_opt_in_confirmed: bool = False
+    whatsapp_opt_in_evidence_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("whatsapp_opt_in_evidence_url")
+    @classmethod
+    def validate_opt_in_evidence(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return _https_url(value)
+
+
 class ProspectUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
@@ -134,6 +149,33 @@ async def update_prospect(prospect_id: UUID, payload: ProspectUpdate, request: R
         raise HTTPException(status_code=422, detail="no_prospect_updates_supplied") from None
     except Exception:
         raise HTTPException(status_code=503, detail="prospect_update_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=404, detail="prospect_not_found")
+    return result
+
+
+@router.put("/{prospect_id}/contact-controls")
+async def update_contact_controls(prospect_id: UUID, payload: ContactControlsUpdate, request: Request):
+    """Let an authorized workspace admin record suppression or documented WhatsApp opt-in."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    if payload.whatsapp_opt_in_confirmed and not payload.whatsapp_opt_in_evidence_url:
+        raise HTTPException(status_code=422, detail="whatsapp_opt_in_evidence_required")
+    store = getattr(request.app.state, "campaign_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="contact_controls_not_configured")
+    try:
+        result = await store.update_contact_controls(
+            workspace_id=payload.workspace_id,
+            prospect_id=prospect_id,
+            actor_id=session["user_id"],
+            email_suppressed=payload.email_suppressed,
+            whatsapp_opt_in_confirmed=payload.whatsapp_opt_in_confirmed,
+            whatsapp_opt_in_evidence_url=payload.whatsapp_opt_in_evidence_url,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="contact_controls_update_unavailable") from None
     if result is None:
         raise HTTPException(status_code=404, detail="prospect_not_found")
     return result
