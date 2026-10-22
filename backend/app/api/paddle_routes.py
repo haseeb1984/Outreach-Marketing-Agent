@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -166,6 +166,7 @@ async def paddle_webhook(request: Request):
     if event_type not in {
         "subscription.created", "subscription.updated", "subscription.canceled",
         "subscription.past_due", "subscription.paused", "subscription.resumed",
+        "subscription.activated",
     }:
         # Acknowledge unrelated, correctly signed notifications without granting access.
         return {"received": True, "outcome": "ignored"}
@@ -196,23 +197,50 @@ async def paddle_webhook(request: Request):
         status = "cancelled"
     elif event_type == "subscription.paused":
         status = "paused"
+    elif event_type in {"subscription.activated", "subscription.resumed"}:
+        status = "active"
     if status is None:
         raise HTTPException(status_code=422, detail="subscription_status_unsupported")
 
     current_period = data.get("current_billing_period")
-    if not isinstance(current_period, dict):
-        raise HTTPException(status_code=422, detail="billing_period_missing")
     try:
+        occurred_at = _datetime(payload["occurred_at"])
+        if isinstance(current_period, dict):
+            period_starts_at = _datetime(current_period["starts_at"])
+            period_ends_at = _datetime(current_period["ends_at"])
+        elif status in {"cancelled", "paused"}:
+            # Paddle omits current_billing_period for canceled/paused subscriptions.
+            # Preserve the last known period where possible; status still denies access.
+            pool = getattr(request.app.state, "db_pool", None)
+            prior = None
+            if pool is not None:
+                async with pool.acquire() as conn:
+                    prior = await conn.fetchrow(
+                        """SELECT billing_period_starts_at,billing_period_ends_at
+                           FROM workspace_subscriptions
+                           WHERE workspace_id=$1 AND provider='paddle'
+                             AND provider_subscription_id=$2""",
+                        workspace_id, str(data["id"]),
+                    )
+            if prior is not None:
+                period_starts_at = prior["billing_period_starts_at"]
+                period_ends_at = prior["billing_period_ends_at"]
+            else:
+                # A terminal event may arrive before creation; canceled/paused status denies access.
+                period_starts_at = occurred_at
+                period_ends_at = occurred_at + timedelta(seconds=1)
+        else:
+            raise ValueError("missing_billing_period")
         event = VerifiedBillingEvent(
             provider="paddle",
             event_id=str(payload["event_id"]),
             workspace_id=workspace_id,
             provider_customer_id=data.get("customer_id"),
             provider_subscription_id=str(data["id"]),
-            event_created_at=_datetime(payload["occurred_at"]),
+            event_created_at=occurred_at,
             subscription_status=status,
-            period_starts_at=_datetime(current_period["starts_at"]),
-            period_ends_at=_datetime(current_period["ends_at"]),
+            period_starts_at=period_starts_at,
+            period_ends_at=period_ends_at,
             entitlements=plan["entitlements"],
         )
         store = getattr(request.app.state, "billing_lifecycle_store", None)
