@@ -83,3 +83,6 @@
 
 
 - Consent isolation hardening on 2026-10-23: recording a renewed WhatsApp opt-in now requires an active WhatsApp account ID, verifies that the account belongs to the workspace, and updates only that account's preference row. This avoids unintentionally clearing opt-out status across other sender accounts. This is an API/store code change; it has not been test-run.
+
+
+- WhatsApp policy test coverage added on 2026-10-23: `backend/tests/test_whatsapp_send_policy.py` now covers inactive account, missing prospect, missing documented consent, do-not-contact suppression, account-specific opt-out, open customer-service window, and missing approved provider template. These tests were authored but intentionally not run in this code-first pass. This does not establish that the tests pass or enable WhatsApp sending.
