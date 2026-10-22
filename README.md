@@ -53,12 +53,12 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 
 - Backend: Python + FastAPI.
 - Data: PostgreSQL; migrations required for every schema change.
-- Frontend: responsive web application; select and document the implementation stack before substantial UI work.
+- Frontend: Next.js + TypeScript + Tailwind, deployed to Hostinger Business (not Vercel). Hostinger is the home for the public website and customer-facing frontend/dashboard; publish via the agreed Hostinger deployment workflow and keep secrets server-side.
 - Background work: durable job queue and scheduler; do not rely on in-process background tasks for critical sending, AI work, or billing reconciliation.
 - Integrations: OAuth/provider adapters; official WhatsApp Business Platform/Cloud API only.
 - Billing: Paddle Billing is the selected provider, behind a server-side adapter. Checkout and signed subscription webhook source are implemented; merchant eligibility, product/price catalog, sandbox acceptance, entitlement enforcement across paid operations, and production readiness remain release gates.
 - AI: provider-agnostic LLM interface, structured outputs, validation, evidence checks, and safe fallbacks.
-- Deployment: document free-tier quotas, paid limits, production costs, and scaling constraints. Never commit credentials.
+- Deployment: frontend on Hostinger Business; FastAPI backend remains on Vercel at `https://outreach-marketing-agent.vercel.app` until a verified backend migration is explicitly approved. Frontend talks to the backend over HTTPS only; it never connects directly to the database. Document Hostinger/Vercel quotas and never commit credentials.
 
 ## Quality and release gates
 
@@ -77,6 +77,6 @@ The product should be engineered to maximize the chance of beating relevant comp
 
 ## Development status
 
-The current repository contains project documentation, a basic FastAPI API, and an initial server-rendered public marketing surface with product/pricing/FAQ pages, robots.txt, llms.txt, and configurable sitemap generation. It is **not yet a complete SaaS product**: customer identity, authenticated dashboard, persistence, tenant authorization, billing, subscription entitlements, provider integrations, and complete workflows still need implementation and verification. The public pages and discovery endpoints also require CI results and deployment configuration checks before being treated as production-ready. No production billing or WCAG/SEO/performance compliance is claimed.
+The current repository contains project documentation and a FastAPI API with an initial server-rendered marketing surface. The intended production frontend is a separate Next.js app in `/frontend`, deployed to Hostinger Business; the FastAPI backend remains on Vercel. Do not treat the backend's temporary HTML surface as the final frontend deployment. It is **not yet a complete SaaS product**: customer identity, authenticated dashboard, persistence, tenant authorization, billing, subscription entitlements, provider integrations, and complete workflows still need implementation and verification. The public pages and discovery endpoints also require CI results and deployment configuration checks before being treated as production-ready. No production billing or WCAG/SEO/performance compliance is claimed.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SAFETY_AND_COMPLIANCE.md](docs/SAFETY_AND_COMPLIANCE.md), [docs/QUALITY_STANDARDS.md](docs/QUALITY_STANDARDS.md), and [docs/SAAS_PLATFORM_REQUIREMENTS.md](docs/SAAS_PLATFORM_REQUIREMENTS.md).
