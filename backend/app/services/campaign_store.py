@@ -54,6 +54,8 @@ class CampaignStore:
                 if campaign is None or prospect is None:
                     return None
                 p = dict(prospect)
+                if p.get("stage") == "do_not_contact":
+                    raise ValueError("contact_suppressed")
                 controls = await conn.fetchrow("SELECT * FROM outreach_contact_controls WHERE workspace_id=$1 AND prospect_id=$2", workspace_id, prospect_id)
                 if channel == "email":
                     if not p.get("contact_email"):
