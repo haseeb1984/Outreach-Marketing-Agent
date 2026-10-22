@@ -64,6 +64,10 @@ export default function DashboardPage() {
   const [businessName, setBusinessName] = useState("");
   const [offer, setOffer] = useState("");
   const [targetProfile, setTargetProfile] = useState("");
+  const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [selectedProspect, setSelectedProspect] = useState("");
+  const [draftChannel, setDraftChannel] = useState("email");
+  const [draftCallToAction, setDraftCallToAction] = useState("");
   const [prospectName, setProspectName] = useState("");
   const [prospectCompany, setProspectCompany] = useState("");
   const [prospectEmail, setProspectEmail] = useState("");
@@ -169,6 +173,30 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
+  async function generateDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !selectedCampaign || !selectedProspect) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/drafts", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          campaign_id: selectedCampaign,
+          prospect_id: selectedProspect,
+          channel: draftChannel,
+          call_to_action: draftCallToAction,
+          idempotency_key: "draft-" + crypto.randomUUID(),
+        }),
+      });
+      setDraftCallToAction("");
+      setNotice("Draft created and placed in the review queue. Nothing was sent.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Draft could not be generated.");
+    } finally { setBusy(false); }
+  }
+
   async function reviewDraft(draft: Draft, decision: "approved" | "rejected") {
     if (!workspaceId || !csrf || !window.confirm("Confirm " + decision + " for this draft? This does not send a message.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -209,7 +237,7 @@ export default function DashboardPage() {
     ["Prospects", "prospects_total"], ["Qualified", "prospects_qualified"],
     ["Active campaigns", "campaigns_active"], ["Drafts awaiting review", "drafts_pending_approval"],
     ["Approved drafts", "drafts_approved"], ["Replies recorded", "inbound_replies"],
-    ["Marked sent", "emails_marked_sent"], ["Failed or uncertain", "deliveries_failed"],
+    ["Marked sent", "emails_marked_sent"], ["Failed deliveries", "deliveries_failed"], ["Uncertain outcomes", "deliveries_uncertain"],
   ];
 
   return <>
@@ -234,6 +262,7 @@ export default function DashboardPage() {
         </div></section>
         <section className="section"><h2>Campaigns</h2><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div></section>
         <section className="section"><h2>Prospect CRM</h2><div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p><p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p></article>) : <article className="card"><p>No prospects saved yet.</p></article>}</div></section>
+        <section className="section"><h2>Prepare an outreach draft</h2><article className="card"><p className="fine">Draft generation uses workspace entitlements and saved prospect evidence. Every draft enters review; this form never sends a message.</p><form onSubmit={generateDraft}><div className="field"><label htmlFor="draft-campaign">Campaign</label><select id="draft-campaign" required value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}><option value="">Choose a campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="field"><label htmlFor="draft-prospect">Prospect</label><select id="draft-prospect" required value={selectedProspect} onChange={e=>setSelectedProspect(e.target.value)}><option value="">Choose a prospect</option>{prospects.map(p=><option key={p.id} value={p.id}>{p.name} · {p.company}</option>)}</select></div><div className="field"><label htmlFor="draft-channel">Channel</label><select id="draft-channel" value={draftChannel} onChange={e=>setDraftChannel(e.target.value)}><option value="email">Email</option><option value="whatsapp">WhatsApp draft (eligibility checked by backend)</option></select></div><div className="field"><label htmlFor="draft-cta">Call to action</label><textarea id="draft-cta" required maxLength={500} value={draftCallToAction} onChange={e=>setDraftCallToAction(e.target.value)} placeholder="Suggest a short, relevant next step" /></div><button className="button" disabled={busy || !canWrite || !workspaceId || !campaigns.length || !prospects.length}>Generate draft for review</button></form></article></section>
         <section className="section"><h2>Draft review queue</h2><p className="fine">Approving a draft does not send it. Sending remains a separate explicit action.</p><div className="cards">{drafts.length ? drafts.map(d=><article className="card" key={d.id}><p className="eyebrow">{d.channel || "Outreach"} · {d.status}</p><h3>{d.subject || d.prospect_name || "Outreach draft"}</h3><p>{d.body || "Draft content is not available."}</p>{d.status === "pending_approval" && <div className="actions"><button type="button" className="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"approved")}>Approve draft</button><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"rejected")}>Reject</button></div>}</article>) : <article className="card"><p>No drafts yet. Draft generation requires configured paid entitlements and eligible prospect evidence.</p></article>}</div></section>
       </>}
     </main>
