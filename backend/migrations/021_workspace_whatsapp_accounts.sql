@@ -1,7 +1,7 @@
 -- Workspace-scoped Meta WhatsApp account registry. Credentials are encrypted at rest.
 CREATE TABLE IF NOT EXISTS workspace_whatsapp_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     label VARCHAR(120) NOT NULL,
     waba_id VARCHAR(128) NOT NULL,
     phone_number_id VARCHAR(128) NOT NULL UNIQUE,
