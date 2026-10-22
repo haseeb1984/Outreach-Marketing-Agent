@@ -14,8 +14,8 @@ _SENSITIVE_ASSIGNMENT = re.compile(
     r"(?i)(\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
     r"id[_-]?token|auth(?:orization)?|authorization[_-]?code|oauth[_-]?code|code|"
     r"cookie|set-cookie|client[_-]?secret|webhook[_-]?secret|private[_-]?key|"
-    r"database[_-]?url|smtp[_-]?(?:username|password)|session|csrf|signature|sig|token)"
-    r"\b\s*[:=]\s*)"
+    r"database[_-]?url|smtp[_-]?(?:username|password)|session|csrf|signature|sig|"
+    r"state|nonce|verifier|challenge|token)\b\s*[:=]\s*)"
     r'''("[^"]*"|'[^']*'|[^\s,;&]+)'''
 )
 _BEARER = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
@@ -25,7 +25,7 @@ _SENSITIVE_KEY = re.compile(
     r"id[_-]?token|authorization|auth|authorization[_-]?code|oauth[_-]?code|"
     r"cookie|client[_-]?secret|webhook[_-]?secret|database[_-]?url|private[_-]?key|"
     r"credential|session|csrf|signature|(^|[_-])sig($|[_-])|(^|[_-])code($|[_-])|"
-    r"smtp[_-]?(username|password)|token)"
+    r"state|nonce|verifier|challenge|smtp[_-]?(username|password)|token)"
 )
 
 
