@@ -99,6 +99,7 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                workspace_name = await conn.fetchval("SELECT name FROM workspaces WHERE id=$1", payload.workspace_id)
                 await conn.execute(
                     """UPDATE workspace_invitations SET status='revoked',revoked_at=$3
                        WHERE workspace_id=$1 AND invited_email=$2 AND status='pending'""",
@@ -115,7 +116,7 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
                 invitation_id = row["id"]
         try:
             await SMTPEmailDelivery().send_workspace_invitation_email(
-                recipient=email, token=token, workspace_name="Workspace",
+                recipient=email, token=token, workspace_name=workspace_name or "Workspace",
                 role=payload.role, expires_at=expires_at,
             )
         except (EmailDeliveryFailed, EmailDeliveryNotConfigured, ValueError):
