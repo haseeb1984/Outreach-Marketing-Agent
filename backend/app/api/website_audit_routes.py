@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.services.website_discovery import discover_and_crawl
