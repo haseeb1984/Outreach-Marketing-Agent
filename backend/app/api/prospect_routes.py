@@ -51,7 +51,7 @@ class ProspectCreate(BaseModel):
     company: str = Field(min_length=1, max_length=240)
     role: str | None = Field(default=None, max_length=160)
     contact_email: str | None = Field(default=None, max_length=320)
-    contact_phone_e164: str | None = Field(default=None, min_length=9, max_length=16, pattern=r"^\\+[1-9][0-9]{7,14}$")
+    contact_phone_e164: str | None = Field(default=None, min_length=9, max_length=16, pattern=r"^\+[1-9][0-9]{7,14}$")
     website_url: str = Field(min_length=8, max_length=2048)
     evidence_url: str = Field(min_length=8, max_length=2048)
     fit_reason: str = Field(min_length=1, max_length=2000)
