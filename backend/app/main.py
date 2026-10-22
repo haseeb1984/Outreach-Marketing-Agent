@@ -118,6 +118,7 @@ from app.api.paddle_routes import router as paddle_router
 from app.api.analytics_routes import router as analytics_router
 from app.api.integration_routes import router as integration_router
 from app.api.research_routes import router as research_router
+from app.api.website_audit_routes import router as website_audit_router
 from app.api.dashboard_routes import router as dashboard_router
 
 app.include_router(auth_router)
@@ -130,6 +131,7 @@ app.include_router(paddle_router)
 app.include_router(analytics_router)
 app.include_router(integration_router)
 app.include_router(research_router)
+app.include_router(website_audit_router)
 app.include_router(dashboard_router)
 
 PUBLIC_PAGES = [
