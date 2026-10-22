@@ -11,15 +11,15 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **57/100** | Weighted score across the six product phases below |
+| Overall implementation progress | **58/100** | Weighted score across the six product phases below |
 | Phase 1 — Core platform | 80% | Identity, workspace, CRM and project foundations |
 | Phase 2 — Discovery and research | 50% | Public-web research and site-audit foundations; deeper competitor/influencer intelligence remains incomplete |
-| Phase 3 — Provider integrations | 55% | SMTP and WhatsApp integration foundations exist; WhatsApp outbound is disabled |
+| Phase 3 — Provider integrations | 58% | SMTP and WhatsApp integration foundations exist; WhatsApp outbound is disabled |
 | Phase 4 — Outreach and replies | 70% | Campaigns, approval queue, email delivery and reply ingestion foundations |
 | Phase 5 — Automation and analytics | 45% | Entitlements and activity analytics exist; durable scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 20% | Some safety/readiness code exists; CI, live provider acceptance and release validation are not complete |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(55×0.20)+(70×0.20)+(45×0.15)+(20×0.10)=57.25`, rounded to **57%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(58×0.20)+(70×0.20)+(45×0.15)+(20×0.10)=57.85`, rounded to **58%**.
 
 ## Phase-by-phase checkpoints
 
@@ -39,13 +39,14 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [ ] Deeper competitor intelligence and repeatable comparison workflow remain incomplete.
 - [ ] Dedicated influencer discovery/scoring and verified deduplication workflow remain incomplete.
 
-### Phase 3 — Email and WhatsApp integrations: 55%
+### Phase 3 — Email and WhatsApp integrations: 58%
 
 - [x] Workspace email-account records and encrypted credential storage foundations.
 - [~] Email queue/send and SMTP diagnostics exist in code; live deliverability has not been verified here.
 - [x] Meta WhatsApp webhook intake, signature validation, durable event storage and account mapping foundations exist.
 - [~] WhatsApp account administration, inbound inbox and contact consent safeguards exist in code; runtime acceptance is pending.
-- [ ] WhatsApp outbound sending is intentionally disabled until template approval, 24-hour customer-service window, provider error handling and send-time eligibility rules are implemented and verified.
+- [~] A fail-closed policy evaluator and provider-template registry foundation now check active account, documented opt-in, account-specific opt-out, the 24-hour customer-service window, and approved/verified templates. The evaluator is not yet wired into an outbound sender.
+- [ ] WhatsApp outbound sending is intentionally disabled until the policy is integrated, durable provider sends/error reconciliation are implemented, and the end-to-end flow is verified.
 
 ### Phase 4 — Outreach and reply management: 70%
 
