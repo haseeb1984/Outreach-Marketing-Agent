@@ -759,6 +759,7 @@ export default function DashboardPage() {
     ["Prospects", "prospects_total"], ["Qualified", "prospects_qualified"],
     ["Active campaigns", "campaigns_active"], ["Drafts awaiting review", "drafts_pending_approval"],
     ["Approved drafts", "drafts_approved"], ["Replies recorded", "inbound_replies"],
+    ["WhatsApp inbound", "whatsapp_inbound_messages"], ["WhatsApp status events", "whatsapp_status_events"],
     ["Marked sent", "emails_marked_sent"], ["Failed deliveries", "deliveries_failed"], ["Uncertain outcomes", "deliveries_uncertain"],
   ];
 
