@@ -8,12 +8,6 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
-export default async function AcceptInvitationPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ token?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const token = typeof params.token === "string" ? params.token : "";
-  return <InvitationAcceptance token={token} />;
+export default function AcceptInvitationPage() {
+  return <InvitationAcceptance />;
 }
