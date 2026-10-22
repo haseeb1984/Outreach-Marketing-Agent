@@ -18,7 +18,7 @@ type Entitlement = { feature: string; allowed: boolean; reason: string; remainin
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
-type WebsiteAudit = { report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice: string };
+type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
 async function api<T>(path: string, csrf: string | null, options: RequestInit = {}): Promise<T> {
@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const [domainBusy, setDomainBusy] = useState(false);
   const [auditUrl, setAuditUrl] = useState("");
   const [auditReport, setAuditReport] = useState<WebsiteAudit | null>(null);
+  const [auditHistory, setAuditHistory] = useState<Array<{ id: string; start_url: string; status: string; created_at: string }>>([]);
   const [auditBusy, setAuditBusy] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -136,6 +137,8 @@ export default function DashboardPage() {
     ]);
     const projectResponse = projectResult[0];
     setProjects(projectResponse.status === "fulfilled" ? (projectResponse.value.items || []) : []);
+    const auditHistoryResult = await Promise.allSettled([api<{ items: Array<{ id: string; start_url: string; status: string; created_at: string }> }>("/api/v1/website-audits?workspace_id=" + encodeURIComponent(selectedId) + "&limit=10", token)]);
+    setAuditHistory(auditHistoryResult[0].status === "fulfilled" ? (auditHistoryResult[0].value.items || []) : []);
     const invitationResult = await Promise.allSettled([api<{ items: Invitation[] }>("/api/v1/workspaces/invitations?workspace_id=" + encodeURIComponent(selectedId), token)]);
     setInvitations(invitationResult[0].status === "fulfilled" ? (invitationResult[0].value.items || []) : []);
     const memberResult = await Promise.allSettled([api<{ items: WorkspaceMember[] }>("/api/v1/workspaces/members?workspace_id=" + encodeURIComponent(selectedId), token)]);
@@ -390,6 +393,17 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Domain verification could not be completed.");
     } finally { setDomainBusy(false); }
+  }
+
+  async function openSavedAudit(reportId: string) {
+    if (!workspaceId || !csrf) return;
+    setAuditBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<WebsiteAudit>("/api/v1/website-audits/" + encodeURIComponent(reportId) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf);
+      setAuditReport(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Saved website audit could not be opened.");
+    } finally { setAuditBusy(false); }
   }
 
   async function runWebsiteAudit(event: FormEvent<HTMLFormElement>) {
@@ -679,6 +693,7 @@ export default function DashboardPage() {
               <button className="button" type="submit" disabled={auditBusy || busy || !workspaceId || !csrf || !auditUrl.trim()}>{auditBusy ? "Auditing…" : "Run read-only SEO crawl"}</button>
             </form>
           </article>
+          {auditHistory.length > 0 && <article className="card"><h3>Recent saved audit reports</h3><div className="cards">{auditHistory.map(item=><article className="card" key={item.id}><p>{item.start_url}</p><p className="fine">{item.status} · {new Date(item.created_at).toLocaleString()}</p><button className="button secondary" type="button" disabled={auditBusy} onClick={()=>openSavedAudit(item.id)}>Open report</button></article>)}</div></article>}
           {auditReport && <div className="section"><article className="card"><h3>Audit overview</h3><p>{auditReport.report.crawl_skipped ? "Crawl skipped: " + (auditReport.report.reason || "safety check") : (auditReport.report.crawl?.pages_crawled ?? 0) + " pages crawled"}</p><p className="fine">{auditReport.report.start_url}</p></article>
             {auditReport.report.crawl?.aggregate_findings?.length ? <div className="cards">{auditReport.report.crawl.aggregate_findings.map(finding=><article className="card" key={finding.code}><p className="eyebrow">{finding.severity} · {finding.occurrences} occurrence(s)</p><h3>{finding.title}</h3><p className="fine">Finding: {finding.code}</p>{finding.evidence_urls.slice(0,3).map(url=><p key={url}><a href={url} target="_blank" rel="noreferrer">Open evidence page</a></p>)}</article>)}</div> : <p className="fine">No aggregate findings were returned, or the crawl did not complete.</p>}
             {(auditReport.report.limitations || []).length > 0 && <p className="fine">Limitations: {(auditReport.report.limitations || []).join(" ")}</p>}
