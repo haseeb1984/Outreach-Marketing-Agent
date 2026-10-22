@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     public_base_url: str | None = None
     # Comma-separated exact HTTPS origins for the Hostinger frontend; no wildcard origins.
     frontend_origins: str = ""
+    # Brave Search API key is server-only; absence disables live prospect research.
+    brave_search_api_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
