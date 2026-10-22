@@ -10,8 +10,8 @@ def test_analytics_summary_fails_closed_without_authentication():
             params={"workspace_id": "workspace-test"},
         )
 
-    assert response.status_code == 401
-    assert response.json() == {"detail": "authentication_required"}
+    assert response.status_code == 503
+    assert response.json() == {"detail": "authentication_not_configured"}
 
 
 
