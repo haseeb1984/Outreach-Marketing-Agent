@@ -97,7 +97,7 @@ class SMTPEmailDelivery:
             raise ValueError("invalid_workspace_name")
         if role not in {"admin", "member", "viewer"}:
             raise ValueError("invalid_invitation_role")
-        base = (self._settings.frontend_public_url or "").strip()
+        base = (self._settings.frontend_public_url or "").strip() or next((item.strip() for item in (self._settings.frontend_origins or "").split(",") if item.strip()), "")
         parts = urlsplit(base)
         if (parts.scheme.lower() != "https" or not parts.hostname
                 or parts.username is not None or parts.password is not None
@@ -109,11 +109,11 @@ class SMTPEmailDelivery:
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
         message["To"] = recipient
         message.set_content(
-            "You have been invited to join the workspace: " + workspace_name.strip() + "\\n"
-            + "Your proposed role is: " + role + ".\\n\\n"
-            + "Sign in with this email address and accept the invitation here: " + link + "\\n\\n"
+            "You have been invited to join the workspace: " + workspace_name.strip() + "\n"
+            + "Your proposed role is: " + role + ".\n\n"
+            + "Sign in with this email address and accept the invitation here: " + link + "\n\n"
             + "This invitation expires at " + expires_at.isoformat()
-            + ". If you were not expecting this invitation, you can ignore this email.\\n"
+            + ". If you were not expecting this invitation, you can ignore this email.\n"
         )
         try:
             await asyncio.to_thread(self._send_message, message)
