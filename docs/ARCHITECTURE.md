@@ -4,9 +4,9 @@
 This is a commercial multi-tenant SaaS platform, not a single-user utility. Customers register, create a workspace, invite authorized teammates, connect their own provider accounts, choose a subscription, and use only the features and quotas granted by server-verified entitlements. Payment status, plan entitlements, tenant isolation, security, and auditability are core architecture requirements.
 
 ## Components
-1. Public marketing site for product information, pricing, FAQs, policies, and account entry points.
-2. Responsive authenticated dashboard for onboarding, workspaces/projects, product profiles, prospect review, CRM, campaigns, draft approvals, connected accounts, usage, billing, and analytics.
-3. FastAPI backend for authentication, authorization, validation, tenant-aware business rules, billing adapter, entitlements, and provider adapters.
+1. **Hostinger Business frontend:** Next.js + TypeScript + Tailwind public marketing site, pricing/FAQ/policies, account entry points, and responsive authenticated dashboard. Hostinger is the frontend host, not Vercel.
+2. **FastAPI backend on Vercel:** authentication, authorization, validation, tenant-aware business rules, billing adapter, entitlements, and provider adapters. The frontend calls it over HTTPS and never connects directly to the database.
+3. PostgreSQL as the durable source of truth for users, workspaces, memberships, projects, prospects, campaigns, messages, account metadata, subscriptions, billing events, usage reservations, suppression records, and audit events.
 4. PostgreSQL as the durable source of truth for users, workspaces, memberships, projects, prospects, campaigns, messages, account metadata, subscriptions, billing events, usage reservations, suppression records, and audit events.
 5. Durable worker/queue for research, AI, synchronization, billing reconciliation, and sending jobs, with idempotency, retries, cancellation, quotas, and per-account/project limits.
 6. Provider adapters for website fetch, authorized GitHub reads, search, LLM, email, official WhatsApp Business Platform, payment/billing, and analytics events.
