@@ -1,0 +1,30 @@
+import logging
+
+from app.services.secret_safe_logging import install_secret_redaction, redact_text
+
+
+def test_redact_common_inline_credentials():
+    message = (
+        "password=hunter2 Authorization: Bearer abc.def.ghi "
+        "db=postgres://service:secretpass@db.example.test/app"
+    )
+    result = redact_text(message)
+    assert "hunter2" not in result
+    assert "abc.def.ghi" not in result
+    assert "secretpass" not in result
+    assert "[REDACTED]" in result
+
+
+def test_log_record_redacts_message_and_drops_exception_traceback(caplog):
+    install_secret_redaction()
+    logger = logging.getLogger("security.secret-redaction-test")
+    with caplog.at_level(logging.ERROR):
+        try:
+            raise RuntimeError("provider failed with password=canary-secret")
+        except RuntimeError:
+            logger.exception("request failed token=canary-token")
+
+    output = caplog.text
+    assert "canary-secret" not in output
+    assert "canary-token" not in output
+    assert "traceback_redacted" in output
