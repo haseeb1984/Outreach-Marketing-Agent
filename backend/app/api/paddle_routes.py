@@ -75,7 +75,7 @@ async def list_public_plans():
             "display_price": display_price[:80] if isinstance(display_price, str) else None,
             "currency": currency[:8] if isinstance(currency, str) else None,
             "billing_interval": interval[:40] if isinstance(interval, str) else None,
-            "checkout_available": bool(settings.paddle_api_key and settings.paddle_webhook_secret),
+            "checkout_available": bool(settings.paddle_api_key and settings.paddle_webhook_secret) and (settings.paddle_environment != "production" or settings.paddle_live_checkout_enabled),
         })
     return {"items": items, "configured": bool(items)}
 
@@ -93,6 +93,8 @@ async def create_checkout(body: CheckoutRequest, request: Request):
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
 
+    if settings.paddle_environment == "production" and not settings.paddle_live_checkout_enabled:
+        raise HTTPException(status_code=403, detail="paddle_live_checkout_disabled")
     if not settings.paddle_api_key:
         raise HTTPException(status_code=503, detail="paddle_not_configured")
     plan = _plans().get(body.plan_id)
