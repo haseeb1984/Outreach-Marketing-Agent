@@ -83,6 +83,50 @@ class AuthStore:
             "verification_expires_at": expires_at,
         }
 
+    async def issue_verification_email(
+        self, *, email: str, verification_lifetime_hours: int = 24,
+    ) -> dict[str, Any] | None:
+        """Rotate a verification token for an existing pending account only."""
+        from app.services.auth_security import normalize_email
+
+        normalized_email = normalize_email(email)
+        if (
+            isinstance(verification_lifetime_hours, bool)
+            or not isinstance(verification_lifetime_hours, int)
+            or not 1 <= verification_lifetime_hours <= 72
+        ):
+            raise ValueError("verification_lifetime_out_of_range")
+        token = new_opaque_token()
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(hours=verification_lifetime_hours)
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                user = await connection.fetchrow(
+                    """SELECT id, email FROM app_users
+                       WHERE email=$1 AND status='pending_verification'
+                         AND email_verified_at IS NULL
+                       FOR UPDATE""",
+                    normalized_email,
+                )
+                if user is None:
+                    return None
+                await connection.execute(
+                    """UPDATE email_verification_tokens SET consumed_at=$2
+                       WHERE user_id=$1 AND consumed_at IS NULL""",
+                    user["id"], now,
+                )
+                await connection.execute(
+                    """INSERT INTO email_verification_tokens
+                       (user_id, token_sha256, created_at, expires_at)
+                       VALUES ($1, $2, $3, $4)""",
+                    user["id"], token_digest(token), now, expires_at,
+                )
+        return {
+            "email": normalized_email,
+            "verification_token": token,
+            "verification_expires_at": expires_at,
+        }
+
     async def verify_email(self, token: str) -> bool:
         """Atomically consume a live verification token and activate its user."""
         try:
