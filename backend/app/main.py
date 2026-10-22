@@ -128,6 +128,7 @@ from app.api.workspace_settings_routes import router as workspace_settings_route
 from app.api.email_account_routes import router as email_account_router
 from app.api.workspace_routes import router as workspace_router
 from app.api.dashboard_routes import router as dashboard_router
+from app.api.meta_whatsapp_webhook_routes import router as meta_whatsapp_webhook_router
 
 app.include_router(auth_router)
 app.include_router(prospect_router)
@@ -149,6 +150,7 @@ app.include_router(workspace_settings_router)
 app.include_router(email_account_router)
 app.include_router(workspace_router)
 app.include_router(dashboard_router)
+app.include_router(meta_whatsapp_webhook_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -249,6 +251,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.feature_usage_reservations') IS NOT NULL
                      AND to_regclass('public.billing_provider_events') IS NOT NULL
                      AND to_regclass('public.schema_migrations') IS NOT NULL
+                     AND to_regclass('public.meta_whatsapp_webhook_events') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
@@ -264,8 +267,9 @@ async def readiness() -> Response:
                             '011_conversation_webhook_inbox.sql',
                             '012_delivery_outcome_uncertainty.sql',
                             '013_subscription_entitlements_and_usage.sql',
-                            '014_billing_provider_event_ledger.sql'
-                          )) = 14"""
+                            '014_billing_provider_event_ledger.sql',
+                            '020_meta_whatsapp_webhook_inbox.sql'
+                          )) = 15"""
             )
             if not schema_ready:
                 return JSONResponse(
