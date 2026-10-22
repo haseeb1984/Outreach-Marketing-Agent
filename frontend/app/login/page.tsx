@@ -26,7 +26,7 @@ export default function LoginPage() {
         const detail = typeof data.detail === "string" ? data.detail : "";
         const friendly: Record<string, string> = {
           authentication_not_configured: "Account service is not configured yet. Please try again later.",
-          authentication_required: "Email or password was not accepted.",
+          email_or_password_incorrect: "Email or password was not accepted.",
           email_not_verified: "Please verify your email before signing in.",
           invalid_credentials: "Email or password was not accepted.",
           too_many_requests: "Too many attempts. Wait a little before trying again.",
