@@ -11,6 +11,7 @@ type Draft = { id: string; subject?: string; body?: string; channel?: string; st
 type Plan = { id: string; name: string; description: string; display_price: string | null; currency: string | null; billing_interval: string | null; checkout_available: boolean };
 type Delivery = { id: string; subject?: string; channel?: string; status: string; error_code?: string | null; created_at?: string };
 type Counts = Record<string, number>;
+type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
 async function api<T>(path: string, csrf: string | null, options: RequestInit = {}): Promise<T> {
@@ -59,6 +60,8 @@ export default function DashboardPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
   const [counts, setCounts] = useState<Counts>({});
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+  const [entitlementsUnavailable, setEntitlementsUnavailable] = useState(false);
   const [period, setPeriod] = useState("30");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -93,6 +96,15 @@ export default function DashboardPage() {
     setDrafts(d.items || []);
     setDeliveries(deliveryResult.items || []);
     setCounts(a.counts || {});
+    const entitlementResults = await Promise.allSettled([
+      api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
+      api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
+    ]);
+    const availableEntitlements = entitlementResults
+      .filter((result): result is PromiseFulfilledResult<Entitlement> => result.status === "fulfilled")
+      .map(result => result.value);
+    setEntitlements(availableEntitlements);
+    setEntitlementsUnavailable(availableEntitlements.length !== 2);
   }, [period]);
 
   const refresh = useCallback(async (selectedId = workspaceId, token = csrf) => {
@@ -313,6 +325,18 @@ export default function DashboardPage() {
         <section className="section" aria-labelledby="billing-title"><h2 id="billing-title">Plan and billing</h2>
           {plans.length ? <div className="cards">{plans.map(plan=><article className="card" key={plan.id}><h3>{plan.name}</h3><p>{plan.description || "Workspace subscription plan."}</p><p className="fine">{plan.display_price ? plan.display_price + (plan.currency ? " " + plan.currency : "") + (plan.billing_interval ? " / " + plan.billing_interval : "") : "Price is configured in the billing provider; display price has not been supplied."}</p><p className="fine">{plan.checkout_available ? "Provider configuration is present; complete sandbox and production verification before launch." : "Checkout is not enabled until server-side billing configuration is complete."}</p></article>)}</div> : <article className="card"><p>No billing plans are configured yet. Plans must be configured server-side; this screen never invents prices.</p></article>}
           {plans.some(plan=>plan.checkout_available) && <div className="card"><div className="field"><label htmlFor="billing-plan">Choose a plan</label><select id="billing-plan" value={selectedPlan} onChange={e=>setSelectedPlan(e.target.value)}>{plans.filter(plan=>plan.checkout_available).map(plan=><option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></div><button className="button" type="button" disabled={busy || !workspaceId || !selectedPlan || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={startCheckout}>Continue to secure checkout</button><p className="fine">Workspace owner/admin permission is required. Paid access activates only after a verified billing webhook updates server-side subscription state.</p></div>}
+        </section>
+        <section className="section" aria-labelledby="entitlements-title"><h2 id="entitlements-title">Feature access and usage</h2>
+          <p className="fine">Access comes from the server-side subscription record. Missing or unavailable billing state does not grant paid access.</p>
+          {entitlementsUnavailable && <p className="notice" role="status">One or more entitlement checks are unavailable. Paid actions remain subject to server-side enforcement.</p>}
+          <div className="cards">{["ai_draft_generations", "email_sends"].map(feature => {
+            const item = entitlements.find(entry => entry.feature === feature);
+            const label = feature === "ai_draft_generations" ? "AI draft generation" : "Email sends";
+            return <article className="card" key={feature}><h3>{label}</h3>
+              <p><strong>{item ? (item.allowed ? "Available" : "Not available") : "Status unavailable"}</strong></p>
+              <p className="fine">{item ? (item.allowed ? (item.remaining === null ? "No remaining limit reported by the server." : item.remaining + " uses remaining in the current period.") : "Access decision: " + item.reason.replaceAll("_", " ")) : "Refresh the workspace or contact the operator if this persists."}</p>
+            </article>;
+          })}</div>
         </section>
         <section className="section" aria-labelledby="metrics-title"><div className="section-head"><h2 id="metrics-title">Recorded activity</h2><p className="fine">Counts from saved records; not estimates of revenue or ROI.</p></div><div className="dashboard-grid">{metricItems.map(([label,key])=><article className="metric" key={key}><strong>{counts[key] ?? "—"}</strong><span>{label}</span></article>)}</div><p className="fine">“Marked sent” means the configured email adapter returned successfully; it does not prove inbox delivery. Clicks, revenue and ROI are not inferred.</p></section>
         <section className="section"><div className="cards">
