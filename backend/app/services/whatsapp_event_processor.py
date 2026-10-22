@@ -131,7 +131,19 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                 )
                                 if inserted:
                                     saved_this_event += 1
-                                    if prospect:
+                                    opt_out = bool(body and body.strip().upper() in {"STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"})
+                                    if opt_out:
+                                        await conn.execute(
+                                            """INSERT INTO whatsapp_contact_preferences
+                                               (workspace_id,account_id,wa_id,opted_out_at,opted_in_at,last_opt_out_message_id,updated_at)
+                                               VALUES($1,$2,$3,now(),NULL,$4,now())
+                                               ON CONFLICT(workspace_id,account_id,wa_id) DO UPDATE
+                                                 SET opted_out_at=now(), opted_in_at=NULL,
+                                                     last_opt_out_message_id=EXCLUDED.last_opt_out_message_id,
+                                                     updated_at=now()""",
+                                            workspace_id, account_id, wa_id, provider_id,
+                                        )
+                                    elif prospect:
                                         await conn.execute(
                                             """UPDATE crm_prospects SET stage='replied', updated_at=now()
                                                WHERE id=$1 AND workspace_id=$2
