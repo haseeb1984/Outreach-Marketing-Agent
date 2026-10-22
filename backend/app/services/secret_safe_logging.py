@@ -11,13 +11,13 @@ import re
 from typing import Any
 
 _SENSITIVE_ASSIGNMENT = re.compile(
-    r"(?i)(\\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"(?i)(\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
     r"auth(?:orization)?|cookie|set-cookie|client[_-]?secret|webhook[_-]?secret|"
-    r"database[_-]?url|smtp[_-]?(?:username|password)|token)\\b\\s*[:=]\\s*)"
-    r"""("[^"]*"|'[^']*'|[^\\s,;]+)"""
+    r"database[_-]?url|smtp[_-]?(?:username|password)|token)\b\s*[:=]\s*)"
+    r"""("[^"]*"|'[^']*'|[^\s,;]+)"""
 )
-_BEARER = re.compile(r"(?i)\\b(Bearer|Basic)\\s+[A-Za-z0-9._~+/=-]+")
-_URL_CREDENTIALS = re.compile(r"(://[^:/\\s]+:)[^@/\\s]+(@)")
+_BEARER = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
+_URL_CREDENTIALS = re.compile(r"(://[^:/\s]+:)[^@/\s]+(@)")
 _SENSITIVE_KEY = re.compile(
     r"(?i)(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|"
     r"authorization|auth|cookie|client[_-]?secret|webhook[_-]?secret|database[_-]?url|"
@@ -45,9 +45,10 @@ def redact_text(value: str) -> str:
     """Redact known environment secrets and common inline credential patterns."""
     for secret in _configured_secrets():
         value = value.replace(secret, "[REDACTED]")
-    value = _SENSITIVE_ASSIGNMENT.sub(r"\\1[REDACTED]", value)
-    value = _BEARER.sub(r"\\1 [REDACTED]", value)
-    value = _URL_CREDENTIALS.sub(r"\\1[REDACTED]\\2", value)
+    # Redact auth schemes first so Authorization: Bearer <token> is fully masked.
+    value = _BEARER.sub(r"\1 [REDACTED]", value)
+    value = _SENSITIVE_ASSIGNMENT.sub(r"\1[REDACTED]", value)
+    value = _URL_CREDENTIALS.sub(r"\1[REDACTED]\2", value)
     return value
 
 
