@@ -122,6 +122,7 @@ from app.api.website_audit_routes import router as website_audit_router
 from app.api.domain_routes import router as domain_router
 from app.api.project_routes import router as project_router
 from app.api.workspace_invitation_routes import router as invitation_router
+from app.api.account_routes import router as account_router
 from app.api.dashboard_routes import router as dashboard_router
 
 app.include_router(auth_router)
@@ -138,6 +139,7 @@ app.include_router(website_audit_router)
 app.include_router(domain_router)
 app.include_router(project_router)
 app.include_router(invitation_router)
+app.include_router(account_router)
 app.include_router(dashboard_router)
 
 PUBLIC_PAGES = [
