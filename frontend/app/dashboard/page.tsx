@@ -15,6 +15,7 @@ type Project = { id: string; name: string; website_url?: string | null; business
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
+type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -65,6 +66,11 @@ export default function DashboardPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  const [whatsappLabel, setWhatsappLabel] = useState("");
+  const [whatsappWabaId, setWhatsappWabaId] = useState("");
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState("");
+  const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
   const [selectedEmailAccountId, setSelectedEmailAccountId] = useState("");
   const [emailAccountLabel, setEmailAccountLabel] = useState("");
   const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
@@ -157,6 +163,8 @@ export default function DashboardPage() {
     const loadedEmailAccounts = emailAccountResult[0].status === "fulfilled" ? (emailAccountResult[0].value.items || []) : [];
     setEmailAccounts(loadedEmailAccounts);
     setSelectedEmailAccountId(current => loadedEmailAccounts.some(account => account.id === current && account.status === "active") ? current : (loadedEmailAccounts.find(account => account.status === "active")?.id || ""));
+    const whatsappAccountResult = await Promise.allSettled([api<ApiResult<WhatsAppAccount>>("/api/v1/integrations/whatsapp/accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    setWhatsappAccounts(whatsappAccountResult[0].status === "fulfilled" ? (whatsappAccountResult[0].value.items || []) : []);
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
@@ -313,6 +321,38 @@ export default function DashboardPage() {
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account connection test failed.");
+    } finally { setBusy(false); }
+  }
+
+  async function createWhatsAppAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/whatsapp/accounts", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId, label: whatsappLabel, waba_id: whatsappWabaId,
+          phone_number_id: whatsappPhoneNumberId, access_token: whatsappAccessToken,
+        }),
+      });
+      setWhatsappLabel(""); setWhatsappWabaId(""); setWhatsappPhoneNumberId(""); setWhatsappAccessToken("");
+      setNotice("Meta account credentials encrypted and saved as pending verification. WhatsApp sending remains disabled.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp account could not be saved.");
+    } finally { setBusy(false); }
+  }
+
+  async function disableWhatsAppAccount(account: WhatsAppAccount) {
+    if (!workspaceId || !csrf || !window.confirm("Disable the WhatsApp account " + account.label + "?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("WhatsApp account disabled.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp account could not be disabled.");
     } finally { setBusy(false); }
   }
 
@@ -818,7 +858,23 @@ export default function DashboardPage() {
               <div className="metric"><strong>{integrationStatus.email?.configuration_complete ? "Configured" : "Incomplete"}</strong><span>Email / SMTP</span><p className="fine">{integrationStatus.email?.configuration_complete ? "Required settings are present; use the test button to verify TLS/authentication." : "Missing: " + (integrationStatus.email?.missing_fields || []).join(", ")}</p></div>
               <div className="metric"><strong>{integrationStatus.whatsapp?.live_send_enabled ? "Enabled" : "Disabled"}</strong><span>Official WhatsApp Business</span><p className="fine">{integrationStatus.whatsapp?.reason || "Live sending remains disabled until official Meta onboarding and webhook verification are implemented."}</p></div>
             </div> : <p className="fine">Provider status has not been loaded for this workspace.</p>}
-            <p className="fine">This release does not claim multiple connected email accounts or active WhatsApp sending. WhatsApp stays disabled until official Meta onboarding, signature verification, tenant-scoped credentials, and inbound event persistence are implemented.</p>
+            <h3>Official Meta WhatsApp accounts</h3>
+            <p className="fine">Add an access token from Meta Business settings and the matching WhatsApp Business Account and phone-number IDs. Tokens are encrypted at rest and never shown again. New accounts stay pending verification; this does not enable sending.</p>
+            <div className="cards">{whatsappAccounts.length ? whatsappAccounts.map(account => <article className="card" key={account.id}>
+              <h4>{account.label}</h4><p className="fine">WABA ID: {account.waba_id} · Phone number ID: {account.phone_number_id}</p>
+              <p className="fine">Status: {account.status}</p>
+              {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
+            </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
+            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details className="card"><summary>Register Meta WhatsApp account</summary>
+              <form onSubmit={createWhatsAppAccount}>
+                <div className="field"><label htmlFor="whatsapp-account-label">Account label</label><input id="whatsapp-account-label" required maxLength={120} value={whatsappLabel} onChange={e=>setWhatsappLabel(e.target.value)} /></div>
+                <div className="field"><label htmlFor="whatsapp-waba-id">WhatsApp Business Account ID</label><input id="whatsapp-waba-id" inputMode="numeric" required minLength={5} maxLength={128} value={whatsappWabaId} onChange={e=>setWhatsappWabaId(e.target.value)} /></div>
+                <div className="field"><label htmlFor="whatsapp-phone-id">Phone number ID</label><input id="whatsapp-phone-id" inputMode="numeric" required minLength={5} maxLength={128} value={whatsappPhoneNumberId} onChange={e=>setWhatsappPhoneNumberId(e.target.value)} /></div>
+                <div className="field"><label htmlFor="whatsapp-access-token">Meta access token</label><input id="whatsapp-access-token" type="password" autoComplete="new-password" required minLength={20} maxLength={4096} value={whatsappAccessToken} onChange={e=>setWhatsappAccessToken(e.target.value)} /></div>
+                <button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Encrypt and save (pending verification)</button>
+              </form>
+            </details>}
+            <p className="fine">Inbound Meta webhook signatures are validated and events are stored in a private inbox. Workspace mapping, event processing, contact opt-in checks, approved-template enforcement and outbound sending remain disabled until their implementation is complete.</p>
           </article>
         </section>
         <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p><div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
