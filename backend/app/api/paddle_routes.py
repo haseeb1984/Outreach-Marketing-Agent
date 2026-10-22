@@ -16,7 +16,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.api.auth_routes import _authenticated
+from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
 from app.services.billing_lifecycle_store import VerifiedBillingEvent
 
@@ -55,10 +55,36 @@ def _api_base() -> str:
     raise HTTPException(status_code=503, detail="billing_environment_invalid")
 
 
+@router.get("/plans")
+async def list_public_plans():
+    """Expose only display-safe, server-configured plans; never return Paddle price IDs or secrets."""
+    plans = _plans()
+    items = []
+    for slug, plan in plans.items():
+        name = plan.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = slug.replace("-", " ").replace("_", " ").title()
+        display_price = plan.get("display_price")
+        currency = plan.get("currency")
+        interval = plan.get("billing_interval")
+        description = plan.get("description")
+        items.append({
+            "id": slug,
+            "name": name[:120],
+            "description": description[:500] if isinstance(description, str) else "",
+            "display_price": display_price[:80] if isinstance(display_price, str) else None,
+            "currency": currency[:8] if isinstance(currency, str) else None,
+            "billing_interval": interval[:40] if isinstance(interval, str) else None,
+            "checkout_available": bool(settings.paddle_api_key and settings.paddle_webhook_secret),
+        })
+    return {"items": items, "configured": bool(items)}
+
+
 @router.post("/checkout")
 async def create_checkout(body: CheckoutRequest, request: Request):
     """Create a Paddle-hosted transaction for an authorized workspace owner/admin."""
     _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
     auth_store = getattr(request.app.state, "auth_store", None)
     if auth_store is None:
         raise HTTPException(status_code=503, detail="authentication_not_configured")
