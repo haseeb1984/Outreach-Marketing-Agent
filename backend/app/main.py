@@ -130,6 +130,7 @@ from app.api.workspace_routes import router as workspace_router
 from app.api.dashboard_routes import router as dashboard_router
 from app.api.meta_whatsapp_webhook_routes import router as meta_whatsapp_webhook_router
 from app.api.whatsapp_account_routes import router as whatsapp_account_router
+from app.api.whatsapp_inbox_routes import router as whatsapp_inbox_router
 
 app.include_router(auth_router)
 app.include_router(prospect_router)
@@ -153,6 +154,7 @@ app.include_router(workspace_router)
 app.include_router(dashboard_router)
 app.include_router(meta_whatsapp_webhook_router)
 app.include_router(whatsapp_account_router)
+app.include_router(whatsapp_inbox_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
