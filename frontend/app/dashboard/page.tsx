@@ -8,6 +8,7 @@ type Workspace = { id: string; name: string; role: string };
 type Prospect = { id: string; name: string; company: string; role?: string | null; contact_email?: string | null; website_url: string; evidence_url: string; fit_reason: string; stage: string };
 type Campaign = { id: string; name: string; client_business: string; target_customer_profile: string; status?: string };
 type Draft = { id: string; subject?: string; body?: string; channel?: string; status: string; prospect_name?: string };
+type Plan = { id: string; name: string; description: string; display_price: string | null; currency: string | null; billing_interval: string | null; checkout_available: boolean };
 type Counts = Record<string, number>;
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
@@ -51,6 +52,8 @@ export default function DashboardPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState("");
   const [counts, setCounts] = useState<Counts>({});
   const [period, setPeriod] = useState("30");
   const [loading, setLoading] = useState(true);
@@ -165,6 +168,21 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
+  async function startCheckout() {
+    if (!workspaceId || !csrf || !selectedPlan) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ checkout_url: string }>("/api/v1/billing/paddle/checkout", csrf, {
+        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, plan_id: selectedPlan }),
+      });
+      const checkoutUrl = new URL(result.checkout_url);
+      if (checkoutUrl.protocol !== "https:") throw new Error("The billing provider returned an unsafe checkout URL.");
+      window.location.assign(checkoutUrl.toString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Checkout could not be started.");
+    } finally { setBusy(false); }
+  }
+
   async function logout() {
     setBusy(true);
     try { await api("/api/v1/auth/logout", csrf, { method: "POST", body: "{}" }); }
@@ -190,6 +208,10 @@ export default function DashboardPage() {
         <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; setWorkspaceId(id); await refresh(id, csrf); }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           <div className="actions"><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || !workspaceId}>Refresh workspace</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
+        </section>
+        <section className="section" aria-labelledby="billing-title"><h2 id="billing-title">Plan and billing</h2>
+          {plans.length ? <div className="cards">{plans.map(plan=><article className="card" key={plan.id}><h3>{plan.name}</h3><p>{plan.description || "Workspace subscription plan."}</p><p className="fine">{plan.display_price ? plan.display_price + (plan.currency ? " " + plan.currency : "") + (plan.billing_interval ? " / " + plan.billing_interval : "") : "Price is configured in the billing provider; display price has not been supplied."}</p><p className="fine">{plan.checkout_available ? "Provider configuration is present; complete sandbox and production verification before launch." : "Checkout is not enabled until server-side billing configuration is complete."}</p></article>)}</div> : <article className="card"><p>No billing plans are configured yet. Plans must be configured server-side; this screen never invents prices.</p></article>}
+          {plans.some(plan=>plan.checkout_available) && <div className="card"><div className="field"><label htmlFor="billing-plan">Choose a plan</label><select id="billing-plan" value={selectedPlan} onChange={e=>setSelectedPlan(e.target.value)}>{plans.filter(plan=>plan.checkout_available).map(plan=><option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></div><button className="button" type="button" disabled={busy || !workspaceId || !selectedPlan || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={startCheckout}>Continue to secure checkout</button><p className="fine">Workspace owner/admin permission is required. Paid access activates only after a verified billing webhook updates server-side subscription state.</p></div>}
         </section>
         <section className="section" aria-labelledby="metrics-title"><div className="section-head"><h2 id="metrics-title">Recorded activity</h2><p className="fine">Counts from saved records; not estimates of revenue or ROI.</p></div><div className="dashboard-grid">{metricItems.map(([label,key])=><article className="metric" key={key}><strong>{counts[key] ?? "—"}</strong><span>{label}</span></article>)}</div><p className="fine">“Marked sent” means the configured email adapter returned successfully; it does not prove inbox delivery. Clicks, revenue and ROI are not inferred.</p></section>
         <section className="section"><div className="cards">
