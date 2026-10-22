@@ -9,7 +9,7 @@ class DeliveryStore:
     async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
-                d=await c.fetchrow("""SELECT d.id,d.status,d.channel,p.contact_email,cc.email_suppressed
+                d=await c.fetchrow("""SELECT d.id,d.status,d.channel,p.contact_email,p.stage,cc.email_suppressed
                   FROM outreach_drafts d JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
                   LEFT JOIN outreach_contact_controls cc ON cc.workspace_id=d.workspace_id AND cc.prospect_id=d.prospect_id
                   WHERE d.id=$1 AND d.workspace_id=$2 AND p.archived_at IS NULL FOR UPDATE OF d""",draft_id,workspace_id)
@@ -17,7 +17,7 @@ class DeliveryStore:
                 if d["status"]!="approved": raise ValueError("draft_not_approved")
                 if d["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not d["contact_email"]: raise ValueError("prospect_email_required")
-                if d["email_suppressed"]: raise ValueError("contact_suppressed")
+                if d["email_suppressed"] or d["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
                 r=await c.fetchrow("""INSERT INTO outreach_deliveries(workspace_id,draft_id,channel,idempotency_key,queued_by)
                   VALUES($1,$2,'email',$3,$4) ON CONFLICT DO NOTHING RETURNING *""",workspace_id,draft_id,idempotency_key,UUID(str(actor_id)))
                 if r is None:
@@ -36,7 +36,7 @@ class DeliveryStore:
         async with self._pool.acquire() as c:
             async with c.transaction():
                 r=await c.fetchrow("""SELECT q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,
-                  p.contact_email,cc.email_suppressed FROM outreach_deliveries q
+                  p.contact_email,p.stage,cc.email_suppressed FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
                   LEFT JOIN outreach_contact_controls cc ON cc.workspace_id=d.workspace_id AND cc.prospect_id=d.prospect_id
@@ -46,7 +46,7 @@ class DeliveryStore:
                 if r["draft_status"]!="approved": raise ValueError("draft_not_approved")
                 if r["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not r["contact_email"]: raise ValueError("prospect_email_required")
-                if r["email_suppressed"]: raise ValueError("contact_suppressed")
+                if r["email_suppressed"] or r["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
                 await c.execute("""UPDATE outreach_deliveries SET status='processing',attempt_count=attempt_count+1,
                   processing_at=now(),updated_at=now() WHERE id=$1 AND workspace_id=$2 AND status='queued'""",delivery_id,workspace_id)
                 return {"recipient":r["contact_email"],"subject":r["subject"] or "A message from a business","body":r["body"]}
