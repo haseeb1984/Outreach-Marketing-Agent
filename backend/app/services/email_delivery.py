@@ -103,7 +103,7 @@ class SMTPEmailDelivery:
                 or parts.username is not None or parts.password is not None
                 or parts.path not in ("", "/") or parts.query or parts.fragment):
             raise ValueError("frontend_https_origin_required")
-        link = urlunsplit(("https", parts.netloc, "/invitations/accept", urlencode({"token": token}), ""))
+        link = urlunsplit(("https", parts.netloc, "/invitations/accept", "", urlencode({"token": token})))
         message = EmailMessage()
         message["Subject"] = "You're invited to an Outreach Marketing Agent workspace"
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
