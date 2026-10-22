@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -24,7 +25,7 @@ async def export_account_data(request: Request) -> JSONResponse:
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
         raise HTTPException(status_code=503, detail="account_export_not_configured")
-    user_id = session["user_id"]
+    user_id = UUID(str(session["user_id"]))
     try:
         async with pool.acquire() as conn:
             async with conn.transaction(isolation="repeatable_read", readonly=True):
