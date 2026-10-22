@@ -37,6 +37,7 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
     if not 1 <= batch_size <= 100:
         raise ValueError("batch_size_out_of_range")
     processed = messages_saved = statuses_saved = unmapped = failed = 0
+    last_event_id = None
 
     for _ in range(batch_size):
         try:
@@ -47,10 +48,11 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                            FROM meta_whatsapp_webhook_events
                            WHERE processed_at IS NULL AND attempts < 8
                            ORDER BY received_at, id
-                           FOR UPDATE SKIP LOCKED LIMIT 1"""
+                           LIMIT 1 FOR UPDATE SKIP LOCKED"""
                     )
                     if event is None:
                         break
+                    last_event_id = event["id"]
                     await conn.execute(
                         "UPDATE meta_whatsapp_webhook_events SET attempts=attempts+1, processing_started_at=now() WHERE id=$1",
                         event["id"],
@@ -166,8 +168,16 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                     statuses_saved += status_this_event
         except Exception:
             failed += 1
+            # Persist a bounded retry counter separately after the failed transaction rolls back.
             # Do not log payloads, phone numbers, provider IDs, or credentials.
-            # The row attempt counter was committed only if the transaction completed, so a
-            # failure rolls back and leaves the event available to another worker.
+            if last_event_id is not None:
+                try:
+                    async with pool.acquire() as conn:
+                        await conn.execute(
+                            "UPDATE meta_whatsapp_webhook_events SET attempts=attempts+1, processing_error_code='worker_processing_failed' WHERE id=$1 AND processed_at IS NULL",
+                            last_event_id,
+                        )
+                except Exception:
+                    pass
             continue
     return {"processed": processed, "messages_saved": messages_saved, "statuses_saved": statuses_saved, "unmapped": unmapped, "failed": failed}
