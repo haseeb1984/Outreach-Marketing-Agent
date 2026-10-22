@@ -62,8 +62,22 @@ class CampaignStore:
                         raise ValueError("prospect_email_required")
                     if controls and controls["email_suppressed"]:
                         raise ValueError("contact_suppressed")
-                if channel == "whatsapp" and (not controls or controls["whatsapp_opt_in_at"] is None or not controls["whatsapp_opt_in_evidence_url"]):
-                    raise ValueError("WhatsApp documented opt-in evidence is required")
+                if channel == "whatsapp":
+                    if not controls or controls["whatsapp_opt_in_at"] is None or not controls["whatsapp_opt_in_evidence_url"]:
+                        raise ValueError("WhatsApp documented opt-in evidence is required")
+                    phone_digits = "".join(ch for ch in str(p.get("contact_phone_e164") or "") if ch.isdigit())
+                    if not phone_digits:
+                        raise ValueError("prospect_whatsapp_phone_required")
+                    opted_out = await conn.fetchval(
+                        """SELECT EXISTS(
+                             SELECT 1 FROM whatsapp_contact_preferences
+                             WHERE workspace_id=$1 AND wa_id=$2 AND opted_out_at IS NOT NULL
+                               AND (opted_in_at IS NULL OR opted_out_at >= opted_in_at)
+                           )""",
+                        workspace_id, phone_digits,
+                    )
+                    if opted_out:
+                        raise ValueError("WhatsApp contact has opted out")
                 facts = self._json_list(p.get("verified_facts"))
                 draft = draft_outreach(
                     channel=channel,
@@ -156,4 +170,15 @@ class CampaignStore:
                 if not exists:
                     return None
                 row = await conn.fetchrow("""INSERT INTO outreach_contact_controls (workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,whatsapp_opt_in_evidence_url,updated_by,updated_at) VALUES ($1,$2,COALESCE($3,FALSE),CASE WHEN $4 THEN now() ELSE NULL END,CASE WHEN $4 THEN $5 ELSE NULL END,$6,now()) ON CONFLICT (workspace_id,prospect_id) DO UPDATE SET email_suppressed=COALESCE($3,outreach_contact_controls.email_suppressed),whatsapp_opt_in_at=CASE WHEN $4 THEN now() ELSE outreach_contact_controls.whatsapp_opt_in_at END,whatsapp_opt_in_evidence_url=CASE WHEN $4 THEN $5 ELSE outreach_contact_controls.whatsapp_opt_in_evidence_url END,updated_by=$6,updated_at=now() RETURNING workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,whatsapp_opt_in_evidence_url,updated_by,updated_at""", workspace_id, prospect_id, email_suppressed, whatsapp_opt_in_confirmed, whatsapp_opt_in_evidence_url, UUID(str(actor_id)))
+                if whatsapp_opt_in_confirmed:
+                    await conn.execute(
+                        """UPDATE whatsapp_contact_preferences pref
+                           SET opted_in_at=now(), updated_at=now()
+                           FROM crm_prospects prospect
+                           WHERE prospect.id=$1 AND prospect.workspace_id=$2
+                             AND prospect.workspace_id=pref.workspace_id
+                             AND pref.wa_id=regexp_replace(COALESCE(prospect.contact_phone_e164,''), '[^0-9]', '', 'g')
+                             AND pref.opted_out_at IS NOT NULL""",
+                        prospect_id, workspace_id,
+                    )
         return self._serialize(dict(row))
