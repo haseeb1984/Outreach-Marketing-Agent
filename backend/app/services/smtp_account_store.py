@@ -53,7 +53,7 @@ def _key() -> bytes:
         raise CredentialEncryptionNotConfigured("provider_credential_encryption_key_missing")
     value = encoded.strip()
     try:
-        raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        raw = base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
     except (ValueError, base64.binascii.Error):
         raise CredentialEncryptionNotConfigured("provider_credential_encryption_key_invalid") from None
     if len(raw) != 32:
