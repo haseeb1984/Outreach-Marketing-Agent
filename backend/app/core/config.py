@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # Non-secret Meta asset identifiers; keep workspace-specific IDs in tenant storage for SaaS.
     meta_whatsapp_phone_number_id: str | None = None
     meta_whatsapp_waba_id: str | None = None
+    # Explicitly pinned Meta Graph API version for account verification; no implicit default.
+    meta_graph_api_version: str | None = None
 
 
 settings = Settings()
