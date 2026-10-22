@@ -422,6 +422,7 @@ export default function DashboardPage() {
       });
       setAuditReport(result);
       setNotice(result.notice || "Read-only audit completed.");
+      await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Website audit could not be completed.");
     } finally { setAuditBusy(false); }
