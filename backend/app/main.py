@@ -77,6 +77,7 @@ from app.api.campaign_routes import router as campaign_router
 from app.api.delivery_routes import router as delivery_router
 from app.api.conversation_routes import router as conversation_router
 from app.api.billing_routes import router as billing_router
+from app.api.analytics_routes import router as analytics_router
 from app.api.integration_routes import router as integration_router
 from app.api.dashboard_routes import router as dashboard_router
 
@@ -86,6 +87,7 @@ app.include_router(campaign_router)
 app.include_router(delivery_router)
 app.include_router(conversation_router)
 app.include_router(billing_router)
+app.include_router(analytics_router)
 app.include_router(integration_router)
 app.include_router(dashboard_router)
 
