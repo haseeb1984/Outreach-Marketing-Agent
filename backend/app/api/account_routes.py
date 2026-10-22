@@ -55,6 +55,8 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "contact_controls": [],
                     "inbound_messages": [],
                     "account_audit_events": [],
+                    "invitations": [],
+                    "website_audits": [],
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
                         "note": "Collections are capped to protect service availability; if any collection reaches the cap, request a larger operator-assisted export.",
@@ -91,6 +93,20 @@ async def export_account_data(request: Request) -> JSONResponse:
                     for collection, query in queries.items():
                         rows = await conn.fetch(query, workspace_ids, _MAX_EXPORT_ROWS)
                         export[collection] = [dict(row) for row in rows]
+                    invitation_rows = await conn.fetch(
+                        """SELECT workspace_id,invited_email,role,status,created_at,expires_at,accepted_at,revoked_at
+                           FROM workspace_invitations WHERE workspace_id=ANY($1::text[])
+                           ORDER BY created_at DESC LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS,
+                    )
+                    export["invitations"] = [dict(row) for row in invitation_rows]
+                    audit_report_rows = await conn.fetch(
+                        """SELECT id,workspace_id,start_url,status,created_at
+                           FROM website_audit_reports WHERE workspace_id=ANY($1::text[])
+                           ORDER BY created_at DESC LIMIT 1000""",
+                        workspace_ids,
+                    )
+                    export["website_audits"] = [dict(row) for row in audit_report_rows]
                     audit_rows = await conn.fetch(
                         """SELECT workspace_id,event_type,outcome,created_at
                            FROM security_audit_events
