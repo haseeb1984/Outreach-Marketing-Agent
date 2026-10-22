@@ -258,6 +258,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.schema_migrations') IS NOT NULL
                      AND to_regclass('public.meta_whatsapp_webhook_events') IS NOT NULL
                      AND to_regclass('public.workspace_whatsapp_accounts') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_prospects' AND column_name='contact_phone_e164')
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
@@ -275,8 +276,9 @@ async def readiness() -> Response:
                             '013_subscription_entitlements_and_usage.sql',
                             '014_billing_provider_event_ledger.sql',
                             '020_meta_whatsapp_webhook_inbox.sql',
-                            '021_workspace_whatsapp_accounts.sql'
-                          )) = 16"""
+                            '021_workspace_whatsapp_accounts.sql',
+                            '022_prospect_whatsapp_phone.sql'
+                          )) = 17"""
             )
             if not schema_ready:
                 return JSONResponse(
