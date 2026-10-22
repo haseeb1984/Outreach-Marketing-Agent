@@ -1,6 +1,7 @@
 """Workspace creation for authenticated multi-tenant accounts."""
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
@@ -59,7 +60,7 @@ async def create_workspace(payload: WorkspaceCreate, request: Request) -> dict:
                     """INSERT INTO security_audit_events
                        (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
                        VALUES ($1,$2,'workspace.created','success',$3::jsonb,now())""",
-                    workspace_id, user_id, '{"name":"' + payload.name.replace('"', '\"') + '"}',
+                    workspace_id, user_id, json.dumps({"name": payload.name}),
                 )
         return {"workspace_id": workspace_id, "name": payload.name, "role": "owner"}
     except HTTPException:
