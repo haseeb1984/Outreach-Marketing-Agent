@@ -24,8 +24,8 @@ def whatsapp_configuration_status(configuration=settings)->dict:
   "configuration_complete": not missing,
   "missing_fields": missing,
   "coexistence_onboarding_required": True,
-  "webhook_signature_verification_implemented": False,
-  "inbound_event_persistence_implemented": False,
+  "webhook_signature_verification_implemented": True,
+  "inbound_event_persistence_implemented": True,
   "live_send_enabled": False,
  }
 
