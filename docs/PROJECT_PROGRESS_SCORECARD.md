@@ -47,6 +47,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [~] WhatsApp account administration, inbound inbox and contact consent safeguards exist in code; runtime acceptance is pending.
 - [~] A fail-closed policy evaluator and provider-template registry foundation now check active account, documented opt-in, account-specific opt-out, the 24-hour customer-service window, and approved/verified templates. Re-consent requires selecting an active WhatsApp account so it cannot clear opt-outs for other accounts. The evaluator is not yet wired into an outbound sender.
 - [ ] WhatsApp outbound sending is intentionally disabled until the policy is integrated, durable provider sends/error reconciliation are implemented, and the end-to-end flow is verified.
+- [x] Added deterministic policy unit-test cases for seven fail-closed/allowed-window decisions; they have not been executed, so passing status is unknown.
 
 ### Phase 4 — Outreach and reply management: 70%
 
@@ -77,6 +78,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - Analytics API now counts inbound messages from mapped WhatsApp conversations and persisted WhatsApp delivery-status events over the selected period.
 - Dashboard analytics adds separate **WhatsApp inbound** and **WhatsApp status events** metrics.
 - Consent and opt-out safeguards, migrations 024/025/026 and readiness/test migration setup were committed in the preceding implementation rounds.
+- Added `backend/tests/test_whatsapp_send_policy.py` with seven deterministic policy decision cases; tests were authored but not run in this code-first pass.
 
 ## Next implementation order
 
