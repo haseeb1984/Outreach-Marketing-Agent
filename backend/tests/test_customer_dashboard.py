@@ -16,6 +16,10 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="prospect-form"' in response.text
     assert 'id="deliveries-list"' in response.text
     assert 'id="integration-status"' in response.text
+    assert 'id="analytics-heading"' in response.text
+    assert 'id="analytics-period"' in response.text
+    assert 'id="analytics-metrics"' in response.text
+    assert "/api/v1/analytics/summary?workspace_id=" in response.text
     assert 'id="integration-refresh"' in response.text
     assert 'id="smtp-connection-test"' in response.text
     assert "/api/v1/integrations/status?workspace_id=" in response.text
