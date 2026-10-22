@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS workspace_email_accounts (
     from_email TEXT NOT NULL CHECK (length(trim(from_email)) BETWEEN 3 AND 320),
     from_name TEXT NOT NULL DEFAULT 'Outreach Marketing Agent' CHECK (length(trim(from_name)) BETWEEN 1 AND 200),
     starttls BOOLEAN NOT NULL DEFAULT TRUE CHECK (starttls=TRUE),
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+    status TEXT NOT NULL DEFAULT 'pending_test' CHECK (status IN ('pending_test','active','disabled')),
     created_by UUID NOT NULL REFERENCES app_users(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
