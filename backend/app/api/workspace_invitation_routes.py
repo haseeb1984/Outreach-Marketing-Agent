@@ -61,7 +61,7 @@ async def list_invitations(
     try:
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
-                """SELECT id,workspace_id,invited_email,role,status,invited_by,
+                """SELECT id,workspace_id,invited_email,role,\n                          CASE WHEN status='pending' AND expires_at <= now() THEN 'expired' ELSE status END AS status,invited_by,
                           created_at,expires_at,accepted_at,revoked_at
                    FROM workspace_invitations WHERE workspace_id=$1
                    ORDER BY created_at DESC LIMIT 100""",
@@ -85,7 +85,7 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
     await _authorize_admin(request, payload.workspace_id, session)
-    if not settings.frontend_public_url:
+    if not (settings.frontend_public_url or settings.frontend_origins.strip()):
         raise HTTPException(status_code=503, detail="frontend_public_url_not_configured")
     try:
         email = normalize_email(payload.email)
