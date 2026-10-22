@@ -37,9 +37,8 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
     if not 1 <= batch_size <= 100:
         raise ValueError("batch_size_out_of_range")
     processed = messages_saved = statuses_saved = unmapped = failed = 0
-    last_event_id = None
-
     for _ in range(batch_size):
+        last_event_id = None
         try:
             async with pool.acquire() as conn:
                 async with conn.transaction():
@@ -151,7 +150,7 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                     """INSERT INTO whatsapp_delivery_status_events
                                        (workspace_id,account_id,provider_message_id,recipient_wa_id,status,provider_timestamp,errors)
                                        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
-                                       ON CONFLICT(provider_message_id,status,provider_timestamp) DO NOTHING""",
+                                       ON CONFLICT DO NOTHING""",
                                     workspace_id, account_id, provider_id,
                                     recipient[:64] if isinstance(recipient, str) else None,
                                     state[:40], _timestamp(status.get("timestamp")),
