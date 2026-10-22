@@ -18,7 +18,7 @@ class ProspectStore:
             raise ValueError("pagination_out_of_range")
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
-                """SELECT p.id, p.workspace_id, p.name, p.company, p.role, p.contact_email,
+                """SELECT p.id, p.workspace_id, p.name, p.company, p.role, p.contact_email, p.contact_phone_e164,
                           p.website_url, p.evidence_url, p.evidence_observed_at, p.fit_reason,
                           p.verified_facts, p.stage, p.notes, p.created_by, p.created_at, p.updated_at,
                           COALESCE(cc.email_suppressed, FALSE) AS email_suppressed,
@@ -37,21 +37,22 @@ class ProspectStore:
     async def create_prospect(
         self, *, workspace_id: str, created_by: UUID | str, name: str,
         company: str, website_url: str, evidence_url: str, fit_reason: str,
-        role: str | None = None, contact_email: str | None = None,
+        role: str | None = None, contact_email: str | None = None, contact_phone_e164: str | None = None,
         verified_facts: list[str] | None = None,
     ) -> dict[str, Any]:
         facts = self._clean_facts(verified_facts)
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """INSERT INTO crm_prospects
-                   (workspace_id, created_by, name, company, role, contact_email,
+                   (workspace_id, created_by, name, company, role, contact_email, contact_phone_e164,
                     website_url, evidence_url, fit_reason, verified_facts)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
-                   RETURNING id, workspace_id, name, company, role, contact_email,
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+                   RETURNING id, workspace_id, name, company, role, contact_email, contact_phone_e164,
                              website_url, evidence_url, evidence_observed_at, fit_reason,
                              verified_facts, stage, notes, created_by, created_at, updated_at""",
                 workspace_id, UUID(str(created_by)), name.strip(), company.strip(),
                 role.strip() if role else None, contact_email.strip() if contact_email else None,
+                contact_phone_e164.strip() if contact_phone_e164 else None,
                 website_url.strip(), evidence_url.strip(), fit_reason.strip(),
                 json.dumps(facts),
             )
@@ -68,7 +69,7 @@ class ProspectStore:
                 """UPDATE crm_prospects
                    SET stage=COALESCE($3,stage), notes=COALESCE($4,notes), updated_at=now()
                    WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL
-                   RETURNING id, workspace_id, name, company, role, contact_email,
+                   RETURNING id, workspace_id, name, company, role, contact_email, contact_phone_e164,
                              website_url, evidence_url, evidence_observed_at, fit_reason,
                              verified_facts, stage, notes, created_by, created_at, updated_at""",
                 prospect_id, workspace_id, stage, notes,
