@@ -86,6 +86,40 @@ class SMTPEmailDelivery:
             raise EmailDeliveryFailed("smtp_delivery_failed") from None
 
 
+    async def send_workspace_invitation_email(
+        self, *, recipient: str, token: str, workspace_name: str, role: str, expires_at: Any,
+    ) -> None:
+        """Send an expiring workspace invitation to the configured frontend origin."""
+        self._validate_configuration()
+        if not isinstance(recipient, str) or len(recipient) > 320 or "@" not in recipient:
+            raise ValueError("invalid_recipient")
+        if not isinstance(workspace_name, str) or not workspace_name.strip() or len(workspace_name) > 200:
+            raise ValueError("invalid_workspace_name")
+        if role not in {"admin", "member", "viewer"}:
+            raise ValueError("invalid_invitation_role")
+        base = (self._settings.frontend_public_url or "").strip()
+        parts = urlsplit(base)
+        if (parts.scheme.lower() != "https" or not parts.hostname
+                or parts.username is not None or parts.password is not None
+                or parts.path not in ("", "/") or parts.query or parts.fragment):
+            raise ValueError("frontend_https_origin_required")
+        link = urlunsplit(("https", parts.netloc, "/invitations/accept", urlencode({"token": token}), ""))
+        message = EmailMessage()
+        message["Subject"] = "You're invited to an Outreach Marketing Agent workspace"
+        message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
+        message["To"] = recipient
+        message.set_content(
+            "You have been invited to join the workspace: " + workspace_name.strip() + "\\n"
+            + "Your proposed role is: " + role + ".\\n\\n"
+            + "Sign in with this email address and accept the invitation here: " + link + "\\n\\n"
+            + "This invitation expires at " + expires_at.isoformat()
+            + ". If you were not expecting this invitation, you can ignore this email.\\n"
+        )
+        try:
+            await asyncio.to_thread(self._send_message, message)
+        except Exception:
+            raise EmailDeliveryFailed("smtp_delivery_failed") from None
+
     async def test_connection(self) -> None:
         """Verify TLS and SMTP authentication without sending any message."""
         self._validate_configuration()
