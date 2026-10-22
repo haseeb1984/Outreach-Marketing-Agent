@@ -83,6 +83,48 @@ class ProjectCreate(BaseModel):
         return list(dict.fromkeys(clean))
 
 
+class ProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    website_url: str | None = Field(default=None, max_length=2048)
+    business_model: str | None = Field(default=None, max_length=120)
+    target_market: str | None = Field(default=None, max_length=240)
+    language: str | None = Field(default=None, max_length=120)
+    audience: str | None = Field(default=None, max_length=2000)
+    offer: str | None = Field(default=None, max_length=2000)
+    conversion_goal: str | None = Field(default=None, max_length=300)
+    brand_voice: str | None = Field(default=None, max_length=800)
+    competitors: list[str] | None = Field(default=None, max_length=20)
+
+    @field_validator("name")
+    @classmethod
+    def clean_optional_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("project_name_required")
+        return value
+
+    @field_validator("website_url")
+    @classmethod
+    def validate_optional_website(cls, value: str | None) -> str | None:
+        return _https_url(value)
+
+    @field_validator("competitors")
+    @classmethod
+    def clean_optional_competitors(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        clean = []
+        for item in value:
+            if not isinstance(item, str) or not item.strip() or len(item.strip()) > 500:
+                raise ValueError("invalid_competitor")
+            clean.append(item.strip())
+        return list(dict.fromkeys(clean))
+
+
 @router.get("")
 async def list_projects(
     request: Request,
@@ -150,6 +192,57 @@ async def create_project(payload: ProjectCreate, request: Request) -> dict:
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="project_create_unavailable") from None
+
+
+@router.patch("/{project_id}")
+async def update_project(project_id: UUID, payload: ProjectUpdate, request: Request) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    changes = payload.model_dump(exclude_unset=True, exclude={"workspace_id"})
+    if not changes:
+        raise HTTPException(status_code=422, detail="no_project_updates_supplied")
+    columns = {
+        "name": "name",
+        "website_url": "website_url",
+        "business_model": "business_model",
+        "target_market": "target_market",
+        "language": "language",
+        "audience": "audience",
+        "offer": "offer",
+        "conversion_goal": "conversion_goal",
+        "brand_voice": "brand_voice",
+        "competitors": "competitors",
+    }
+    assignments = []
+    values = [project_id, payload.workspace_id]
+    for field, value in changes.items():
+        column = columns[field]
+        if field == "competitors":
+            value = json.dumps(value)
+        values.append(value)
+        placeholder = "$" + str(len(values))
+        assignments.append(f"{column}={placeholder}::jsonb" if field == "competitors" else f"{column}={placeholder}")
+    assignments.append("updated_at=now()")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                "UPDATE workspace_projects SET " + ", ".join(assignments) +
+                " WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL RETURNING "
+                "id,workspace_id,name,website_url,business_model,target_market,language,audience,"
+                "offer,conversion_goal,brand_voice,competitors,status,created_by,created_at,updated_at",
+                *values,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="project_not_found")
+        result = dict(row)
+        result["id"] = str(result["id"])
+        result["created_by"] = str(result["created_by"])
+        return result
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="project_update_unavailable") from None
 
 
 @router.delete("/{project_id}", status_code=204)
