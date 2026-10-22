@@ -1,5 +1,7 @@
 # Outreach Marketing Agent
 
+> Internal implementation tracking: see [`docs/PROJECT_PROGRESS_SCORECARD.md`](docs/PROJECT_PROGRESS_SCORECARD.md) for the six-phase numeric progress estimate and unverified production gates. Scores are code-inventory estimates, not test-pass or production-readiness claims.
+
 A commercial, multi-tenant SaaS platform whose core job is to help client businesses win more qualified opportunities and improve organic search performance through business-aware prospect discovery, personalized email/WhatsApp outreach, competitor intelligence, and website crawlability/SEO optimization. Customers will be able to register, manage isolated workspaces/projects, research public-facing prospects and competing pages, draft personalized outreach, track replies and SEO outcomes, and pay for plan-based access.
 
 ## Product principles
