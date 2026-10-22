@@ -13,6 +13,7 @@ type Delivery = { id: string; subject?: string; channel?: string; status: string
 type Counts = Record<string, number>;
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
+type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [projectName, setProjectName] = useState("");
@@ -135,6 +137,8 @@ export default function DashboardPage() {
     setProjects(projectResponse.status === "fulfilled" ? (projectResponse.value.items || []) : []);
     const invitationResult = await Promise.allSettled([api<{ items: Invitation[] }>("/api/v1/workspaces/invitations?workspace_id=" + encodeURIComponent(selectedId), token)]);
     setInvitations(invitationResult[0].status === "fulfilled" ? (invitationResult[0].value.items || []) : []);
+    const memberResult = await Promise.allSettled([api<{ items: WorkspaceMember[] }>("/api/v1/workspaces/members?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    setMembers(memberResult[0].status === "fulfilled" ? (memberResult[0].value.items || []) : []);
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
@@ -196,6 +200,34 @@ export default function DashboardPage() {
     })();
     return () => { cancelled = true; };
   }, [loadWorkspaceData, router]);
+
+  async function changeMemberRole(member: WorkspaceMember, role: string) {
+    if (!workspaceId || !csrf || role === member.role) return;
+    if (!window.confirm("Change " + member.email + "'s role to " + role + "?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspaces/members/" + encodeURIComponent(member.user_id), csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, role }),
+      });
+      setNotice("Workspace member role updated.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Member role could not be changed.");
+      await refresh(workspaceId, csrf);
+    } finally { setBusy(false); }
+  }
+
+  async function removeMember(member: WorkspaceMember) {
+    if (!workspaceId || !csrf || !window.confirm("Remove " + member.email + " from this workspace? Their account will remain active.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspaces/members/" + encodeURIComponent(member.user_id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("Member removed from this workspace.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Workspace member could not be removed.");
+    } finally { setBusy(false); }
+  }
 
   async function createInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -556,6 +588,11 @@ export default function DashboardPage() {
               <button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Send invitation</button>
             </form>
           </article>
+          <h3>Current members</h3>
+          <div className="cards">{members.length ? members.map(member=><article className="card" key={member.user_id}><h3>{member.email}</h3><p className="fine">{member.status} · {member.role}</p>
+            {member.role !== "owner" && <div className="field"><label htmlFor={"role-" + member.user_id}>Role</label><select id={"role-" + member.user_id} value={member.role} disabled={busy} onChange={e=>changeMemberRole(member,e.target.value)}><option value="viewer">Viewer</option><option value="member">Member</option><option value="admin">Admin</option></select></div>}
+            {member.role !== "owner" && <button className="button secondary" type="button" disabled={busy} onClick={()=>removeMember(member)}>Remove member</button>}
+          </article>) : <article className="card"><p>Member list is unavailable or no active memberships were returned.</p></article>}</div>
           <div className="cards">{invitations.length ? invitations.map(invitation=><article className="card" key={invitation.id}><h3>{invitation.invited_email}</h3><p className="fine">Role: {invitation.role} · Status: {invitation.status}</p><p className="fine">Expires: {new Date(invitation.expires_at).toLocaleString()}</p>{invitation.status === "pending" && <button className="button secondary" type="button" disabled={busy} onClick={() => revokeInvitation(invitation)}>Revoke invitation</button>}</article>) : <article className="card"><p>No invitations available for this workspace, or the invitation service is not yet configured.</p></article>}</div>
         </section>}
         <section className="section" aria-labelledby="billing-title"><h2 id="billing-title">Plan and billing</h2>
