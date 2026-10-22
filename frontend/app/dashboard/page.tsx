@@ -344,6 +344,18 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function verifyWhatsAppAccount(account: WhatsAppAccount) {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ verified: boolean; notice: string }>("/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/verify?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
+      setNotice(result.notice || "Meta account verified. Sending remains disabled until policy and delivery safeguards are implemented.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp account verification failed.");
+    } finally { setBusy(false); }
+  }
+
   async function disableWhatsAppAccount(account: WhatsAppAccount) {
     if (!workspaceId || !csrf || !window.confirm("Disable the WhatsApp account " + account.label + "?")) return;
     setBusy(true); setError(""); setNotice("");
@@ -863,6 +875,7 @@ export default function DashboardPage() {
             <div className="cards">{whatsappAccounts.length ? whatsappAccounts.map(account => <article className="card" key={account.id}>
               <h4>{account.label}</h4><p className="fine">WABA ID: {account.waba_id} · Phone number ID: {account.phone_number_id}</p>
               <p className="fine">Status: {account.status}</p>
+              {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "pending_verification" && <button className="button" type="button" disabled={busy} onClick={() => verifyWhatsAppAccount(account)}>Verify with Meta</button>}
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
             </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details className="card"><summary>Register Meta WhatsApp account</summary>
