@@ -1,0 +1,173 @@
+"""Idempotent worker for the durable Meta WhatsApp webhook inbox.
+
+Invoke from a trusted worker/scheduler with the application DB pool. This module does not
+send messages; it only stores inbound conversations and provider delivery-status events.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+from uuid import UUID
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, (str, int, float)):
+        return None
+    try:
+        parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
+        return parsed
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def _text(message: dict[str, Any]) -> tuple[str, str | None]:
+    kind = message.get("type")
+    if not isinstance(kind, str) or not kind:
+        kind = "unknown"
+    body: str | None = None
+    if kind == "text":
+        obj = message.get("text")
+        if isinstance(obj, dict) and isinstance(obj.get("body"), str):
+            body = obj["body"][:10000]
+    return kind[:40], body
+
+
+async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) -> dict[str, int]:
+    """Process a bounded batch using row locks; safe for concurrent worker instances."""
+    if not 1 <= batch_size <= 100:
+        raise ValueError("batch_size_out_of_range")
+    processed = messages_saved = statuses_saved = unmapped = failed = 0
+
+    for _ in range(batch_size):
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    event = await conn.fetchrow(
+                        """SELECT id, phone_number_id, payload
+                           FROM meta_whatsapp_webhook_events
+                           WHERE processed_at IS NULL AND attempts < 8
+                           ORDER BY received_at, id
+                           FOR UPDATE SKIP LOCKED LIMIT 1"""
+                    )
+                    if event is None:
+                        break
+                    await conn.execute(
+                        "UPDATE meta_whatsapp_webhook_events SET attempts=attempts+1, processing_started_at=now() WHERE id=$1",
+                        event["id"],
+                    )
+                    account = None
+                    if event["phone_number_id"]:
+                        account = await conn.fetchrow(
+                            """SELECT id, workspace_id FROM workspace_whatsapp_accounts
+                               WHERE phone_number_id=$1 AND status='active'""",
+                            event["phone_number_id"],
+                        )
+                    payload = event["payload"]
+                    if isinstance(payload, str):
+                        import json
+                        payload = json.loads(payload)
+                    if account is None:
+                        await conn.execute(
+                            """UPDATE meta_whatsapp_webhook_events
+                               SET processed_at=now(), processing_error_code='unmapped_or_inactive_phone'
+                               WHERE id=$1""",
+                            event["id"],
+                        )
+                        processed += 1
+                        unmapped += 1
+                        continue
+
+                    workspace_id = str(account["workspace_id"])
+                    account_id = account["id"]
+                    saved_this_event = 0
+                    status_this_event = 0
+                    entries = payload.get("entry", []) if isinstance(payload, dict) else []
+                    for entry in entries if isinstance(entries, list) else []:
+                        if not isinstance(entry, dict):
+                            continue
+                        changes = entry.get("changes", [])
+                        for change in changes if isinstance(changes, list) else []:
+                            if not isinstance(change, dict):
+                                continue
+                            value = change.get("value")
+                            if not isinstance(value, dict):
+                                continue
+                            metadata = value.get("metadata")
+                            if not isinstance(metadata, dict) or metadata.get("phone_number_id") != event["phone_number_id"]:
+                                continue
+                            messages = value.get("messages", [])
+                            for msg in messages if isinstance(messages, list) else []:
+                                if not isinstance(msg, dict):
+                                    continue
+                                provider_id = msg.get("id")
+                                wa_id = msg.get("from")
+                                if not isinstance(provider_id, str) or not provider_id or not isinstance(wa_id, str) or not wa_id.isdigit() or len(wa_id) > 64:
+                                    continue
+                                prospect = await conn.fetchrow(
+                                    """SELECT id FROM crm_prospects
+                                       WHERE workspace_id=$1 AND archived_at IS NULL
+                                         AND regexp_replace(contact_phone_e164, '[^0-9]', '', 'g')=$2
+                                       ORDER BY updated_at DESC LIMIT 1""",
+                                    workspace_id, wa_id,
+                                )
+                                conversation = await conn.fetchrow(
+                                    """INSERT INTO whatsapp_conversations(workspace_id,account_id,prospect_id,wa_id)
+                                       VALUES($1,$2,$3,$4)
+                                       ON CONFLICT(workspace_id,account_id,wa_id) DO UPDATE
+                                         SET prospect_id=COALESCE(whatsapp_conversations.prospect_id,EXCLUDED.prospect_id),
+                                             updated_at=now()
+                                       RETURNING id""",
+                                    workspace_id, account_id, prospect["id"] if prospect else None, wa_id,
+                                )
+                                message_type, body = _text(msg)
+                                inserted = await conn.fetchval(
+                                    """INSERT INTO whatsapp_inbound_messages
+                                       (workspace_id,conversation_id,provider_message_id,message_type,text_body,provider_timestamp)
+                                       VALUES($1,$2,$3,$4,$5,$6)
+                                       ON CONFLICT(provider_message_id) DO NOTHING
+                                       RETURNING id""",
+                                    workspace_id, conversation["id"], provider_id, message_type, body, _timestamp(msg.get("timestamp")),
+                                )
+                                if inserted:
+                                    saved_this_event += 1
+                                    if prospect:
+                                        await conn.execute(
+                                            """UPDATE crm_prospects SET stage='replied', updated_at=now()
+                                               WHERE id=$1 AND workspace_id=$2
+                                                 AND stage NOT IN ('converted','disqualified','do_not_contact')""",
+                                            prospect["id"], workspace_id,
+                                        )
+                            statuses = value.get("statuses", [])
+                            for status in statuses if isinstance(statuses, list) else []:
+                                if not isinstance(status, dict):
+                                    continue
+                                provider_id, state = status.get("id"), status.get("status")
+                                recipient = status.get("recipient_id")
+                                if not isinstance(provider_id, str) or not provider_id or not isinstance(state, str) or not state:
+                                    continue
+                                await conn.execute(
+                                    """INSERT INTO whatsapp_delivery_status_events
+                                       (workspace_id,account_id,provider_message_id,recipient_wa_id,status,provider_timestamp,errors)
+                                       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
+                                       ON CONFLICT(provider_message_id,status,provider_timestamp) DO NOTHING""",
+                                    workspace_id, account_id, provider_id,
+                                    recipient[:64] if isinstance(recipient, str) else None,
+                                    state[:40], _timestamp(status.get("timestamp")),
+                                    __import__("json").dumps(status.get("errors", []) if isinstance(status.get("errors", []), list) else []),
+                                )
+                                status_this_event += 1
+                    await conn.execute(
+                        """UPDATE meta_whatsapp_webhook_events
+                           SET processed_at=now(), processing_error_code=NULL WHERE id=$1""",
+                        event["id"],
+                    )
+                    processed += 1
+                    messages_saved += saved_this_event
+                    statuses_saved += status_this_event
+        except Exception:
+            failed += 1
+            # Do not log payloads, phone numbers, provider IDs, or credentials.
+            # The row attempt counter was committed only if the transaction completed, so a
+            # failure rolls back and leaves the event available to another worker.
+            continue
+    return {"processed": processed, "messages_saved": messages_saved, "statuses_saved": statuses_saved, "unmapped": unmapped, "failed": failed}
