@@ -77,3 +77,6 @@
 
 
 - WhatsApp status deduplication follow-up on 2026-10-23: migration `025_whatsapp_status_event_dedup.sql` removes duplicate status rows and adds a unique index over provider message ID, status and a normalized timestamp expression so missing timestamps no longer bypass deduplication. Readiness and the PostgreSQL migration setup now require migration 025. The configuration-status response also accurately reports webhook signature verification and inbound persistence as implemented. No tests, provider calls or deployment were run.
+
+
+- WhatsApp policy foundation follow-up on 2026-10-23: migration `026_whatsapp_template_and_window_policy.sql` adds an account-scoped provider-template registry and latest inbound timestamp fields for 24-hour customer-service-window checks. The webhook worker records latest inbound activity for mapped contacts. Added `app/services/whatsapp_send_policy.py`, a fail-closed eligibility evaluator that checks active account, contact stage, documented opt-in, account-specific opt-out, the 24-hour window, and an approved/verified provider template when outside that window. Readiness and PostgreSQL migration setup now include migration 026. **This evaluator is not yet wired into an outbound WhatsApp sender; no WhatsApp messages are sent by it, and live sending remains disabled.** No tests or deployment were run.
