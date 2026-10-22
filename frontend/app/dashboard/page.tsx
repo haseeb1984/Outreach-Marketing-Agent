@@ -12,6 +12,7 @@ type Plan = { id: string; name: string; description: string; display_price: stri
 type Delivery = { id: string; subject?: string; channel?: string; status: string; error_code?: string | null; created_at?: string };
 type Counts = Record<string, number>;
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
+type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
 async function api<T>(path: string, csrf: string | null, options: RequestInit = {}): Promise<T> {
@@ -35,6 +36,9 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       request_origin_rejected: "The frontend origin is not yet authorized by the backend.",
       email_provider_not_configured: "Email sending is not configured.",
       quota_exhausted: "This workspace has reached its current usage limit.",
+      search_provider_not_configured: "Live public-web research is not configured on the server yet.",
+      search_provider_unavailable: "The search provider is temporarily unavailable. Try again later.",
+      search_response_invalid: "The search provider returned an unexpected response.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
@@ -52,6 +56,9 @@ export default function DashboardPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [researchQuery, setResearchQuery] = useState("");
+  const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
+  const [researchBusy, setResearchBusy] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -172,6 +179,27 @@ export default function DashboardPage() {
       await refresh(workspaceId, csrf);
     } catch (err) { setError(err instanceof Error ? err.message : "Campaign could not be created."); }
     finally { setBusy(false); }
+  }
+
+  async function searchProspects(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !researchQuery.trim()) return;
+    setResearchBusy(true); setError(""); setNotice(""); setResearchResults([]);
+    try {
+      const result = await api<{ items: ResearchResult[]; notice?: string }>("/api/v1/research/prospects/search", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          query: researchQuery.trim(),
+          count: 10,
+          idempotency_key: "research-" + crypto.randomUUID(),
+        }),
+      });
+      setResearchResults(result.items || []);
+      setNotice(result.notice || "Research results loaded for human review.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Public-web research could not be completed.");
+    } finally { setResearchBusy(false); }
   }
 
   async function createProspect(event: FormEvent<HTMLFormElement>) {
@@ -361,6 +389,14 @@ export default function DashboardPage() {
           <article className="card"><h2>Add a prospect</h2><p className="fine">Save public evidence and a clear reason for fit. Website and evidence URLs must use HTTPS.</p><form onSubmit={createProspect}><div className="field"><label htmlFor="prospect-name">Contact / prospect name</label><input id="prospect-name" required maxLength={200} value={prospectName} onChange={e=>setProspectName(e.target.value)} /></div><div className="field"><label htmlFor="prospect-company">Company</label><input id="prospect-company" required maxLength={240} value={prospectCompany} onChange={e=>setProspectCompany(e.target.value)} /></div><div className="field"><label htmlFor="prospect-email">Business email (optional)</label><input id="prospect-email" type="email" maxLength={320} value={prospectEmail} onChange={e=>setProspectEmail(e.target.value)} /></div><div className="field"><label htmlFor="prospect-website">Website URL</label><input id="prospect-website" type="url" required placeholder="https://example.com" value={prospectWebsite} onChange={e=>setProspectWebsite(e.target.value)} /></div><div className="field"><label htmlFor="evidence-url">Evidence URL</label><input id="evidence-url" type="url" required placeholder="https://example.com/about" value={evidenceUrl} onChange={e=>setEvidenceUrl(e.target.value)} /></div><div className="field"><label htmlFor="fit-reason">Why this prospect fits</label><textarea id="fit-reason" required maxLength={2000} value={fitReason} onChange={e=>setFitReason(e.target.value)} /></div><button className="button" disabled={busy || !canWrite || !workspaceId}>Save prospect</button></form></article>
         </div></section>
         <section className="section"><h2>Campaigns</h2><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div></section>
+        <section className="section" aria-labelledby="research-title"><h2 id="research-title">Discover prospects from public sources</h2>
+          <article className="card"><p className="fine">Search returns source-linked suggestions only. Results are not saved automatically; verify fit and evidence before adding a prospect to the CRM.</p>
+            <form onSubmit={searchProspects}><div className="field"><label htmlFor="research-query">Business, audience and market query</label><textarea id="research-query" required minLength={3} maxLength={400} value={researchQuery} onChange={e=>setResearchQuery(e.target.value)} placeholder="Describe the type of business, creator, publisher or potential customer you want to find." /></div>
+              <button className="button" type="submit" disabled={researchBusy || busy || !workspaceId || !csrf || !canWrite}>{researchBusy ? "Searching public sources…" : "Search public web"}</button>
+            </form>
+          </article>
+          {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Evidence: public search result · Review required · Not saved to CRM</p></article>)}</div>}
+        </section>
         <section className="section"><h2>Prospect CRM</h2><div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p>{p.contact_email && <p className="fine">Email outreach: {p.email_suppressed ? "Suppressed" : "Not suppressed"}</p>}<p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p>{p.contact_email && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEmailSuppression(p, !p.email_suppressed)}>{p.email_suppressed ? "Allow email outreach" : "Suppress email outreach"}</button></div>}</article>) : <article className="card"><p>No prospects saved yet.</p></article>}</div></section>
         <section className="section"><h2>Prepare an outreach draft</h2><article className="card"><p className="fine">Draft generation uses workspace entitlements and saved prospect evidence. Every draft enters review; this form never sends a message.</p><form onSubmit={generateDraft}><div className="field"><label htmlFor="draft-campaign">Campaign</label><select id="draft-campaign" required value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}><option value="">Choose a campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="field"><label htmlFor="draft-prospect">Prospect</label><select id="draft-prospect" required value={selectedProspect} onChange={e=>setSelectedProspect(e.target.value)}><option value="">Choose a prospect</option>{prospects.map(p=><option key={p.id} value={p.id}>{p.name} · {p.company}</option>)}</select></div><div className="field"><label htmlFor="draft-channel">Channel</label><select id="draft-channel" value={draftChannel} onChange={e=>setDraftChannel(e.target.value)}><option value="email">Email</option><option value="whatsapp">WhatsApp draft (eligibility checked by backend)</option></select></div><div className="field"><label htmlFor="draft-cta">Call to action</label><textarea id="draft-cta" required maxLength={500} value={draftCallToAction} onChange={e=>setDraftCallToAction(e.target.value)} placeholder="Suggest a short, relevant next step" /></div><button className="button" disabled={busy || !canWrite || !workspaceId || !campaigns.length || !prospects.length}>Generate draft for review</button></form></article></section>
         <section className="section"><h2>Draft review queue</h2><p className="fine">Approving a draft does not send it. Sending remains a separate explicit action.</p><div className="cards">{drafts.length ? drafts.map(d=><article className="card" key={d.id}><p className="eyebrow">{d.channel || "Outreach"} · {d.status}</p><h3>{d.subject || d.prospect_name || "Outreach draft"}</h3><p>{d.body || "Draft content is not available."}</p>{d.status === "approved" && d.channel === "email" && <div className="actions"><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => queueDraft(d)}>Queue email</button></div>}{d.status === "pending_approval" && <div className="actions"><button type="button" className="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"approved")}>Approve draft</button><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"rejected")}>Reject</button></div>}</article>) : <article className="card"><p>No drafts yet. Draft generation requires configured paid entitlements and eligible prospect evidence.</p></article>}</div></section>
