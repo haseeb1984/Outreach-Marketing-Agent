@@ -226,6 +226,36 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function updateProject(event: FormEvent<HTMLFormElement>, project: Project) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    const form = new FormData(event.currentTarget);
+    const value = (key: string) => String(form.get(key) || "");
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/projects/" + encodeURIComponent(project.id), csrf, {
+        method: "PATCH",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          name: value("name"),
+          website_url: value("website_url") || null,
+          business_model: value("business_model"),
+          target_market: value("target_market"),
+          language: value("language"),
+          audience: value("audience"),
+          offer: value("offer"),
+          conversion_goal: value("conversion_goal"),
+          brand_voice: value("brand_voice"),
+          competitors: value("competitors").split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean).slice(0, 20),
+        }),
+      });
+      setNotice("Project settings updated.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Project settings could not be updated.");
+    } finally { setBusy(false); }
+  }
+
   async function archiveProject(project: Project) {
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
     if (!window.confirm("Archive project " + project.name + "? It will disappear from the active project list; existing workspace records are not deleted.")) return;
@@ -551,7 +581,21 @@ export default function DashboardPage() {
         </div></section>
         <section className="section" aria-labelledby="projects-title"><h2 id="projects-title">Client projects and websites</h2>
           <p className="fine">Keep each client website, audience, offer, language and growth goal in its own workspace-scoped project profile.</p>
-          <div className="cards">{projects.length ? projects.map(project=><article className="card" key={project.id}><h3>{project.name}</h3><p>{project.website_url || "No website URL added yet."}</p><p className="fine">{project.business_model} · {project.target_market} · {project.language}</p><p>{project.audience}</p><p className="fine">Goal: {project.conversion_goal || "Not set"}</p>{project.website_url && <p><a href={project.website_url} target="_blank" rel="noreferrer">Open project website</a></p>}{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={() => archiveProject(project)}>Archive project</button>}</article>) : <article className="card"><p>No project profiles yet. Create one for each website or client business.</p></article>}</div>
+          <div className="cards">{projects.length ? projects.map(project=><article className="card" key={project.id}><h3>{project.name}</h3><p>{project.website_url || "No website URL added yet."}</p><p className="fine">{project.business_model} · {project.target_market} · {project.language}</p><p>{project.audience}</p><p className="fine">Goal: {project.conversion_goal || "Not set"}</p>{project.website_url && <p><a href={project.website_url} target="_blank" rel="noreferrer">Open project website</a></p>}
+            {["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details><summary>Edit project settings</summary><form onSubmit={event=>updateProject(event,project)}>
+              <div className="field"><label>Project name</label><input name="name" required maxLength={160} defaultValue={project.name} /></div>
+              <div className="field"><label>Website URL</label><input name="website_url" type="url" maxLength={2048} defaultValue={project.website_url || ""} /></div>
+              <div className="field"><label>Business model</label><input name="business_model" maxLength={120} defaultValue={project.business_model} /></div>
+              <div className="field"><label>Target market</label><input name="target_market" maxLength={240} defaultValue={project.target_market} /></div>
+              <div className="field"><label>Language(s)</label><input name="language" maxLength={120} defaultValue={project.language} /></div>
+              <div className="field"><label>Target audience</label><textarea name="audience" maxLength={2000} defaultValue={project.audience} /></div>
+              <div className="field"><label>Offer</label><textarea name="offer" maxLength={2000} defaultValue={project.offer} /></div>
+              <div className="field"><label>Conversion goal</label><input name="conversion_goal" maxLength={300} defaultValue={project.conversion_goal} /></div>
+              <div className="field"><label>Brand voice</label><input name="brand_voice" maxLength={800} defaultValue={project.brand_voice} /></div>
+              <div className="field"><label>Competitors (one per line)</label><textarea name="competitors" maxLength={10000} defaultValue={(project.competitors || []).join(String.fromCharCode(10))} /></div>
+              <button className="button" type="submit" disabled={busy}>Save changes</button>
+            </form></details>}
+            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={() => archiveProject(project)}>Archive project</button>}</article>) : <article className="card"><p>No project profiles yet. Create one for each website or client business.</p></article>}</div>
           <article className="card"><h3>Create project profile</h3><form onSubmit={createProject}>
             <div className="field"><label htmlFor="project-name">Project name</label><input id="project-name" required maxLength={160} value={projectName} onChange={e=>setProjectName(e.target.value)} /></div>
             <div className="field"><label htmlFor="project-website">Website URL (optional)</label><input id="project-website" type="url" maxLength={2048} placeholder="https://example.com" value={projectWebsite} onChange={e=>setProjectWebsite(e.target.value)} /></div>
