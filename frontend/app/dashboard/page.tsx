@@ -12,6 +12,7 @@ type Plan = { id: string; name: string; description: string; display_price: stri
 type Delivery = { id: string; subject?: string; channel?: string; status: string; error_code?: string | null; created_at?: string };
 type Counts = Record<string, number>;
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
+type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -59,6 +60,9 @@ export default function DashboardPage() {
   const [csrf, setCsrf] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
   const [projectName, setProjectName] = useState("");
   const [projectWebsite, setProjectWebsite] = useState("");
   const [projectBusinessModel, setProjectBusinessModel] = useState("");
@@ -129,6 +133,8 @@ export default function DashboardPage() {
     ]);
     const projectResponse = projectResult[0];
     setProjects(projectResponse.status === "fulfilled" ? (projectResponse.value.items || []) : []);
+    const invitationResult = await Promise.allSettled([api<{ items: Invitation[] }>("/api/v1/workspaces/invitations?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    setInvitations(invitationResult[0].status === "fulfilled" ? (invitationResult[0].value.items || []) : []);
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
@@ -190,6 +196,35 @@ export default function DashboardPage() {
     })();
     return () => { cancelled = true; };
   }, [loadWorkspaceData, router]);
+
+  async function createInvitation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspaces/invitations", csrf, {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceId, email: inviteEmail, role: inviteRole }),
+      });
+      setInviteEmail("");
+      setNotice("Invitation email sent. The recipient must sign in with that email address to accept.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Workspace invitation could not be sent.");
+    } finally { setBusy(false); }
+  }
+
+  async function revokeInvitation(invitation: Invitation) {
+    if (!workspaceId || !csrf || !window.confirm("Revoke the pending invitation for " + invitation.invited_email + "?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspaces/invitations/" + encodeURIComponent(invitation.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("Pending invitation revoked.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invitation could not be revoked.");
+    } finally { setBusy(false); }
+  }
 
   async function archiveProject(project: Project) {
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
