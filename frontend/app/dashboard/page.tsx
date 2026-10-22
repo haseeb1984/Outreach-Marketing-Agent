@@ -191,6 +191,19 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, [loadWorkspaceData, router]);
 
+  async function archiveProject(project: Project) {
+    if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    if (!window.confirm("Archive project " + project.name + "? It will disappear from the active project list; existing workspace records are not deleted.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/projects/" + encodeURIComponent(project.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("Project archived. Its historical campaign and CRM records remain in the workspace.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Project could not be archived.");
+    } finally { setBusy(false); }
+  }
+
   async function createProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
@@ -494,7 +507,7 @@ export default function DashboardPage() {
         </div></section>
         <section className="section" aria-labelledby="projects-title"><h2 id="projects-title">Client projects and websites</h2>
           <p className="fine">Keep each client website, audience, offer, language and growth goal in its own workspace-scoped project profile.</p>
-          <div className="cards">{projects.length ? projects.map(project=><article className="card" key={project.id}><h3>{project.name}</h3><p>{project.website_url || "No website URL added yet."}</p><p className="fine">{project.business_model} · {project.target_market} · {project.language}</p><p>{project.audience}</p><p className="fine">Goal: {project.conversion_goal || "Not set"}</p>{project.website_url && <p><a href={project.website_url} target="_blank" rel="noreferrer">Open project website</a></p>}</article>) : <article className="card"><p>No project profiles yet. Create one for each website or client business.</p></article>}</div>
+          <div className="cards">{projects.length ? projects.map(project=><article className="card" key={project.id}><h3>{project.name}</h3><p>{project.website_url || "No website URL added yet."}</p><p className="fine">{project.business_model} · {project.target_market} · {project.language}</p><p>{project.audience}</p><p className="fine">Goal: {project.conversion_goal || "Not set"}</p>{project.website_url && <p><a href={project.website_url} target="_blank" rel="noreferrer">Open project website</a></p>}{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={() => archiveProject(project)}>Archive project</button>}</article>) : <article className="card"><p>No project profiles yet. Create one for each website or client business.</p></article>}</div>
           <article className="card"><h3>Create project profile</h3><form onSubmit={createProject}>
             <div className="field"><label htmlFor="project-name">Project name</label><input id="project-name" required maxLength={160} value={projectName} onChange={e=>setProjectName(e.target.value)} /></div>
             <div className="field"><label htmlFor="project-website">Website URL (optional)</label><input id="project-website" type="url" maxLength={2048} placeholder="https://example.com" value={projectWebsite} onChange={e=>setProjectWebsite(e.target.value)} /></div>
