@@ -20,7 +20,7 @@
 | Subscription and billing | Migration 013 for entitlements/usage, migration 014 provider-event ledger, subscription store, billing lifecycle store, authenticated read-only `GET /api/v1/billing/entitlements` endpoint | Partial foundation only; no verified payment-provider checkout/webhook/reconciliation lifecycle established |
 | Paid entitlements and quotas | Server-side entitlement decision endpoint and persistence foundation | Not release-ready: paid operations must remain fail-closed until transactional enforcement and concurrency tests cover all paid actions/jobs |
 | Customer dashboard/onboarding | Responsive same-origin `/app` UI; registration/sign-in and reset request through existing auth APIs; authenticated active-workspace selector; prospect create/list; campaign create/list; draft list and approve/reject; read-only delivery activity; role-aware controls; noindex/no-store and security headers; `tests/test_customer_dashboard.py` | **Core dashboard/onboarding phase implemented; CI passed.** Remaining product gaps: workspace/project settings and invitations, connected-provider management, complete billing UX, and authenticated browser/accessibility acceptance.
-| WhatsApp Business Platform | No complete native Meta onboarding/webhook/send flow verified | **PENDING**; keep live sending disabled until account/Coexistence eligibility, native signature validation, event persistence, opt-in/template checks and staging acceptance |
+| WhatsApp Business Platform | Native Meta webhook GET verification, raw-body `X-Hub-Signature-256` validation, 1 MiB request cap, payload-hash deduplication and durable event inbox in migration 020 | **Webhook intake foundation implemented on `main`**; tenant account mapping, workspace credential connection/onboarding, inbound contact matching, opt-in/template policy enforcement, event worker and outbound sending remain pending. Live sending stays disabled. |
 | Provider account connections and analytics | Partial delivery/reply foundations; no complete customer-managed account-linking and verified campaign analytics workflow established | Incomplete |
 | Production operations | CI, migrations, readiness checks and security tests exist | Staging secrets/provider smoke tests, accessibility/manual screen-reader checks, performance/load evidence, backup-restore drill, monitoring/incident runbook and policy review remain |
 
@@ -40,3 +40,13 @@
 - External sending, live payments and website writes remain gated until staging acceptance and explicit release approval.
 - CI success proves only the checks that ran on that commit. It does not prove external provider operation or production readiness.
 - Never fabricate delivery, conversion, SEO ranking, AI-crawler adoption or ROI metrics.
+
+
+## Implementation update — 2026-10-23 (GitHub-only; no deployment or tests run)
+
+- Added `backend/migrations/020_meta_whatsapp_webhook_inbox.sql` to persist verified Meta webhook events with payload-hash deduplication and a pending-work index.
+- Added `backend/app/api/meta_whatsapp_webhook_routes.py`: Meta subscription handshake using a server-side verify token, raw-body HMAC-SHA256 signature validation, bounded request streaming, JSON/object validation, and durable persistence without logging message content.
+- Registered the receiver in FastAPI and added the inbox table/migration to readiness checks.
+- Documented the verify-token setting and webhook configuration in `backend/.env.example`. No real credentials were added.
+- **Important limitation:** this is webhook intake only. It does not yet map phone-number IDs to workspace-owned accounts, process message/status events into CRM conversations, validate opt-in/template eligibility, or enable outbound WhatsApp sends. Those remain open implementation work.
+- This update was committed directly to `main`. Automated tests, deployment, and live Meta webhook acceptance were intentionally not run, so runtime correctness is not claimed.
