@@ -54,6 +54,7 @@ async def _exercise_password_reset() -> None:
             "023_whatsapp_conversations_and_status.sql",
             "024_whatsapp_contact_preferences.sql",
             "025_whatsapp_status_event_dedup.sql",
+            "026_whatsapp_template_and_window_policy.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
