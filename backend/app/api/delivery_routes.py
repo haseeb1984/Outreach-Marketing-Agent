@@ -6,6 +6,7 @@ from fastapi import APIRouter,HTTPException,Query,Request
 from pydantic import BaseModel,ConfigDict,Field
 from app.api.auth_routes import _authenticated,_check_csrf
 from app.services.email_delivery import EmailDeliveryFailed,EmailDeliveryNotConfigured,SMTPEmailDelivery
+from app.services.smtp_account_store import CredentialDecryptionFailed, CredentialEncryptionNotConfigured, SMTPAccountStore
 from app.core.config import settings
 router=APIRouter(prefix="/api/v1",tags=["outbound-delivery"])
 
@@ -102,9 +103,42 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
         raise HTTPException(status_code=503, detail="delivery_claim_unavailable") from None
 
     try:
-        await SMTPEmailDelivery().send_outreach_email(
-            recipient=data["recipient"], subject=data["subject"], body=data["body"]
+        if data.get("email_account_id"):
+            pool = getattr(request.app.state, "db_pool", None)
+            if pool is None:
+                raise EmailDeliveryNotConfigured("email_account_service_not_configured")
+            configuration = await SMTPAccountStore(pool).get_config(
+                workspace_id=payload.workspace_id,
+                account_id=UUID(data["email_account_id"]),
+            )
+            await SMTPEmailDelivery(configuration).send_outreach_email(
+                recipient=data["recipient"], subject=data["subject"], body=data["body"]
+            )
+        else:
+            await SMTPEmailDelivery().send_outreach_email(
+                recipient=data["recipient"], subject=data["subject"], body=data["body"]
+            )
+    except LookupError:
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="email_account_not_available")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
         )
+        raise HTTPException(status_code=409, detail="email_account_not_available") from None
+    except CredentialEncryptionNotConfigured:
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="provider_encryption_not_configured")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=503, detail="provider_credential_encryption_not_configured") from None
+    except CredentialDecryptionFailed:
+        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
+                           error_code="provider_credential_decryption_failed")
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=503, detail="provider_credential_decryption_failed") from None
     except EmailDeliveryNotConfigured:
         await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
                            error_code="provider_not_configured")
