@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function InvitationAcceptance({ token }: { token: string }) {
+export default function InvitationAcceptance() {
   const router = useRouter();
+  const [token, setToken] = useState("");
   const [csrf, setCsrf] = useState("");
   const [sessionReady, setSessionReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -13,9 +14,14 @@ export default function InvitationAcceptance({ token }: { token: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+    const fragmentParams = new URLSearchParams(fragment);
+    const inviteToken = fragmentParams.get("token") || "";
+    setToken(inviteToken);
     fetch("/api/v1/auth/me", { credentials: "same-origin", cache: "no-store" })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
+        if (!inviteToken) throw new Error("The invitation token is missing. Open the complete link from the invitation email.");
         if (!response.ok || typeof data.csrf_token !== "string" || !data.csrf_token) {
           throw new Error("Sign in with the invited email address, then reopen the invitation link.");
         }
