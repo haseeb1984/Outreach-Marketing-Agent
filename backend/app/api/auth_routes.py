@@ -76,11 +76,33 @@ def _origin_from_config() -> str | None:
         return None
 
 
+def _allowed_frontend_origins() -> set[str]:
+    """Return exact normalized HTTPS origins; never permit wildcard credentialed CORS."""
+    configured = [item.strip() for item in (settings.frontend_origins or "").split(",") if item.strip()]
+    origins: set[str] = set()
+    for value in configured:
+        try:
+            parsed = urlsplit(value)
+            if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+                continue
+            port = parsed.port
+            host = parsed.hostname.lower()
+            origins.add("https://" + host + (f":{port}" if port is not None and port != 443 else ""))
+        except ValueError:
+            continue
+    if not origins:
+        fallback = _origin_from_config()
+        if fallback:
+            origins.add(fallback)
+    return origins
+
+
 def _require_origin(request: Request) -> None:
-    expected = _origin_from_config()
-    if expected is None:
+    origin = request.headers.get("origin")
+    allowed = _allowed_frontend_origins()
+    if not allowed:
         raise HTTPException(status_code=503, detail="authentication_not_configured")
-    if not origin_matches(request.headers.get("origin"), expected):
+    if not isinstance(origin, str) or not any(origin_matches(origin, candidate) for candidate in allowed):
         raise HTTPException(status_code=403, detail="request_origin_rejected")
 
 
