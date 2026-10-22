@@ -6,7 +6,7 @@ from uuid import UUID
 class DeliveryStore:
     def __init__(self,pool: Any)->None: self._pool=pool
 
-    async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str)->dict[str,Any]:
+    async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str,email_account_id: UUID|None=None)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
                 d=await c.fetchrow("""SELECT d.id,d.status,d.channel,p.contact_email,p.stage,cc.email_suppressed
@@ -18,12 +18,16 @@ class DeliveryStore:
                 if d["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not d["contact_email"]: raise ValueError("prospect_email_required")
                 if d["email_suppressed"] or d["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
-                r=await c.fetchrow("""INSERT INTO outreach_deliveries(workspace_id,draft_id,channel,idempotency_key,queued_by)
-                  VALUES($1,$2,'email',$3,$4) ON CONFLICT DO NOTHING RETURNING *""",workspace_id,draft_id,idempotency_key,UUID(str(actor_id)))
+                if email_account_id is not None:
+                    account = await c.fetchrow("SELECT status FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2 FOR SHARE", email_account_id, workspace_id)
+                    if account is None or account["status"] != "active": raise LookupError("email_account_not_available")
+                r=await c.fetchrow("""INSERT INTO outreach_deliveries(workspace_id,draft_id,channel,idempotency_key,queued_by,email_account_id)
+                  VALUES($1,$2,'email',$3,$4,$5) ON CONFLICT DO NOTHING RETURNING *""",workspace_id,draft_id,idempotency_key,UUID(str(actor_id)),email_account_id)
                 if r is None:
                     r=await c.fetchrow("""SELECT * FROM outreach_deliveries WHERE workspace_id=$1
                       AND (idempotency_key=$2 OR draft_id=$3) ORDER BY (idempotency_key=$2) DESC LIMIT 1 FOR UPDATE""",workspace_id,idempotency_key,draft_id)
                     if r is None or r["draft_id"]!=draft_id: raise ValueError("idempotency_key_conflict")
+                    if r["email_account_id"] != email_account_id: raise ValueError("email_account_conflict")
                 return self._serialize(dict(r))
 
     async def list_deliveries(self,*,workspace_id: str,limit: int=50,offset: int=0)->list[dict[str,Any]]:
@@ -35,7 +39,7 @@ class DeliveryStore:
     async def claim(self,*,workspace_id: str,delivery_id: UUID)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
-                r=await c.fetchrow("""SELECT q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,
+                r=await c.fetchrow("""SELECT q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id,
                   p.contact_email,p.stage,cc.email_suppressed FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
@@ -49,7 +53,7 @@ class DeliveryStore:
                 if r["email_suppressed"] or r["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
                 await c.execute("""UPDATE outreach_deliveries SET status='processing',attempt_count=attempt_count+1,
                   processing_at=now(),updated_at=now() WHERE id=$1 AND workspace_id=$2 AND status='queued'""",delivery_id,workspace_id)
-                return {"recipient":r["contact_email"],"subject":r["subject"] or "A message from a business","body":r["body"]}
+                return {"recipient":r["contact_email"],"subject":r["subject"] or "A message from a business","body":r["body"],"email_account_id":str(r["email_account_id"]) if r["email_account_id"] else None}
 
     async def finish(self,*,workspace_id: str,delivery_id: UUID,error_code: str|None=None)->bool:
         async with self._pool.acquire() as c:
@@ -68,6 +72,6 @@ class DeliveryStore:
 
     @staticmethod
     def _serialize(r: dict[str,Any])->dict[str,Any]:
-        for k in ("id","draft_id","queued_by"):
+        for k in ("id","draft_id","queued_by","email_account_id"):
             if r.get(k) is not None: r[k]=str(r[k])
         return r
