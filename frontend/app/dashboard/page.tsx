@@ -263,6 +263,50 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function createEmailAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/email-accounts", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId, label: emailAccountLabel, smtp_host: smtpHost,
+          smtp_port: 587, smtp_username: smtpUsername, smtp_password: smtpPassword,
+          from_email: smtpFromEmail, from_name: smtpFromName, starttls: true,
+        }),
+      });
+      setEmailAccountLabel(""); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail("");
+      setNotice("Email account credentials encrypted and stored. Test the connection before queueing messages.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Email account could not be connected.");
+    } finally { setBusy(false); }
+  }
+
+  async function testEmailAccount(account: EmailAccount) {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ message: string }>("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "/test?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
+      setNotice(result.message || "Email account connection test succeeded. No email was sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Email account connection test failed.");
+    } finally { setBusy(false); }
+  }
+
+  async function disableEmailAccount(account: EmailAccount) {
+    if (!workspaceId || !csrf || !window.confirm("Disable " + account.label + "? New queue requests cannot use this account.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("Email account disabled.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Email account could not be disabled.");
+    } finally { setBusy(false); }
+  }
+
   async function createInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
