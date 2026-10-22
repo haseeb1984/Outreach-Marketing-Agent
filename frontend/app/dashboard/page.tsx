@@ -124,6 +124,11 @@ export default function DashboardPage() {
     setDrafts(d.items || []);
     setDeliveries(deliveryResult.items || []);
     setCounts(a.counts || {});
+    const projectResult = await Promise.allSettled([
+      api<ApiResult<Project>>("/api/v1/projects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
+    ]);
+    const projectResponse = projectResult[0];
+    setProjects(projectResponse.status === "fulfilled" ? (projectResponse.value.items || []) : []);
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
@@ -185,6 +190,31 @@ export default function DashboardPage() {
     })();
     return () => { cancelled = true; };
   }, [loadWorkspaceData, router]);
+
+  async function createProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const competitors = projectCompetitors.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean).slice(0, 20);
+      await api("/api/v1/projects", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId, name: projectName, website_url: projectWebsite || null,
+          business_model: projectBusinessModel, target_market: projectMarket, language: projectLanguage,
+          audience: projectAudience, offer: projectOffer, conversion_goal: projectGoal,
+          brand_voice: projectBrandVoice, competitors,
+        }),
+      });
+      setProjectName(""); setProjectWebsite(""); setProjectBusinessModel(""); setProjectMarket("");
+      setProjectLanguage(""); setProjectAudience(""); setProjectOffer(""); setProjectGoal("");
+      setProjectBrandVoice(""); setProjectCompetitors("");
+      setNotice("Project profile saved. Website ownership verification is a separate step.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Project could not be saved.");
+    } finally { setBusy(false); }
+  }
 
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
