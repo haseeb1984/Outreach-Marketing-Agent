@@ -1,0 +1,228 @@
+"""Paddle Billing checkout and signed subscription lifecycle webhook.
+
+Only server-configured plan IDs are purchasable. Webhook bodies are verified from
+raw bytes before any state changes. Never trust browser redirects for paid access.
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import time
+from datetime import datetime
+from typing import Any
+
+import httpx
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
+
+from app.api.auth_routes import _authenticated
+from app.core.config import settings
+from app.services.billing_lifecycle_store import VerifiedBillingEvent
+
+router = APIRouter(prefix="/api/v1/billing/paddle", tags=["billing"])
+
+
+class CheckoutRequest(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=200)
+    plan_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+
+
+def _plans() -> dict[str, Any]:
+    raw = settings.paddle_plans_json
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid") from None
+    if not isinstance(value, dict):
+        raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
+    for slug, plan in value.items():
+        if (not isinstance(slug, str) or not isinstance(plan, dict)
+                or not isinstance(plan.get("price_id"), str)
+                or not plan["price_id"].startswith("pri_")
+                or not isinstance(plan.get("entitlements"), dict)):
+            raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
+    return value
+
+
+def _api_base() -> str:
+    if settings.paddle_environment == "sandbox":
+        return "https://sandbox-api.paddle.com"
+    if settings.paddle_environment == "production":
+        return "https://api.paddle.com"
+    raise HTTPException(status_code=503, detail="billing_environment_invalid")
+
+
+@router.post("/checkout")
+async def create_checkout(body: CheckoutRequest, request: Request):
+    """Create a Paddle-hosted transaction for an authorized workspace owner/admin."""
+    _, _, session = await _authenticated(request)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=body.workspace_id, minimum_role="admin"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=503, detail="paddle_not_configured")
+    plan = _plans().get(body.plan_id)
+    if plan is None:
+        raise HTTPException(status_code=422, detail="unknown_billing_plan")
+
+    payload = {
+        "items": [{"price_id": plan["price_id"], "quantity": 1}],
+        "collection_mode": "automatic",
+        "custom_data": {
+            "workspace_id": body.workspace_id,
+            "plan_id": body.plan_id,
+            "billing_integration": "outreach-marketing-agent",
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{_api_base()}/transactions",
+                headers={
+                    "Authorization": f"Bearer {settings.paddle_api_key}",
+                    "Paddle-Version": "1",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+        if response.status_code not in (200, 201):
+            # Do not return Paddle response bodies, which may include sensitive diagnostics.
+            raise HTTPException(status_code=502, detail="paddle_checkout_creation_failed")
+        data = response.json().get("data", {})
+        checkout_url = data.get("checkout", {}).get("url") if isinstance(data, dict) else None
+        if not isinstance(checkout_url, str) or not checkout_url.startswith("https://"):
+            raise HTTPException(status_code=502, detail="paddle_checkout_url_unavailable")
+        return {"checkout_url": checkout_url, "transaction_id": data.get("id"), "plan_id": body.plan_id}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="paddle_checkout_unavailable") from None
+
+
+def _verify_signature(raw_body: bytes, header: str | None, secret: str) -> bool:
+    if not header or len(header) > 4096:
+        return False
+    values: dict[str, list[str]] = {}
+    for part in header.split(";"):
+        key, sep, value = part.strip().partition("=")
+        if sep and key and value:
+            values.setdefault(key, []).append(value)
+    timestamps = values.get("ts", [])
+    signatures = values.get("h1", [])
+    if len(timestamps) != 1 or not signatures:
+        return False
+    try:
+        timestamp = int(timestamps[0])
+    except (TypeError, ValueError):
+        return False
+    if abs(time.time() - timestamp) > 300:
+        return False
+    expected = hmac.new(
+        secret.encode("utf-8"), timestamps[0].encode("ascii") + b":" + raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    return any(
+        len(sig) == len(expected) and hmac.compare_digest(expected, sig)
+        for sig in signatures
+    )
+
+
+def _datetime(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("missing_billing_timestamp")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("timezone_required")
+    return parsed
+
+
+@router.post("/webhook")
+async def paddle_webhook(request: Request):
+    """Verify Paddle signature and apply only recognized subscription snapshots."""
+    secret = settings.paddle_webhook_secret
+    if not secret:
+        raise HTTPException(status_code=503, detail="paddle_webhook_not_configured")
+    raw_body = await request.body()
+    if len(raw_body) > 1_000_000:
+        raise HTTPException(status_code=413, detail="webhook_payload_too_large")
+    if not _verify_signature(raw_body, request.headers.get("Paddle-Signature"), secret):
+        raise HTTPException(status_code=401, detail="invalid_paddle_signature")
+    try:
+        payload = json.loads(raw_body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise HTTPException(status_code=400, detail="invalid_webhook_payload") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="invalid_webhook_payload")
+
+    event_type = payload.get("event_type")
+    if event_type not in {
+        "subscription.created", "subscription.updated", "subscription.canceled",
+        "subscription.past_due", "subscription.paused", "subscription.resumed",
+    }:
+        # Acknowledge unrelated, correctly signed notifications without granting access.
+        return {"received": True, "outcome": "ignored"}
+    data = payload.get("data")
+    custom_data = data.get("custom_data") if isinstance(data, dict) else None
+    workspace_id = custom_data.get("workspace_id") if isinstance(custom_data, dict) else None
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise HTTPException(status_code=422, detail="workspace_mapping_missing")
+
+    plans = _plans()
+    items = data.get("items")
+    price_ids = {
+        item.get("price", {}).get("id")
+        for item in items if isinstance(item, dict) and isinstance(item.get("price"), dict)
+    } if isinstance(items, list) else set()
+    matching = [(slug, plan) for slug, plan in plans.items() if plan["price_id"] in price_ids]
+    if len(matching) != 1:
+        raise HTTPException(status_code=422, detail="subscription_plan_mapping_invalid")
+    _, plan = matching[0]
+
+    status_map = {
+        "active": "active", "trialing": "trialing", "past_due": "past_due",
+        "canceled": "cancelled", "paused": "paused", "past_due": "past_due",
+        "incomplete": "incomplete", "unpaid": "unpaid",
+    }
+    status = status_map.get(data.get("status"))
+    if event_type == "subscription.canceled":
+        status = "cancelled"
+    elif event_type == "subscription.paused":
+        status = "paused"
+    if status is None:
+        raise HTTPException(status_code=422, detail="subscription_status_unsupported")
+
+    current_period = data.get("current_billing_period")
+    if not isinstance(current_period, dict):
+        raise HTTPException(status_code=422, detail="billing_period_missing")
+    try:
+        event = VerifiedBillingEvent(
+            provider="paddle",
+            event_id=str(payload["event_id"]),
+            workspace_id=workspace_id,
+            provider_customer_id=data.get("customer_id"),
+            provider_subscription_id=str(data["id"]),
+            event_created_at=_datetime(payload["occurred_at"]),
+            subscription_status=status,
+            period_starts_at=_datetime(current_period["starts_at"]),
+            period_ends_at=_datetime(current_period["ends_at"]),
+            entitlements=plan["entitlements"],
+        )
+        store = getattr(request.app.state, "billing_lifecycle_store", None)
+        if store is None:
+            raise HTTPException(status_code=503, detail="billing_service_not_configured")
+        outcome = await store.apply_verified_event(event)
+    except HTTPException:
+        raise
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="subscription_event_invalid") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_event_processing_unavailable") from None
+    return {"received": True, **outcome}
