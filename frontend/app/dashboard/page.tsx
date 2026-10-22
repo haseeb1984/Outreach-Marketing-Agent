@@ -15,7 +15,7 @@ type Project = { id: string; name: string; website_url?: string | null; business
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
-type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
+type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };\ntype WhatsAppConversation = { id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };\ntype WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; provider_timestamp?: string | null; received_at: string };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -66,7 +66,7 @@ export default function DashboardPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
-  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);\n  const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);\n  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);\n  const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");\n  const [whatsappInboxBusy, setWhatsappInboxBusy] = useState(false);
   const [whatsappLabel, setWhatsappLabel] = useState("");
   const [whatsappWabaId, setWhatsappWabaId] = useState("");
   const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState("");
@@ -166,6 +166,12 @@ export default function DashboardPage() {
     setSelectedEmailAccountId(current => loadedEmailAccounts.some(account => account.id === current && account.status === "active") ? current : (loadedEmailAccounts.find(account => account.status === "active")?.id || ""));
     const whatsappAccountResult = await Promise.allSettled([api<ApiResult<WhatsAppAccount>>("/api/v1/integrations/whatsapp/accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
     setWhatsappAccounts(whatsappAccountResult[0].status === "fulfilled" ? (whatsappAccountResult[0].value.items || []) : []);
+    const inboxResult = await Promise.allSettled([api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token)]);
+    const loadedConversations = inboxResult[0].status === "fulfilled" ? (inboxResult[0].value.items || []) : [];
+    setWhatsappConversations(loadedConversations);
+    setSelectedWhatsAppConversation(current => loadedConversations.some(item => item.id === current) ? current : "");
+    if (!loadedConversations.some(item => item.id === selectedWhatsAppConversation)) setWhatsappMessages([]);
+
     const entitlementResults = await Promise.allSettled([
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
@@ -323,6 +329,25 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account connection test failed.");
     } finally { setBusy(false); }
+  }
+
+  async function openWhatsAppConversation(conversation: WhatsAppConversation) {
+    if (!workspaceId || !csrf) return;
+    setWhatsappInboxBusy(true);
+    setError("");
+    try {
+      const result = await api<{ items: WhatsAppMessage[] }>(
+        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
+        "/messages?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
+        csrf,
+      );
+      setSelectedWhatsAppConversation(conversation.id);
+      setWhatsappMessages((result.items || []).slice().reverse());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
+    } finally {
+      setWhatsappInboxBusy(false);
+    }
   }
 
   async function createWhatsAppAccount(event: FormEvent<HTMLFormElement>) {
@@ -879,6 +904,33 @@ export default function DashboardPage() {
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "pending_verification" && <button className="button" type="button" disabled={busy} onClick={() => verifyWhatsAppAccount(account)}>Verify with Meta</button>}
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
             </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
+            <h3>WhatsApp inbox</h3>
+            <p className="fine">Inbound messages received by the configured Meta webhook appear here. This is a read-only inbox for now; replies and outbound sending remain disabled until opt-in, template and delivery safeguards are complete.</p>
+            <div className="cards">
+              <article className="card">
+                <h4>Conversations ({whatsappConversations.length})</h4>
+                {whatsappConversations.length ? whatsappConversations.map(conversation => <button
+                  className={"button " + (selectedWhatsAppConversation === conversation.id ? "" : "secondary")}
+                  type="button" key={conversation.id} disabled={whatsappInboxBusy}
+                  onClick={() => openWhatsAppConversation(conversation)}
+                  style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}
+                >
+                  <strong>{conversation.prospect_name || conversation.wa_id}</strong>
+                  <span style={{display:"block"}}>{conversation.account_label} · {conversation.prospect_company || "Unmatched contact"}</span>
+                  <span style={{display:"block"}}>{conversation.last_message_text || ("Latest message type: " + (conversation.last_message_type || "not available"))}</span>
+                </button>) : <p className="fine">No inbound conversations have been processed yet.</p>}
+              </article>
+              <article className="card">
+                <h4>Messages</h4>
+                {selectedWhatsAppConversation ? (whatsappMessages.length ? <ol>
+                  {whatsappMessages.map(message => <li key={message.id} style={{marginBottom:"0.75rem"}}>
+                    <p>{message.text_body || ("[" + message.message_type + " message]")}</p>
+                    <p className="fine">{message.provider_timestamp ? new Date(message.provider_timestamp).toLocaleString() : new Date(message.received_at).toLocaleString()}</p>
+                  </li>)}
+                </ol> : <p className="fine">No messages in this conversation.</p>) : <p className="fine">Select a conversation to view its inbound messages.</p>}
+                <button className="button secondary" type="button" disabled={whatsappInboxBusy || !workspaceId || !csrf} onClick={() => refresh(workspaceId, csrf)}>Refresh inbox</button>
+              </article>
+            </div>
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details className="card"><summary>Register Meta WhatsApp account</summary>
               <form onSubmit={createWhatsAppAccount}>
                 <div className="field"><label htmlFor="whatsapp-account-label">Account label</label><input id="whatsapp-account-label" required maxLength={120} value={whatsappLabel} onChange={e=>setWhatsappLabel(e.target.value)} /></div>
@@ -888,7 +940,7 @@ export default function DashboardPage() {
                 <button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Encrypt and save (pending verification)</button>
               </form>
             </details>}
-            <p className="fine">Inbound Meta webhook signatures are validated and events are stored in a private inbox. Workspace mapping, event processing, contact opt-in checks, approved-template enforcement and outbound sending remain disabled until their implementation is complete.</p>
+            <p className="fine">Inbound Meta webhook signatures are validated and events are stored in a private inbox. A worker can map events to workspace-owned accounts and persist inbound messages/statuses; configure a trusted scheduler to process the inbox. Outbound sending remains disabled until opt-in and approved-template safeguards are complete.</p>
           </article>
         </section>
         <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p><div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
