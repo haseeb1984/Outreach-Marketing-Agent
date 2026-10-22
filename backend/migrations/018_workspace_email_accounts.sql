@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS workspace_email_accounts (
     smtp_host TEXT NOT NULL CHECK (length(trim(smtp_host)) BETWEEN 1 AND 253),
     smtp_port INTEGER NOT NULL DEFAULT 587 CHECK (smtp_port=587),
     smtp_username TEXT NOT NULL CHECK (length(trim(smtp_username)) BETWEEN 1 AND 320),
-    encrypted_password BYTEA NOT NULL CHECK (octet_length(encrypted_password) BETWEEN 40 AND 2048),
+    encrypted_password BYTEA NOT NULL CHECK (octet_length(encrypted_password) BETWEEN 29 AND 2048),
     from_email TEXT NOT NULL CHECK (length(trim(from_email)) BETWEEN 3 AND 320),
     from_name TEXT NOT NULL DEFAULT 'Outreach Marketing Agent' CHECK (length(trim(from_name)) BETWEEN 1 AND 200),
     starttls BOOLEAN NOT NULL DEFAULT TRUE CHECK (starttls=TRUE),
