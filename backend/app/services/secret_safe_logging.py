@@ -18,6 +18,9 @@ _SENSITIVE_ASSIGNMENT = re.compile(
     r"state|nonce|verifier|challenge|token)\b\s*[:=]\s*)"
     r'''("[^"]*"|'[^']*'|[^\s,;&]+)'''
 )
+_SENSITIVE_JSON_FIELD = re.compile(
+    r"""(?i)(["'](?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|auth|cookie|client[_-]?secret|webhook[_-]?secret|private[_-]?key|database[_-]?url|session|csrf|signature|state|nonce|verifier|challenge|token|code)["']\s*:\s*)(["'][^"']*["']|[^,\s}\]]+)"""
+)
 _BEARER = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
 _URL_CREDENTIALS = re.compile(r"(://[^:/\s]+:)[^@/\s]+(@)")
 _SENSITIVE_KEY = re.compile(
@@ -49,6 +52,7 @@ def redact_text(value: str) -> str:
     """Redact known environment secrets and common inline credential patterns."""
     for secret in _configured_secrets():
         value = value.replace(secret, "[REDACTED]")
+    value = _SENSITIVE_JSON_FIELD.sub(r'\1"[REDACTED]"', value)
     value = _BEARER.sub(r"\1 [REDACTED]", value)
     value = _SENSITIVE_ASSIGNMENT.sub(r"\1[REDACTED]", value)
     value = _URL_CREDENTIALS.sub(r"\1[REDACTED]\2", value)
