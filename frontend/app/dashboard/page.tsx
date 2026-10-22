@@ -190,6 +190,59 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
+  async function createDomainChallenge(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !domainName.trim()) return;
+    setDomainBusy(true); setError(""); setNotice(""); setDomainChallenge(null);
+    try {
+      const result = await api<DomainChallenge>("/api/v1/domains/challenges", csrf, {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceId, domain: domainName.trim() }),
+      });
+      setDomainChallenge(result);
+      setNotice("DNS record created. Publish the record exactly as shown, then verify it.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Domain challenge could not be created.");
+    } finally { setDomainBusy(false); }
+  }
+
+  async function verifyDomain() {
+    if (!workspaceId || !csrf || !domainChallenge) return;
+    setDomainBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/domains/verify", csrf, {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceId, domain: domainChallenge.domain }),
+      });
+      setAuditUrl("https://" + domainChallenge.domain + "/");
+      setDomainChallenge(null);
+      setNotice("Domain verified. Run a bounded read-only audit on the verified host.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Domain verification could not be completed.");
+    } finally { setDomainBusy(false); }
+  }
+
+  async function runWebsiteAudit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !auditUrl.trim()) return;
+    setAuditBusy(true); setError(""); setNotice(""); setAuditReport(null);
+    try {
+      const result = await api<WebsiteAudit>("/api/v1/website-audits", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          start_url: auditUrl.trim(),
+          max_pages: 5,
+          idempotency_key: "site-audit-" + crypto.randomUUID(),
+        }),
+      });
+      setAuditReport(result);
+      setNotice(result.notice || "Read-only audit completed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Website audit could not be completed.");
+    } finally { setAuditBusy(false); }
+  }
+
   async function searchProspects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !researchQuery.trim()) return;
