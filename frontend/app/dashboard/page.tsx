@@ -54,6 +54,8 @@ export default function DashboardPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<{ email?: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp?: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string } } | null>(null);
+  const [integrationBusy, setIntegrationBusy] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
   const [counts, setCounts] = useState<Counts>({});
@@ -257,6 +259,31 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function refreshIntegrationStatus() {
+    if (!workspaceId || !csrf) return;
+    setIntegrationBusy(true);
+    try {
+      const result = await api<{ email: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string } }>(
+        "/api/v1/integrations/status?workspace_id=" + encodeURIComponent(workspaceId), csrf
+      );
+      setIntegrationStatus(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Provider status could not be loaded.");
+    } finally { setIntegrationBusy(false); }
+  }
+
+  async function testSmtpConnection() {
+    if (!workspaceId || !csrf || !window.confirm("Test the configured SMTP TLS connection and authentication? No email will be sent.")) return;
+    setIntegrationBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/smtp/test?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
+      setNotice("SMTP TLS connection and authentication succeeded. No email was sent.");
+      await refreshIntegrationStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "SMTP connection test failed.");
+    } finally { setIntegrationBusy(false); }
+  }
+
   async function logout() {
     setBusy(true);
     try { await api("/api/v1/auth/logout", csrf, { method: "POST", body: "{}" }); }
@@ -296,6 +323,20 @@ export default function DashboardPage() {
         <section className="section"><h2>Prospect CRM</h2><div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p><p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p></article>) : <article className="card"><p>No prospects saved yet.</p></article>}</div></section>
         <section className="section"><h2>Prepare an outreach draft</h2><article className="card"><p className="fine">Draft generation uses workspace entitlements and saved prospect evidence. Every draft enters review; this form never sends a message.</p><form onSubmit={generateDraft}><div className="field"><label htmlFor="draft-campaign">Campaign</label><select id="draft-campaign" required value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}><option value="">Choose a campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="field"><label htmlFor="draft-prospect">Prospect</label><select id="draft-prospect" required value={selectedProspect} onChange={e=>setSelectedProspect(e.target.value)}><option value="">Choose a prospect</option>{prospects.map(p=><option key={p.id} value={p.id}>{p.name} · {p.company}</option>)}</select></div><div className="field"><label htmlFor="draft-channel">Channel</label><select id="draft-channel" value={draftChannel} onChange={e=>setDraftChannel(e.target.value)}><option value="email">Email</option><option value="whatsapp">WhatsApp draft (eligibility checked by backend)</option></select></div><div className="field"><label htmlFor="draft-cta">Call to action</label><textarea id="draft-cta" required maxLength={500} value={draftCallToAction} onChange={e=>setDraftCallToAction(e.target.value)} placeholder="Suggest a short, relevant next step" /></div><button className="button" disabled={busy || !canWrite || !workspaceId || !campaigns.length || !prospects.length}>Generate draft for review</button></form></article></section>
         <section className="section"><h2>Draft review queue</h2><p className="fine">Approving a draft does not send it. Sending remains a separate explicit action.</p><div className="cards">{drafts.length ? drafts.map(d=><article className="card" key={d.id}><p className="eyebrow">{d.channel || "Outreach"} · {d.status}</p><h3>{d.subject || d.prospect_name || "Outreach draft"}</h3><p>{d.body || "Draft content is not available."}</p>{d.status === "approved" && d.channel === "email" && <div className="actions"><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => queueDraft(d)}>Queue email</button></div>}{d.status === "pending_approval" && <div className="actions"><button type="button" className="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"approved")}>Approve draft</button><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"rejected")}>Reject</button></div>}</article>) : <article className="card"><p>No drafts yet. Draft generation requires configured paid entitlements and eligible prospect evidence.</p></article>}</div></section>
+        <section className="section" aria-labelledby="integrations-title"><h2 id="integrations-title">Provider connections</h2>
+          <article className="card">
+            <p className="fine">Current email support uses deployment-level SMTP settings. It does not yet connect multiple personal mailboxes per workspace. Provider diagnostics never return credentials.</p>
+            <div className="actions">
+              <button className="button secondary" type="button" onClick={refreshIntegrationStatus} disabled={integrationBusy || !workspaceId || !csrf}>Refresh status</button>
+              <button className="button" type="button" onClick={testSmtpConnection} disabled={integrationBusy || !workspaceId || !csrf || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Test SMTP (no email sent)</button>
+            </div>
+            {integrationStatus ? <div className="cards">
+              <div className="metric"><strong>{integrationStatus.email?.configuration_complete ? "Configured" : "Incomplete"}</strong><span>Email / SMTP</span><p className="fine">{integrationStatus.email?.configuration_complete ? "Required settings are present; use the test button to verify TLS/authentication." : "Missing: " + (integrationStatus.email?.missing_fields || []).join(", ")}</p></div>
+              <div className="metric"><strong>{integrationStatus.whatsapp?.live_send_enabled ? "Enabled" : "Disabled"}</strong><span>Official WhatsApp Business</span><p className="fine">{integrationStatus.whatsapp?.reason || "Live sending remains disabled until official Meta onboarding and webhook verification are implemented."}</p></div>
+            </div> : <p className="fine">Provider status has not been loaded for this workspace.</p>}
+            <p className="fine">This release does not claim multiple connected email accounts or active WhatsApp sending. WhatsApp stays disabled until official Meta onboarding, signature verification, tenant-scoped credentials, and inbound event persistence are implemented.</p>
+          </article>
+        </section>
         <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p><div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
       </>}
     </main>
