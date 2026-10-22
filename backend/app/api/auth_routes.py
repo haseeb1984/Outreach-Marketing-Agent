@@ -43,6 +43,11 @@ class VerificationInput(BaseModel):
     token: str = Field(min_length=32, max_length=512)
 
 
+class VerificationResendInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=3, max_length=320)
+
+
 class PasswordResetRequestInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=320)
@@ -163,6 +168,46 @@ async def register(payload: RegistrationInput, request: Request):
             # The public response does not reveal whether an account was created.
             raise HTTPException(status_code=503, detail="verification_delivery_unavailable") from None
     return {"message": "If registration can proceed, a verification email will be sent."}
+
+
+@router.post("/resend-verification", status_code=202)
+async def resend_verification(payload: VerificationResendInput, request: Request):
+    """Resend verification for pending accounts without disclosing account state."""
+    _require_origin(request)
+    store, limiter = _services(request)
+    await _consume(
+        limiter, namespace="verify-resend-ip", identifier=_client_identifier(request),
+        limit=10, window=3600,
+    )
+    try:
+        email = normalize_email(payload.email)
+    except ValueError:
+        return {"message": "If the account needs verification, an email will be sent."}
+    await _consume(
+        limiter, namespace="verify-resend-email", identifier=email,
+        limit=3, window=3600,
+    )
+    delivery = SMTPEmailDelivery()
+    try:
+        delivery._validate_configuration()
+    except EmailDeliveryNotConfigured:
+        raise HTTPException(status_code=503, detail="email_delivery_not_configured") from None
+    try:
+        issued = await store.issue_verification_email(email=email)
+    except ValueError:
+        return {"message": "If the account needs verification, an email will be sent."}
+    except Exception:
+        raise HTTPException(status_code=503, detail="verification_temporarily_unavailable") from None
+    if issued is not None:
+        try:
+            await delivery.send_verification_email(
+                recipient=issued["email"],
+                token=issued["verification_token"],
+                expires_at=issued["verification_expires_at"],
+            )
+        except (EmailDeliveryFailed, EmailDeliveryNotConfigured, ValueError):
+            raise HTTPException(status_code=503, detail="verification_delivery_unavailable") from None
+    return {"message": "If the account needs verification, an email will be sent."}
 
 
 @router.post("/verify-email")
