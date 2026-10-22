@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     paddle_api_key: str | None = None
     paddle_webhook_secret: str | None = None
     paddle_environment: str = "sandbox"
+    # Live checkout remains disabled until explicit operator release approval.
+    paddle_live_checkout_enabled: bool = False
     # JSON object keyed by plan slug: {"price_id":"pri_...","entitlements":{"feature":{"enabled":true,"monthly_limit":100}}}
     paddle_plans_json: str | None = None
     # High-entropy shared secret for the provider-neutral inbound reply gateway.
