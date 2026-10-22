@@ -97,6 +97,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    api<{ items: Plan[] }>("/api/v1/billing/paddle/plans", null)
+      .then(result => {
+        if (!cancelled) {
+          const configured = result.items || [];
+          setPlans(configured);
+          setSelectedPlan(configured.find(plan => plan.checkout_available)?.id || configured[0]?.id || "");
+        }
+      })
+      .catch(() => { if (!cancelled) setPlans([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const session = await api<{ user: { email: string }; csrf_token: string | null }>("/api/v1/auth/me", null);
