@@ -86,3 +86,5 @@
 
 
 - WhatsApp policy test coverage added on 2026-10-23: `backend/tests/test_whatsapp_send_policy.py` now covers inactive account, missing prospect, missing documented consent, do-not-contact suppression, account-specific opt-out, open customer-service window, and missing approved provider template. These tests were authored but intentionally not run in this code-first pass. This does not establish that the tests pass or enable WhatsApp sending.
+
+- Delivery queue reliability follow-up on 2026-10-23: added `DeliveryStore.reconcile_stale_processing`, a bounded `FOR UPDATE SKIP LOCKED` reconciliation that moves abandoned in-flight sends to terminal `uncertain` with a stable error code. It intentionally does not retry automatically because a provider may have accepted a message before the worker stopped. Added unit cases for the uncertainty transition, bounds validation, and malformed command tags. These tests were authored but not executed; the method is not yet wired to a recurring worker.
