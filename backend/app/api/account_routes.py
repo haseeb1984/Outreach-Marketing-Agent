@@ -56,6 +56,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "inbound_messages": [],
                     "account_audit_events": [],
                     "invitations": [],
+                    "email_accounts": [],
                     "website_audits": [],
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
@@ -79,7 +80,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                             source_evidence_url,verified_facts_used,status,review_note,reviewed_at,created_at,updated_at
                             FROM outreach_drafts WHERE workspace_id=ANY($1::text[])
                             ORDER BY created_at,id LIMIT $2""",
-                        "deliveries": """SELECT id,workspace_id,draft_id,channel,status,attempt_count,error_code,
+                        "deliveries": """SELECT id,workspace_id,draft_id,email_account_id,channel,status,attempt_count,error_code,
                             queued_at,processing_at,sent_at,updated_at FROM outreach_deliveries
                             WHERE workspace_id=ANY($1::text[]) ORDER BY queued_at,id LIMIT $2""",
                         "contact_controls": """SELECT workspace_id,prospect_id,email_suppressed,whatsapp_opt_in_at,
@@ -100,6 +101,14 @@ async def export_account_data(request: Request) -> JSONResponse:
                         workspace_ids, _MAX_EXPORT_ROWS,
                     )
                     export["invitations"] = [dict(row) for row in invitation_rows]
+                    email_account_rows = await conn.fetch(
+                        """SELECT id,workspace_id,label,smtp_host,smtp_port,smtp_username,from_email,
+                                  from_name,starttls,status,created_at,updated_at
+                           FROM workspace_email_accounts WHERE workspace_id=ANY($1::text[])
+                           ORDER BY created_at DESC LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS,
+                    )
+                    export["email_accounts"] = [dict(row) for row in email_account_rows]
                     audit_report_rows = await conn.fetch(
                         """SELECT id,workspace_id,start_url,status,created_at
                            FROM website_audit_reports WHERE workspace_id=ANY($1::text[])
