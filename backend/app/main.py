@@ -13,6 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from app.core.config import settings
+from app.services.secret_safe_logging import install_secret_redaction
+
+# Install before importing route modules so accidental credential-bearing log records
+# are sanitized before any configured handler formats them.
+install_secret_redaction()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
