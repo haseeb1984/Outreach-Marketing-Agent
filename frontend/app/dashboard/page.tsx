@@ -569,7 +569,7 @@ export default function DashboardPage() {
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/drafts/" + encodeURIComponent(draft.id) + "/enqueue", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, idempotency_key: "queue-" + crypto.randomUUID() }),
+        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, idempotency_key: "queue-" + crypto.randomUUID(), email_account_id: selectedEmailAccountId || null }),
       });
       setNotice("Draft queued. It will not be sent until an authorized admin confirms Send now.");
       await refresh(workspaceId, csrf);
