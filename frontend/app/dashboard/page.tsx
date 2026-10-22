@@ -310,6 +310,7 @@ export default function DashboardPage() {
     try {
       const result = await api<{ message: string }>("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "/test?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
       setNotice(result.message || "Email account connection test succeeded. No email was sent.");
+      await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account connection test failed.");
     } finally { setBusy(false); }
