@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS workspace_whatsapp_accounts (
     label VARCHAR(120) NOT NULL,
     waba_id VARCHAR(128) NOT NULL,
     phone_number_id VARCHAR(128) NOT NULL UNIQUE,
-    encrypted_access_token BYTEA NOT NULL CHECK (octet_length(encrypted_access_token) BETWEEN 29 AND 8192),
+    encrypted_access_token BYTEA CHECK (encrypted_access_token IS NULL OR octet_length(encrypted_access_token) BETWEEN 29 AND 8192),
     status VARCHAR(24) NOT NULL DEFAULT 'pending_verification'
         CHECK (status IN ('pending_verification', 'active', 'disabled')),
     created_by UUID NOT NULL REFERENCES app_users(id) ON DELETE RESTRICT,
