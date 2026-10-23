@@ -21,6 +21,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_delivery_status_dedup_idx
         (COALESCE(provider_timestamp, 'epoch'::timestamptz))
     );
 
-INSERT INTO schema_migrations (version)
-VALUES ('025_whatsapp_status_event_dedup.sql')
-ON CONFLICT (version) DO NOTHING;
