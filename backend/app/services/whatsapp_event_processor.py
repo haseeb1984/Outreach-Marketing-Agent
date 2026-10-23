@@ -160,8 +160,14 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                            (workspace_id,account_id,wa_id,last_inbound_at,last_inbound_message_id,updated_at)
                                            VALUES($1,$2,$3,$5,$4,now())
                                            ON CONFLICT(workspace_id,account_id,wa_id) DO UPDATE
-                                             SET last_inbound_at=EXCLUDED.last_inbound_at,
-                                                 last_inbound_message_id=EXCLUDED.last_inbound_message_id,
+                                             SET last_inbound_message_id=CASE
+                                                   WHEN whatsapp_contact_preferences.last_inbound_at IS NULL
+                                                     OR EXCLUDED.last_inbound_at >= whatsapp_contact_preferences.last_inbound_at
+                                                   THEN EXCLUDED.last_inbound_message_id
+                                                   ELSE whatsapp_contact_preferences.last_inbound_message_id END,
+                                                 last_inbound_at=GREATEST(
+                                                   COALESCE(whatsapp_contact_preferences.last_inbound_at, EXCLUDED.last_inbound_at),
+                                                   EXCLUDED.last_inbound_at),
                                                  updated_at=now()""",
                                         workspace_id, account_id, wa_id, provider_id, inbound_at,
                                     )
@@ -170,18 +176,21 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                     if opt_out:
                                         await conn.execute(
                                             """UPDATE whatsapp_contact_preferences
-                                               SET opted_out_at=now(), opted_in_at=NULL,
+                                               SET opted_out_at=$5, opted_in_at=NULL,
                                                    last_opt_out_message_id=$4, updated_at=now()
-                                               WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3""",
-                                            workspace_id, account_id, wa_id, provider_id,
+                                               WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3
+                                                 AND (opted_out_at IS NULL OR opted_out_at <= $5)
+                                                 AND (opted_in_at IS NULL OR opted_in_at <= $5)""",
+                                            workspace_id, account_id, wa_id, provider_id, inbound_at,
                                         )
                                     elif opt_in:
                                         # Explicit inbound START-family commands re-enable contact only after
                                         # the contact themselves initiates it; preserve the audit timestamp.
                                         await conn.execute(
                                             """UPDATE whatsapp_contact_preferences
-                                               SET opted_in_at=now(), updated_at=now()
-                                               WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3""",
+                                               SET opted_in_at=$4, updated_at=now()
+                                               WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3
+                                                 AND (opted_out_at IS NULL OR opted_out_at <= $4)""",
                                             workspace_id, account_id, wa_id,
                                         )
                                     elif prospect:
