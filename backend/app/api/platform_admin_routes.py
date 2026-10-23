@@ -183,16 +183,17 @@ async def create_plan(payload: PlanInput, request: Request):
     actor = await require_platform_admin(request, write=True)
     try:
         async with pool_for(request).acquire() as conn:
-            row = await conn.fetchrow("""INSERT INTO platform_billing_plans
-              (slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active)
-              VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
-              RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
-              payload.slug,payload.name.strip(),payload.description,payload.price_id,payload.display_price,
-              payload.currency,payload.billing_interval,json.dumps(payload.entitlements,allow_nan=False),payload.active)
-            await conn.execute("""INSERT INTO platform_admin_audit_events
-              (actor_user_id,event_type,target_type,target_id,metadata)
-              VALUES($1::uuid,'billing_plan.created','billing_plan',$2,$3::jsonb)""",
-              actor["user_id"],payload.slug,json.dumps({"active":payload.active}))
+            async with conn.transaction():
+                row = await conn.fetchrow("""INSERT INTO platform_billing_plans
+                  (slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active)
+                  VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+                  RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
+                  payload.slug,payload.name.strip(),payload.description,payload.price_id,payload.display_price,
+                  payload.currency,payload.billing_interval,json.dumps(payload.entitlements,allow_nan=False),payload.active)
+                await conn.execute("""INSERT INTO platform_admin_audit_events
+                  (actor_user_id,event_type,target_type,target_id,metadata)
+                  VALUES($1::uuid,'billing_plan.created','billing_plan',$2,$3::jsonb)""",
+                  actor["user_id"],payload.slug,json.dumps({"active":payload.active}))
         return {"plan":public_plan(row)}
     except Exception as exc:
         if "unique" in str(exc).casefold() or "duplicate" in str(exc).casefold():
@@ -205,16 +206,17 @@ async def update_plan(slug: str, payload: PlanInput, request: Request):
     if slug != payload.slug: raise HTTPException(status_code=422,detail="plan_slug_mismatch")
     try:
         async with pool_for(request).acquire() as conn:
-            row = await conn.fetchrow("""UPDATE platform_billing_plans SET name=$2,description=$3,price_id=$4,
-              display_price=$5,currency=$6,billing_interval=$7,entitlements=$8::jsonb,active=$9,updated_at=now()
-              WHERE slug=$1 RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
-              slug,payload.name.strip(),payload.description,payload.price_id,payload.display_price,payload.currency,
-              payload.billing_interval,json.dumps(payload.entitlements,allow_nan=False),payload.active)
-            if row is not None:
-                await conn.execute("""INSERT INTO platform_admin_audit_events
-                  (actor_user_id,event_type,target_type,target_id,metadata)
-                  VALUES($1::uuid,'billing_plan.updated','billing_plan',$2,$3::jsonb)""",
-                  actor["user_id"],slug,json.dumps({"active":payload.active}))
+            async with conn.transaction():
+                row = await conn.fetchrow("""UPDATE platform_billing_plans SET name=$2,description=$3,price_id=$4,
+                  display_price=$5,currency=$6,billing_interval=$7,entitlements=$8::jsonb,active=$9,updated_at=now()
+                  WHERE slug=$1 RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
+                  slug,payload.name.strip(),payload.description,payload.price_id,payload.display_price,payload.currency,
+                  payload.billing_interval,json.dumps(payload.entitlements,allow_nan=False),payload.active)
+                if row is not None:
+                    await conn.execute("""INSERT INTO platform_admin_audit_events
+                      (actor_user_id,event_type,target_type,target_id,metadata)
+                      VALUES($1::uuid,'billing_plan.updated','billing_plan',$2,$3::jsonb)""",
+                      actor["user_id"],slug,json.dumps({"active":payload.active}))
         if row is None: raise HTTPException(status_code=404,detail="billing_plan_not_found")
         return {"plan":public_plan(row)}
     except HTTPException: raise
