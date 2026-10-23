@@ -1,8 +1,8 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Reviewed commit:** `fb78ab4329c1fa76f89d40ed35480fa9e34a1c5a`  
-**Dashboard implementation CI:** [Run 428](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39679387084) — passed for Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL auth integration tests and dependency audit passed.  
+**Reviewed/deployed commit at smoke-audit time:** `2e6616d1d64070214b4d1d830ae42169b3aaf06d`  
+**Historical dashboard CI evidence:** [Run 428](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39679387084) passed for Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL auth integration tests and dependency audit passed. The CI result for the deployed commit was not independently verified in the smoke audit.  
 **Scope:** Repository/source review and automated CI. The dashboard route is deployed through the Vercel Git integration, but an authenticated production browser journey has not been verified. This is not a penetration test or proof that external provider credentials work.
 
 ## Evidence-based phase matrix
@@ -181,3 +181,11 @@
 - Added deterministic mapping tests. They have been authored but not run. The behavior is not production-verified; no dispatcher was added and live WhatsApp sending remains disabled.
 
 - Extended the authenticated account privacy export to include safe WhatsApp account metadata, conversations, inbound message content, per-account consent/opt-out records, outbound queue history, and provider delivery-status events. Encrypted access tokens are explicitly excluded. Export remains workspace-membership-scoped and bounded per collection. This source change has not been tested against a database; production schema compatibility is unverified.
+
+
+## Production smoke audit — 2026-10-23
+
+- Vercel project `outreach-marketing-agent` reported a production deployment in `READY` state on `main`; deployment: [inspector](https://vercel.com/junction-tec/outreach-marketing-agent/FeZ1Biqfqd8wMHhEiEUeyB4TivgS).
+- Production `/`, `/health`, `/openapi.json`, and `/docs` returned HTTP 200. Grouped runtime errors were empty for 24h; error/fatal runtime logs were empty for the most recent 30m query.
+- Full automated test suite, frontend build, live database/migration verification, authenticated browser journey and external provider acceptance were not run. Sandbox provisioning failed and local GitHub clone was blocked by network DNS; do not interpret smoke checks as complete QA.
+- Detailed scope and blockers: [Production audit report](PRODUCTION_AUDIT_REPORT_2026-10-23.md).
