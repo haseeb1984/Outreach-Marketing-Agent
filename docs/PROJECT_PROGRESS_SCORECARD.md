@@ -122,3 +122,5 @@ A feature marked implemented means repository code exists. It must not be descri
 - Added plan-input validation tests. They have not been run, and no score increase is claimed from unverified code.
 
 - Hardened Paddle subscription mapping: signed webhooks require custom_data.plan_id to match the single package identified by provider price ID, and reject missing event/subscription identities instead of stringifying absent values. Added backend/tests/test_paddle_plan_mapping.py for matching, mismatch, missing metadata, unknown price and ambiguous mapping cases. Tests were authored but not run.
+
+- Bootstrap billing configuration now validates package slug syntax, Paddle price-ID syntax and duplicate price IDs before exposing plans or accepting checkout/webhook mapping. Expanded the Paddle mapping test file for malformed bootstrap catalog cases; tests remain unrun.
