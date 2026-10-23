@@ -130,3 +130,67 @@ async def list_whatsapp_messages(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_message_list_unavailable") from None
+
+@router.get("/webhook-events")
+async def list_whatsapp_webhook_events(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+    state: str = Query(default="pending", pattern="^(pending|processed|all)$"),
+) -> dict:
+    """Expose safe processing metadata for this workspace's mapped Meta accounts only.
+
+    Raw provider payloads, message text, signatures, and access tokens are never returned.
+    This is an operational inbox view, not a processing/retry trigger.
+    """
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session)
+    try:
+        async with _pool(request).acquire() as conn:
+            # Account IDs are globally unique; the workspace join is the tenant boundary.
+            rows = await conn.fetch(
+                """SELECT e.id, e.phone_number_id, e.event_kind, e.received_at,
+                          e.processed_at, e.processing_error_code
+                   FROM meta_whatsapp_webhook_events e
+                   JOIN workspace_whatsapp_accounts a
+                     ON a.phone_number_id=e.phone_number_id
+                    AND a.workspace_id=$1
+                   WHERE ($2='all'
+                     OR ($2='pending' AND e.processed_at IS NULL)
+                     OR ($2='processed' AND e.processed_at IS NOT NULL))
+                   ORDER BY e.received_at DESC,e.id DESC
+                   LIMIT $3 OFFSET $4""",
+                workspace_id, state, limit, offset,
+            )
+            counts = await conn.fetchrow(
+                """SELECT count(*) FILTER (WHERE e.processed_at IS NULL)::bigint AS pending,
+                          count(*) FILTER (WHERE e.processed_at IS NOT NULL)::bigint AS processed,
+                          count(*) FILTER (WHERE e.processing_error_code IS NOT NULL)::bigint AS with_errors
+                   FROM meta_whatsapp_webhook_events e
+                   JOIN workspace_whatsapp_accounts a
+                     ON a.phone_number_id=e.phone_number_id
+                    AND a.workspace_id=$1""",
+                workspace_id,
+            )
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["id"] = str(item["id"])
+            for key in ("received_at", "processed_at"):
+                if item.get(key) is not None:
+                    item[key] = item[key].isoformat()
+            items.append(item)
+        return {
+            "items": items,
+            "counts": {key: int(value or 0) for key, value in dict(counts).items()},
+            "state": state,
+            "limit": limit,
+            "offset": offset,
+            "notice": "Only processing metadata for mapped workspace accounts is shown; event payloads are withheld.",
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_webhook_event_list_unavailable") from None
+
