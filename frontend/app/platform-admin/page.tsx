@@ -7,7 +7,8 @@ type Plan = { slug: string; name: string; description: string; price_id: string;
 type Client = { workspace_id: string; workspace_name: string; owner_email: string | null; subscription_status: string | null; billing_period_starts_at: string | null; billing_period_ends_at: string | null; usage_consumed: number; usage_reserved: number; usage_released: number };
 type UsageFeature = { workspace_id: string; feature: string; consumed: number; reserved: number; released: number };
 type UsageRecord = { reservation_id: string; workspace_id: string; workspace_name: string | null; feature: string; status: string; created_at: string; updated_at: string; billing_period_starts_at: string; billing_period_ends_at: string };
-type AdminEvent = { id: number; actor_email: string; event_type: string; target_type: string; target_id: string; created_at: string };\ntype Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean };
+type AdminEvent = { id: number; actor_email: string; event_type: string; target_type: string; target_id: string; created_at: string };
+type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "prospect_search": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
