@@ -131,3 +131,6 @@
 - No tests, deployment, workflow or live Paddle calls were run. Billing remains unverified until migration 030 is applied and provider acceptance is completed.
 
 - Additional bootstrap catalog guard: configured plans now fail closed on malformed slugs, malformed Paddle price IDs or duplicate price IDs. Added corresponding unit cases; no tests were executed.
+
+- Added workspace-authorized `GET /api/v1/integrations/whatsapp/inbox/webhook-events` for operational visibility into Meta webhook intake. It returns pending/processed/error counts and bounded event metadata only, filtered to phone-number IDs mapped to the caller's workspace; raw payloads and message content are withheld. This is observability only: it does not process events, retry them, or enable outbound sends.
+- The endpoint is committed on `main`; no tests, deployment, or live webhook acceptance were run for this change.
