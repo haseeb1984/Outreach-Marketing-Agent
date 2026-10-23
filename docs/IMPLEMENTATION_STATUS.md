@@ -179,3 +179,5 @@
 - WhatsApp inbound status processing now maps recognized Meta `sent`, `delivered`, `read`, and `failed` events onto an existing outbound queue row only when its workspace, account, and persisted provider message ID match.
 - Delivery updates are monotonic: older status events cannot move a delivered/read message backwards, and provider status ingestion never dispatches a message. Failure codes are normalized rather than copying provider error payloads into queue logs.
 - Added deterministic mapping tests. They have been authored but not run. The behavior is not production-verified; no dispatcher was added and live WhatsApp sending remains disabled.
+
+- Extended the authenticated account privacy export to include safe WhatsApp account metadata, conversations, inbound message content, per-account consent/opt-out records, outbound queue history, and provider delivery-status events. Encrypted access tokens are explicitly excluded. Export remains workspace-membership-scoped and bounded per collection. This source change has not been tested against a database; production schema compatibility is unverified.
