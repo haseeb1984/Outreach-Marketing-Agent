@@ -292,8 +292,9 @@ async def readiness() -> Response:
                             '025_whatsapp_status_event_dedup.sql',
                             '026_whatsapp_template_and_window_policy.sql',
                             '027_platform_billing_admin.sql',
-                            '028_platform_admin_audit.sql'
-                          )) = 23"""
+                            '028_platform_admin_audit.sql',
+                            '029_unique_platform_plan_price_ids.sql'
+                          )) = 24"""
             )
             if not schema_ready:
                 return JSONResponse(
