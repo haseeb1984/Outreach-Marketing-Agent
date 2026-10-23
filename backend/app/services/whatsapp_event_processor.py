@@ -48,6 +48,18 @@ def _is_opt_in(body: str | None) -> bool:
     return normalized in {"START", "UNSTOP", "SUBSCRIBE"}
 
 
+def _delivery_status_target(value: Any) -> str | None:
+    """Normalize only documented Meta delivery states into internal queue states."""
+    if not isinstance(value, str):
+        return None
+    return {
+        "sent": "sent",
+        "delivered": "delivered",
+        "read": "read",
+        "failed": "failed",
+    }.get(value.strip().lower())
+
+
 def _text(message: dict[str, Any]) -> tuple[str, str | None]:
     kind = message.get("type")
     if not isinstance(kind, str) or not kind:
@@ -252,19 +264,14 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                 # Reconcile only when a future approved dispatcher has
                                 # persisted the provider message ID. Status webhooks never
                                 # trigger a send and must not move delivery state backwards.
-                                target_status = {
-                                    "sent": "sent",
-                                    "delivered": "delivered",
-                                    "read": "read",
-                                    "failed": "failed",
-                                }.get(state.lower())
+                                target_status = _delivery_status_target(state)
                                 if target_status:
                                     await conn.execute(
                                         """UPDATE whatsapp_outbound_deliveries
                                            SET status=$3,
                                                sent_at=CASE
                                                  WHEN $3 IN ('sent','delivered','read')
-                                                 THEN COALESCE(sent_at, $4)
+                                                 THEN COALESCE(sent_at, $4, now())
                                                  ELSE sent_at END,
                                                error_code=CASE
                                                  WHEN $3='failed' THEN 'provider_delivery_failed'
