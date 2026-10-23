@@ -192,6 +192,17 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                                  AND (opted_in_at IS NULL OR opted_in_at <= $5)""",
                                             workspace_id, account_id, wa_id, provider_id, inbound_at,
                                         )
+                                        # Cancel queued (not yet dispatched) drafts for this contact.
+                                        # The future dispatcher must still re-check policy immediately before send.
+                                        if prospect:
+                                            await conn.execute(
+                                                """UPDATE whatsapp_outbound_deliveries
+                                                   SET status='cancelled', error_code='contact_opted_out',
+                                                       updated_at=now()
+                                                   WHERE workspace_id=$1 AND account_id=$2 AND prospect_id=$3
+                                                     AND status='queued'""",
+                                                workspace_id, account_id, prospect["id"],
+                                            )
                                     elif opt_in:
                                         # Explicit inbound START-family commands re-enable contact only after
                                         # the contact themselves initiates it; preserve the audit timestamp.
