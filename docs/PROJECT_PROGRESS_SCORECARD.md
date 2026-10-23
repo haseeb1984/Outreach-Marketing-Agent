@@ -161,3 +161,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - WhatsApp outbound queue (2026-10-23): added migration 031, tenant-scoped idempotent queue storage, admin-only CSRF-protected queue API, queue history endpoint, and authored store tests. Queue creation reserves the `whatsapp_sends` entitlement and calls the fail-closed send-policy evaluator. The API explicitly does not dispatch messages; no live sending, tests, deployment, or live migration was performed. Readiness migration count is now 26.
+
+
+- WhatsApp queue idempotency follow-up (2026-10-23): workspace-scoped queue lookup now returns an existing matching queue record before reserving quota, and the queue insert replay path releases the duplicate reservation instead of reporting a conflict. This is a code-only hardening change; concurrent first-write races and end-to-end behavior still require later verification. No tests, migrations, deployment, or workflows were run. Overall score remains **59/100**.
