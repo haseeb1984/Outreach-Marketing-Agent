@@ -5,7 +5,9 @@ import Link from "next/link";
 
 type Plan = { slug: string; name: string; description: string; price_id: string; display_price: string | null; currency: string | null; billing_interval: string | null; entitlements: Record<string, { enabled: boolean; monthly_limit?: number | null }>; active: boolean; created_at?: string; updated_at?: string };
 type Client = { workspace_id: string; workspace_name: string; owner_email: string | null; subscription_status: string | null; billing_period_starts_at: string | null; billing_period_ends_at: string | null; usage_consumed: number; usage_reserved: number; usage_released: number };
-type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; clients_truncated: boolean };
+type UsageFeature = { workspace_id: string; feature: string; consumed: number; reserved: number; released: number };
+type UsageRecord = { reservation_id: string; workspace_id: string; workspace_name: string | null; feature: string; status: string; created_at: string; updated_at: string; billing_period_starts_at: string; billing_period_ends_at: string };
+type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; clients_truncated: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "prospect_search": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
@@ -100,6 +102,12 @@ export default function PlatformAdminPage() {
       </section>
       <section className="section" aria-labelledby="clients-title"><h2 id="clients-title">Clients and usage</h2><p className="fine">Usage figures are persisted reservation counts, not inferred revenue. Showing up to 500 workspaces.{overview.clients_truncated ? " The list is truncated; use database reporting for older records." : ""}</p>
         <div className="card table-wrap"><table><thead><tr><th>Workspace</th><th>Owner email</th><th>Subscription</th><th>Billing period</th><th>Usage counts</th></tr></thead><tbody>{overview.clients.map(client=><tr key={client.workspace_id}><td>{client.workspace_name}<br/><span className="fine">{client.workspace_id}</span></td><td>{client.owner_email || "Owner not mapped"}</td><td>{client.subscription_status || "No subscription"}</td><td>{client.billing_period_starts_at ? new Date(client.billing_period_starts_at).toLocaleDateString() : "—"} – {client.billing_period_ends_at ? new Date(client.billing_period_ends_at).toLocaleDateString() : "—"}</td><td>Consumed: {client.usage_consumed}<br/>Reserved: {client.usage_reserved}<br/>Released: {client.usage_released}</td></tr>)}</tbody></table>{!overview.clients.length && <p>No workspaces were found.</p>}</div>
+      </section>
+      <section className="section" aria-labelledby="feature-usage-title"><h2 id="feature-usage-title">Usage by client and feature</h2>
+        <div className="card table-wrap"><table><thead><tr><th>Workspace ID</th><th>Feature</th><th>Consumed</th><th>Reserved</th><th>Released</th></tr></thead><tbody>{overview.usage_by_feature.map((item,index)=><tr key={item.workspace_id + ":" + item.feature + ":" + index}><td>{item.workspace_id}</td><td>{item.feature}</td><td>{item.consumed}</td><td>{item.reserved}</td><td>{item.released}</td></tr>)}</tbody></table>{!overview.usage_by_feature.length && <p>No feature usage records yet.</p>}</div>
+      </section>
+      <section className="section" aria-labelledby="usage-history-title"><h2 id="usage-history-title">Recent usage history</h2><p className="fine">Latest 200 persisted reservation records; no prompts, credentials, or message bodies are exposed.</p>
+        <div className="card table-wrap"><table><thead><tr><th>Created</th><th>Client</th><th>Feature</th><th>Status</th><th>Billing period</th><th>Reservation ID</th></tr></thead><tbody>{overview.recent_usage.map(item=><tr key={item.reservation_id}><td>{new Date(item.created_at).toLocaleString()}</td><td>{item.workspace_name || item.workspace_id}</td><td>{item.feature}</td><td>{item.status}</td><td>{item.billing_period_starts_at ? new Date(item.billing_period_starts_at).toLocaleDateString() : "—"} – {item.billing_period_ends_at ? new Date(item.billing_period_ends_at).toLocaleDateString() : "—"}</td><td>{item.reservation_id}</td></tr>)}</tbody></table>{!overview.recent_usage.length && <p>No usage history yet.</p>}</div>
       </section>
     </>}
   </main>;
