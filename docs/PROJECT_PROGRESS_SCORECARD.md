@@ -110,3 +110,11 @@ A feature marked implemented means repository code exists. It must not be descri
 - No tests, migrations against a live database, deployment, or workflow runs were performed in this code-first pass.
 
 - Follow-up migration `029_unique_platform_plan_price_ids.sql` enforces one-to-one Paddle price-to-package mapping and is included in readiness and the PostgreSQL migration fixture.
+
+
+## Follow-up billing safeguards — 2026-10-23
+
+- Added a platform-admin-only import action for environment-configured Paddle plans; existing database packages are not overwritten.
+- Package catalog writes and audit events now share a database transaction.
+- Price IDs cannot be changed when subscription snapshots are linked to the package entitlement set; use a new package for future price changes.
+- Added plan-input validation tests. They have not been run, and no score increase is claimed from unverified code.
