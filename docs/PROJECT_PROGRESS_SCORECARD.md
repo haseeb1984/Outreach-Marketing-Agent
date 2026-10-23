@@ -149,3 +149,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - Platform-admin pagination (2026-10-23): client inventory is now paginated server-side with total workspace count and previous/next controls in the admin UI; search explicitly applies to the current page. This removes the fixed 500-workspace view cap, but the dashboard remains unverified in an authenticated browser. No tests or deployment were run.
+
+
+- Platform-admin reporting extension (2026-10-23): client inventory and usage-reservation history now support server-side page size/offset, total counts, and dashboard navigation. The prior 500-client and 200-record display caps are removed for these lists. Per-feature aggregation and audit history remain bounded top-N views; no tests or authenticated browser acceptance were run. Overall score remains **59/100**.
