@@ -190,8 +190,9 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                             """UPDATE whatsapp_contact_preferences
                                                SET opted_in_at=$4, updated_at=now()
                                                WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3
-                                                 AND (opted_out_at IS NULL OR opted_out_at <= $4)""",
-                                            workspace_id, account_id, wa_id,
+                                                 AND (opted_out_at IS NULL OR opted_out_at <= $4)
+                                                 AND (opted_in_at IS NULL OR opted_in_at <= $4)""",
+                                            workspace_id, account_id, wa_id, inbound_at,
                                         )
                                     elif prospect:
                                         await conn.execute(
