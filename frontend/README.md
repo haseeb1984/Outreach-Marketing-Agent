@@ -35,3 +35,14 @@ The customer-facing Next.js app is deployed on **Hostinger Business**. The FastA
 7. Keep paid checkout disabled until Paddle sandbox checkout, signed webhook handling and subscription lifecycle are verified.
 
 This configuration removes the frontend's dependency on cross-site browser cookies, but production acceptance still requires deployment-origin testing. The final ZIP must contain `.env.example` only, never a real `.env` or credentials.
+
+
+## Create a Hostinger ZIP (Windows)
+
+From the repository root, run the packaging script (it does not deploy or run tests):
+
+```powershell
+.\frontend\scripts\package-hostinger.ps1 -OutputPath .\outreach-marketing-agent-hostinger.zip
+```
+
+The script stages the Next.js source and required runtime configuration, excludes dependency/build/Git directories and refuses to package real `.env` files. The resulting ZIP is source-only: Hostinger must still install dependencies and build the app, and the production origin/cookie/API flows must be verified before launch. The script has been added to source but has not been executed in this code-only pass.
