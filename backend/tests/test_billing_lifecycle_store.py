@@ -15,6 +15,7 @@ def event(**overrides):
         "workspace_id": "workspace-1",
         "provider_customer_id": "cus_123",
         "provider_subscription_id": "sub_123",
+        "plan_slug": "starter",
         "event_created_at": NOW,
         "subscription_status": "active",
         "period_starts_at": NOW - timedelta(days=1),
