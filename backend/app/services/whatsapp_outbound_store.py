@@ -11,7 +11,7 @@ class WhatsAppOutboundStore:
 
     async def enqueue(
         self, *, workspace_id: str, account_id: UUID, draft_id: UUID,
-        actor_id: UUID | str, idempotency_key: str,
+        actor_id: UUID | str, idempotency_key: str, usage_reservation_id: UUID | str,
     ) -> dict[str, Any]:
         if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
             raise ValueError("workspace_id_invalid")
@@ -59,11 +59,11 @@ class WhatsAppOutboundStore:
                     return {"id": str(existing["id"]), "status": existing["status"], "replayed": True}
                 row = await conn.fetchrow(
                     """INSERT INTO whatsapp_outbound_deliveries
-                       (workspace_id,account_id,draft_id,prospect_id,idempotency_key,queued_by)
-                       VALUES($1,$2,$3,$4,$5,$6)
+                       (workspace_id,account_id,draft_id,prospect_id,idempotency_key,usage_reservation_id,queued_by)
+                       VALUES($1,$2,$3,$4,$5,$6,$7)
                        RETURNING id,status,queued_at""",
                     workspace_id, account_id, draft_id, draft["prospect_id"],
-                    idempotency_key, UUID(str(actor_id)),
+                    idempotency_key, UUID(str(usage_reservation_id)), UUID(str(actor_id)),
                 )
                 return {
                     "id": str(row["id"]),
