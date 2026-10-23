@@ -136,3 +136,5 @@
 - The endpoint is committed on `main`; no tests, deployment, or live webhook acceptance were run for this change.
 
 - Platform-admin usability follow-up (2026-10-23): added an accessible client search filter covering workspace name/ID, owner email, package, and subscription status. The UI reports filtered versus loaded workspace counts and distinguishes an empty search from an empty client list. This is client-side filtering over the API's existing maximum of 500 loaded workspaces; it does not replace full-dataset reporting. No tests, deployment, or workflow were run.
+
+- WhatsApp event processor hardening (2026-10-23): inbound standalone STOP/UNSUBSCRIBE/CANCEL/END/QUIT commands are normalized for trailing punctuation and persisted as opt-outs; standalone START/UNSTOP/SUBSCRIBE commands record explicit inbound re-opt-in; duplicate delivery-status events no longer inflate the worker's saved-status count. Added focused helper regression tests. Tests were authored but not run.
