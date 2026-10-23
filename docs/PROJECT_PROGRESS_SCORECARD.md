@@ -142,7 +142,10 @@ A feature marked implemented means repository code exists. It must not be descri
 - Added regression tests for command matching, ordinary-prose false positives, message-body truncation, and timestamp parsing. Tests have not been run; this does not enable outbound sending.
 
 
-- WhatsApp reliability follow-up (2026-10-23): service-window timestamps now use the provider timestamp bounded by server receipt time; exhausted webhook events (8+ attempts) are exposed as a separate workspace-scoped `dead_letter` state and count. This improves safety and operator visibility but does not add retry/replay or enable outbound messaging. No tests were run; overall estimate remains **59/100**.
+- WhatsApp reliability follow-up (2026-10-23): service-window timestamps now use the provider timestamp bounded by server receipt time; exhausted webhook events (8+ attempts) are exposed as a separate workspace-scoped `dead_letter` state and count. This improves safety and operator visibility but adds a workspace-admin-only manual requeue for a single exhausted event, but does not enable outbound messaging. No tests were run; overall estimate remains **59/100**.
 
 
 - WhatsApp consent/recovery follow-up (2026-10-23): consent updates now use bounded inbound event timestamps and guard against out-of-order STOP/START events overwriting newer consent state. A workspace admin can requeue one exhausted webhook event after review using a CSRF-protected endpoint scoped to an active mapped account. Requeue does not send messages; the trusted worker must run separately. Added timestamp regression tests but did not execute them. Overall implementation estimate remains **59/100**.
+
+
+- Platform-admin pagination (2026-10-23): client inventory is now paginated server-side with total workspace count and previous/next controls in the admin UI; search explicitly applies to the current page. This removes the fixed 500-workspace view cap, but the dashboard remains unverified in an authenticated browser. No tests or deployment were run.
