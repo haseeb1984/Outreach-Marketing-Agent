@@ -24,6 +24,7 @@ class VerifiedBillingEvent:
     workspace_id: str
     provider_customer_id: str | None
     provider_subscription_id: str
+    plan_slug: str
     event_created_at: datetime
     subscription_status: str
     period_starts_at: datetime
@@ -67,12 +68,13 @@ class BillingLifecycleStore:
 
                 applied = await conn.fetchrow(
                     """INSERT INTO workspace_subscriptions
-                       (workspace_id,provider,provider_customer_id,provider_subscription_id,
+                       (workspace_id,provider,provider_customer_id,provider_subscription_id,plan_slug,
                         status,billing_period_starts_at,billing_period_ends_at,entitlements,
                         provider_event_created_at,updated_at)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,now())
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,now())
                        ON CONFLICT (workspace_id) DO UPDATE SET
                          provider_customer_id=EXCLUDED.provider_customer_id,
+                         plan_slug=EXCLUDED.plan_slug,
                          status=EXCLUDED.status,
                          billing_period_starts_at=EXCLUDED.billing_period_starts_at,
                          billing_period_ends_at=EXCLUDED.billing_period_ends_at,
@@ -85,7 +87,7 @@ class BillingLifecycleStore:
                            OR EXCLUDED.provider_event_created_at > workspace_subscriptions.provider_event_created_at)
                        RETURNING workspace_id""",
                     event.workspace_id, event.provider, event.provider_customer_id,
-                    event.provider_subscription_id, event.subscription_status,
+                    event.provider_subscription_id, event.plan_slug, event.subscription_status,
                     event.period_starts_at, event.period_ends_at, entitlements_json,
                     event.event_created_at,
                 )
@@ -106,6 +108,7 @@ class BillingLifecycleStore:
             ("event_id", event.event_id, 300),
             ("workspace_id", event.workspace_id, 200),
             ("provider_subscription_id", event.provider_subscription_id, 300),
+            ("plan_slug", event.plan_slug, 80),
         ):
             if not isinstance(value, str) or not value.strip() or len(value) > maximum:
                 raise ValueError(f"invalid_{name}")
