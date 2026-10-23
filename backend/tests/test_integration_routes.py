@@ -79,10 +79,10 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
     monkeypatch.setattr(config.settings, "smtp_starttls", True)
     calls = []
 
-    def fake_test_connection(self):
+    async def fake_test_connection(self):
         calls.append("tested")
 
-    monkeypatch.setattr(integration_routes.SMTPEmailDelivery, "_test_connection", fake_test_connection)
+    monkeypatch.setattr(integration_routes.SMTPEmailDelivery, "test_connection", fake_test_connection)
     with _client(monkeypatch) as client:
         rejected = client.post(
             "/api/v1/integrations/smtp/test?workspace_id=workspace-1",
