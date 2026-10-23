@@ -8,7 +8,7 @@ type Client = { workspace_id: string; workspace_name: string; owner_email: strin
 type UsageFeature = { workspace_id: string; feature: string; consumed: number; reserved: number; released: number };
 type UsageRecord = { reservation_id: string; workspace_id: string; workspace_name: string | null; feature: string; status: string; created_at: string; updated_at: string; billing_period_starts_at: string; billing_period_ends_at: string };
 type AdminEvent = { id: number; actor_email: string; event_type: string; target_type: string; target_id: string; created_at: string };
-type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean };
+type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "prospect_search": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
@@ -32,6 +32,7 @@ export default function PlatformAdminPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [clientSearch, setClientSearch] = useState("");
+  const [clientOffset, setClientOffset] = useState(0);
   const filteredClients = (overview?.clients ?? []).filter((client) => {
     const query = clientSearch.trim().toLowerCase();
     if (!query) return true;
@@ -39,9 +40,10 @@ export default function PlatformAdminPage() {
       .some((value) => (value ?? "").toLowerCase().includes(query));
   });
 
-  const refresh = useCallback(async (token: string) => {
-    const data = await api<Overview>("/api/v1/platform-admin/overview", token);
+  const refresh = useCallback(async (token: string, offset = 0) => {
+    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset, token);
     setOverview(data);
+    setClientOffset(data.clients_offset);
   }, []);
 
   useEffect(() => {
@@ -118,8 +120,8 @@ export default function PlatformAdminPage() {
         </form>
         <div className="card table-wrap"><table><thead><tr><th>Package</th><th>Price</th><th>Status</th><th>Limits / features</th><th>Actions</th></tr></thead><tbody>{overview.plans.map(plan=><tr key={plan.slug}><td><strong>{plan.name}</strong><br/><span className="fine">{plan.slug}</span></td><td>{plan.display_price || "Not set"} {plan.currency || ""}<br/><span className="fine">{plan.billing_interval || "interval not set"}</span></td><td>{plan.active ? "Active" : "Inactive"}</td><td>{Object.entries(plan.entitlements || {}).map(([feature,rule])=><div key={feature}>{feature}: {rule.enabled ? "on" : "off"} · {rule.monthly_limit == null ? "unlimited" : rule.monthly_limit + "/period"}</div>)}</td><td><div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={()=>startEdit(plan)}>Edit</button>{plan.active && <button className="button secondary" type="button" disabled={busy} onClick={()=>deactivate(plan)}>Deactivate</button>}</div></td></tr>)}</tbody></table>{!overview.plans.length && <p>No database-managed packages yet. Create the first package to activate database catalog management.</p>}</div>
       </section>
-      <section className="section" aria-labelledby="clients-title"><h2 id="clients-title">Clients and usage</h2><p className="fine">Usage figures are persisted reservation counts, not inferred revenue. Showing up to 500 workspaces.{overview.clients_truncated ? " The list is truncated; use database reporting for older records." : ""}</p>
-        <div className="field"><label htmlFor="client-search">Search clients</label><input id="client-search" type="search" maxLength={200} value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Workspace, owner email, package or subscription status"/><p className="fine" aria-live="polite">Showing {filteredClients.length} of {overview.clients.length} loaded workspaces.</p></div>
+      <section className="section" aria-labelledby="clients-title"><h2 id="clients-title">Clients and usage</h2><p className="fine">Usage figures are persisted reservation counts, not inferred revenue. Clients are paginated from the full workspace count; search applies to the currently loaded page.</p>
+        <div className="field"><label htmlFor="client-search">Search clients</label><input id="client-search" type="search" maxLength={200} value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Workspace, owner email, package or subscription status"/><p className="fine" aria-live="polite">Showing {filteredClients.length} matching of {overview.clients.length} workspaces on this page; total workspaces: {overview.clients_total.toLocaleString()}.</p></div>
         <div className="card table-wrap"><table><thead><tr><th>Workspace</th><th>Owner email</th><th>Package / subscription</th><th>Billing period</th><th>Usage counts</th></tr></thead><tbody>{filteredClients.map(client=><tr key={client.workspace_id}><td>{client.workspace_name}<br/><span className="fine">{client.workspace_id}</span></td><td>{client.owner_email || "Owner not mapped"}</td><td>{client.package_name || "Package not matched"}<br/><span className="fine">{client.subscription_status || "No subscription"}</span></td><td>{client.billing_period_starts_at ? new Date(client.billing_period_starts_at).toLocaleDateString() : "—"} – {client.billing_period_ends_at ? new Date(client.billing_period_ends_at).toLocaleDateString() : "—"}</td><td>Consumed: {client.usage_consumed}<br/>Reserved: {client.usage_reserved}<br/>Released: {client.usage_released}</td></tr>)}</tbody></table>{!filteredClients.length && <p>{overview.clients.length ? "No clients match this search." : "No workspaces were found."}</p>}</div>
         <div className="actions" aria-label="Client pagination">
           <button className="button secondary" type="button" disabled={busy || clientOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, Math.max(0, clientOffset - overview.clients_limit)); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous clients."); } finally { setBusy(false); } }}>Previous page</button>
