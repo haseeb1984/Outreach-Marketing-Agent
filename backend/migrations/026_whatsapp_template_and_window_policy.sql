@@ -23,6 +23,3 @@ CREATE TABLE IF NOT EXISTS whatsapp_message_templates (
 CREATE INDEX IF NOT EXISTS whatsapp_message_templates_eligible
     ON whatsapp_message_templates(workspace_id, account_id, status, template_name, language_code);
 
-INSERT INTO schema_migrations (version)
-VALUES ('026_whatsapp_template_and_window_policy.sql')
-ON CONFLICT (version) DO NOTHING;
