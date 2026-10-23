@@ -46,7 +46,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [x] Meta WhatsApp webhook intake, signature validation, durable event storage and account mapping foundations exist.
 - [~] WhatsApp account administration, inbound inbox and contact consent safeguards exist in code; runtime acceptance is pending.
 - [~] A fail-closed policy evaluator and provider-template registry foundation now check active account, documented opt-in, account-specific opt-out, the 24-hour customer-service window, and approved/verified templates. Re-consent requires selecting an active WhatsApp account so it cannot clear opt-outs for other accounts. The evaluator is not yet wired into an outbound sender.
-- [ ] WhatsApp outbound sending is intentionally disabled until the policy is integrated, durable provider sends/error reconciliation are implemented, and the end-to-end flow is verified.
+- [~] Durable tenant-scoped WhatsApp queue API now checks approved draft, active campaign/account, documented opt-in, account-specific opt-out, service window or verified template, and `whatsapp_sends` entitlement before queueing. Queue migration 031 is required by readiness. Provider dispatch, send idempotency at Meta, delivery reconciliation and end-to-end acceptance remain incomplete; live sending stays disabled.
 - [x] Added deterministic policy unit-test cases for seven fail-closed/allowed-window decisions; they have not been executed, so passing status is unknown.
 
 ### Phase 4 — Outreach and reply management: 70%
@@ -158,3 +158,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - WhatsApp send-policy hardening (2026-10-23): eligibility now fails closed when an active account has no encrypted credential and requires a workspace-matched, approved WhatsApp draft attached to an active campaign before allowing either an open customer-service-window send or a verified-template send. Added/updated deterministic test fixtures for these gates. The evaluator is still not connected to an outbound sender; live WhatsApp sending remains disabled. Tests were not run and the overall score remains **59/100**.
+
+
+- WhatsApp outbound queue (2026-10-23): added migration 031, tenant-scoped idempotent queue storage, admin-only CSRF-protected queue API, queue history endpoint, and authored store tests. Queue creation reserves the `whatsapp_sends` entitlement and calls the fail-closed send-policy evaluator. The API explicitly does not dispatch messages; no live sending, tests, deployment, or live migration was performed. Readiness migration count is now 26.
