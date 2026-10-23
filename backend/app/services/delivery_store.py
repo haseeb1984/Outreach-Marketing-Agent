@@ -70,12 +70,15 @@ class DeliveryStore:
                   WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
         return result.endswith(" 1")
 
-    async def reconcile_stale_processing(self, *, older_than_seconds: int = 900, limit: int = 100) -> int:
-        """Move abandoned in-flight sends to an operator-visible uncertain state.
+    async def reconcile_stale_processing(self, *, workspace_id: str, older_than_seconds: int = 900, limit: int = 100) -> int:
+        """Move one workspace's abandoned sends to an operator-visible uncertain state.
 
         Never automatically requeue a timed-out send: the provider may have accepted it
-        before the worker disappeared. A bounded update avoids a large table-wide lock.
+        before the worker disappeared. A bounded tenant-scoped update avoids cross-workspace
+        changes and a large table-wide lock.
         """
+        if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
+            raise ValueError("workspace_id_invalid")
         if isinstance(older_than_seconds, bool) or not isinstance(older_than_seconds, int) or not 60 <= older_than_seconds <= 86400:
             raise ValueError("stale_processing_age_out_of_range")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
@@ -85,7 +88,8 @@ class DeliveryStore:
                 """WITH stale AS (
                        SELECT id
                        FROM outreach_deliveries
-                       WHERE status='processing'
+                       WHERE workspace_id=$1
+                         AND status='processing'
                          AND processing_at IS NOT NULL
                          AND processing_at < now() - ($1 * interval '1 second')
                        ORDER BY processing_at ASC, id
@@ -97,7 +101,8 @@ class DeliveryStore:
                        error_code='worker_lost_outcome_unknown',
                        updated_at=now()
                    FROM stale
-                   WHERE q.id=stale.id AND q.status='processing'""",
+                   WHERE q.id=stale.id AND q.workspace_id=$1 AND q.status='processing'""",
+                workspace_id,
                 older_than_seconds,
                 limit,
             )
