@@ -79,6 +79,8 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 
 ## Changes in this update
 
+- Added migration `030_subscription_plan_slug.sql` and persisted the exact package slug on each verified Paddle subscription snapshot. Platform admin client rows now resolve the package by stable slug first, using entitlement matching only for legacy rows. This avoids displaying the wrong package when two plans share identical entitlement JSON. Readiness now expects 25 tracked migrations. The migration is not applied to a live database and no tests/deployment were run.
+
 - Analytics API now counts inbound messages from mapped WhatsApp conversations and persisted WhatsApp delivery-status events over the selected period.
 - Dashboard analytics adds separate **WhatsApp inbound** and **WhatsApp status events** metrics.
 - Consent and opt-out safeguards, migrations 024/025/026 and readiness/test migration setup were committed in the preceding implementation rounds.
