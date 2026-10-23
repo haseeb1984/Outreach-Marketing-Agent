@@ -57,6 +57,7 @@ async def _exercise_password_reset() -> None:
             "026_whatsapp_template_and_window_policy.sql",
             "027_platform_billing_admin.sql",
             "028_platform_admin_audit.sql",
+            "029_unique_platform_plan_price_ids.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
