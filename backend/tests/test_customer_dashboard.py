@@ -23,6 +23,12 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="invitations-heading"' in response.text
     assert 'id="invitation-form"' in response.text
     assert 'id="invitations-list"' in response.text
+    assert 'id="workspace-admin-heading"' in response.text
+    assert 'id="workspace-settings-form"' in response.text
+    assert "/api/v1/workspaces/settings?workspace_id=" in response.text
+    assert 'id="workspace-members-list"' in response.text
+    assert "/api/v1/workspaces/members?workspace_id=" in response.text
+    assert "Role changes and removals are permission-checked by the server." in response.text
     assert "/api/v1/workspaces/invitations?workspace_id=" in response.text
     assert 'id="account-export-link"' in response.text
     assert '/api/v1/account/export' in response.text
