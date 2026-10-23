@@ -14,6 +14,7 @@ import asyncpg
 from app.core.config import settings
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
+MIGRATION_LOCK_KEY = "outreach-marketing-agent:migrations"
 
 
 async def apply_migrations(database_url: str, migrations_dir: Path = MIGRATIONS_DIR) -> list[str]:
@@ -32,27 +33,28 @@ async def apply_migrations(database_url: str, migrations_dir: Path = MIGRATIONS_
                    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
                )"""
         )
-        # Prevent two deploy processes from applying the same migration at once.
-        await connection.execute("SELECT pg_advisory_lock(hashtext($1))", "outreach-marketing-agent:migrations")
-        try:
-            for path in sorted(migrations_dir.glob("[0-9][0-9][0-9]_*.sql")):
-                async with connection.transaction():
-                    exists = await connection.fetchval(
-                        "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1)",
-                        path.name,
-                    )
-                    if exists:
-                        continue
-                    sql = path.read_text(encoding="utf-8")
-                    if not sql.strip():
-                        raise ValueError(f"Migration is empty: {path.name}")
-                    await connection.execute(sql)
-                    await connection.execute(
-                        "INSERT INTO schema_migrations(version) VALUES($1)", path.name
-                    )
-                    applied.append(path.name)
-        finally:
-            await connection.execute("SELECT pg_advisory_unlock(hashtext($1))", "outreach-marketing-agent:migrations")
+        # Use a transaction-scoped lock inside each migration transaction. A
+        # session-level lock may not survive transaction-pooling PostgreSQL URLs.
+        for path in sorted(migrations_dir.glob("[0-9][0-9][0-9]_*.sql")):
+            async with connection.transaction():
+                await connection.fetchval(
+                    "SELECT pg_advisory_xact_lock(hashtext($1))",
+                    MIGRATION_LOCK_KEY,
+                )
+                exists = await connection.fetchval(
+                    "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1)",
+                    path.name,
+                )
+                if exists:
+                    continue
+                sql = path.read_text(encoding="utf-8")
+                if not sql.strip():
+                    raise ValueError(f"Migration is empty: {path.name}")
+                await connection.execute(sql)
+                await connection.execute(
+                    "INSERT INTO schema_migrations(version) VALUES($1)", path.name
+                )
+                applied.append(path.name)
     finally:
         await connection.close()
     return applied
