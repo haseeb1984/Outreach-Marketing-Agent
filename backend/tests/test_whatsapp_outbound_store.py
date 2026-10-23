@@ -57,6 +57,7 @@ def test_queue_persists_only_after_database_gate_checks():
             "channel": "whatsapp", "campaign_status": "active", "stage": "new",
             "archived_at": None, "active_account_id": account_id,
         },
+        None,
         {
             "id": queue_id, "status": "queued",
             "queued_at": datetime(2026, 10, 23, tzinfo=timezone.utc),
