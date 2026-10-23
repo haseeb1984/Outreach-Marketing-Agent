@@ -103,3 +103,5 @@
 - Added client/subscription overview, per-feature usage counters, recent usage history, and platform-admin audit history, plus a Hostinger-source frontend page at `frontend/app/platform-admin/page.tsx`.
 - Added migrations `027_platform_billing_admin.sql` and `028_platform_admin_audit.sql`; readiness and the PostgreSQL migration fixture now include them.
 - Tests, live migration, deployment, and authenticated browser acceptance were not run. Configure the backend-only allowlist before operator access.
+
+- Follow-up migration `029_unique_platform_plan_price_ids.sql` adds a unique index so a Paddle price can map to exactly one package; readiness and the PostgreSQL migration fixture include it.
