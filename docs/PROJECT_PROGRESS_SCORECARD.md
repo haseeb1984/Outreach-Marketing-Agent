@@ -152,3 +152,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - Platform-admin reporting extension (2026-10-23): client inventory and usage-reservation history now support server-side page size/offset, total counts, and dashboard navigation. The prior 500-client and 200-record display caps are removed for these lists. Per-feature aggregation and audit history remain bounded top-N views; no tests or authenticated browser acceptance were run. Overall score remains **59/100**.
+
+
+- Platform-admin audit history now supports bounded server-side pagination, total count and dashboard navigation alongside client and usage-history paging. Per-feature aggregate reporting remains capped at 2,000 workspace-feature rows. This is source implementation only; tests and authenticated browser acceptance remain pending, so overall score stays **59/100**.
