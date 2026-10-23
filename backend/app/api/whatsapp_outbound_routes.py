@@ -1,0 +1,172 @@
+"""Approval- and quota-gated WhatsApp queue. No endpoint here dispatches messages."""
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.auth_routes import _authenticated, _check_csrf
+from app.services.whatsapp_outbound_store import WhatsAppOutboundStore
+from app.services.whatsapp_send_policy import WhatsAppSendPolicy
+
+router = APIRouter(prefix="/api/v1/integrations/whatsapp/outbound", tags=["WhatsApp outbound queue"])
+
+
+class QueueWhatsAppDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    account_id: UUID
+    idempotency_key: str = Field(min_length=8, max_length=200, pattern=r"^[A-Za-z0-9._:-]+$")
+    template_name: str | None = Field(default=None, min_length=1, max_length=512)
+    language_code: str | None = Field(default=None, min_length=2, max_length=32)
+
+
+def _pool(request: Request):
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="whatsapp_outbound_queue_not_configured")
+    return pool
+
+
+async def _authorize(request: Request, workspace_id: str, session: dict, role: str) -> None:
+    auth = getattr(request.app.state, "auth_store", None)
+    if auth is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth.authorize_workspace(
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role=role
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+
+
+@router.post("/drafts/{draft_id}/queue", status_code=202)
+async def queue_whatsapp_draft(
+    draft_id: UUID, payload: QueueWhatsAppDraft, request: Request,
+) -> dict:
+    """Check consent/template/window and quota, then queue for future reviewed dispatch.
+
+    This endpoint never sends a WhatsApp message. Queue rows stay queued until a
+    separately approved worker exists; live sending is deliberately not enabled.
+    """
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, session, "admin")
+    pool = _pool(request)
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+
+    try:
+        decision = await WhatsAppSendPolicy(pool).evaluate(
+            workspace_id=payload.workspace_id,
+            account_id=payload.account_id,
+            prospect_id=await _draft_prospect_id(pool, payload.workspace_id, draft_id),
+            draft_id=draft_id,
+            template_name=payload.template_name,
+            language_code=payload.language_code,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="workspace_draft_not_found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_policy_unavailable") from None
+    if not decision.get("allowed"):
+        reason = str(decision.get("reason", "whatsapp_policy_denied"))
+        raise HTTPException(status_code=403, detail=reason)
+
+    reservation_key = "whatsapp-send:" + payload.idempotency_key
+    try:
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="whatsapp_sends",
+            idempotency_key=reservation_key,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
+    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="whatsapp_queue_key_already_used")
+
+    try:
+        result = await WhatsAppOutboundStore(pool).enqueue(
+            workspace_id=payload.workspace_id,
+            account_id=payload.account_id,
+            draft_id=draft_id,
+            actor_id=session["user_id"],
+            idempotency_key=payload.idempotency_key,
+        )
+        if result.get("replayed"):
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id,
+                reservation_id=reservation["reservation_id"],
+                outcome="released",
+            )
+            raise HTTPException(status_code=409, detail="whatsapp_draft_already_queued")
+    except HTTPException:
+        raise
+    except LookupError as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id,
+            reservation_id=reservation["reservation_id"],
+            outcome="released",
+        )
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ValueError as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id,
+            reservation_id=reservation["reservation_id"],
+            outcome="released",
+        )
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id,
+            reservation_id=reservation["reservation_id"],
+            outcome="released",
+        )
+        raise HTTPException(status_code=503, detail="whatsapp_queue_unavailable") from None
+
+    return {
+        **result,
+        "policy_reason": decision["reason"],
+        "requires_approved_template": decision["requires_approved_template"],
+        "dispatch_enabled": False,
+        "notice": "Queued only. No WhatsApp message was sent; outbound dispatch remains disabled.",
+    }
+
+
+async def _draft_prospect_id(pool, workspace_id: str, draft_id: UUID) -> UUID:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT prospect_id FROM outreach_drafts WHERE id=$1 AND workspace_id=$2",
+            draft_id, workspace_id,
+        )
+    if row is None:
+        raise LookupError("workspace_draft_not_found")
+    return row["prospect_id"]
+
+
+@router.get("")
+async def list_whatsapp_outbound_queue(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, "viewer")
+    try:
+        items = await WhatsAppOutboundStore(_pool(request)).list(
+            workspace_id=workspace_id, limit=limit, offset=offset,
+        )
+        return {
+            "items": items, "limit": limit, "offset": offset,
+            "dispatch_enabled": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_queue_list_unavailable") from None
