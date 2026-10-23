@@ -72,6 +72,32 @@ class WhatsAppOutboundStore:
                     "replayed": False,
                 }
 
+    async def find_by_idempotency_key(
+        self, *, workspace_id: str, idempotency_key: str,
+    ) -> dict[str, Any] | None:
+        """Return a workspace-scoped queue record so client retries can replay safely."""
+        if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
+            raise ValueError("workspace_id_invalid")
+        if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 200:
+            raise ValueError("idempotency_key_invalid")
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT id,account_id,draft_id,status,queued_at
+                   FROM whatsapp_outbound_deliveries
+                   WHERE workspace_id=$1 AND idempotency_key=$2""",
+                workspace_id, idempotency_key,
+            )
+        if row is None:
+            return None
+        return {
+            "id": str(row["id"]),
+            "account_id": str(row["account_id"]),
+            "draft_id": str(row["draft_id"]),
+            "status": row["status"],
+            "queued_at": row["queued_at"].isoformat(),
+            "replayed": True,
+        }
+
     async def list(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
             raise ValueError("pagination_out_of_range")
