@@ -12,6 +12,3 @@ CREATE TABLE IF NOT EXISTS meta_whatsapp_webhook_events (
 CREATE INDEX IF NOT EXISTS idx_meta_whatsapp_webhook_events_pending
     ON meta_whatsapp_webhook_events (received_at, id)
     WHERE processed_at IS NULL;
-INSERT INTO schema_migrations (version)
-VALUES ('020_meta_whatsapp_webhook_inbox.sql')
-ON CONFLICT (version) DO NOTHING;
