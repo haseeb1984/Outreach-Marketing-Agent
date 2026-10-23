@@ -125,7 +125,6 @@ async def queue_whatsapp_draft(
                 reservation_id=reservation["reservation_id"],
                 outcome="released",
             )
-            raise HTTPException(status_code=409, detail="whatsapp_draft_already_queued")
     except HTTPException:
         raise
     except LookupError as exc:
