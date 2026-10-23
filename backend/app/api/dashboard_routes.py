@@ -78,7 +78,12 @@ footer{max-width:1240px;margin:auto;padding:0 1.25rem 2rem;color:var(--muted);fo
  <div class="grid columns">
   <div class="stack">
    <section class="panel"><div class="section-head"><h2>Prospect CRM</h2><span class="pill">Workspace-scoped</span></div>
-    <details style="margin:.75rem 0 1rem"><summary style="cursor:pointer;font-weight:750;color:var(--blue)">Add a prospect</summary>
+    <details style="margin:.75rem 0 1rem"><summary style="cursor:pointer;font-weight:750;color:var(--blue)">Discover prospects from public web search</summary>
+     <p class="muted">Search results are unverified leads. Review the source before adding anyone to your CRM; searching never sends a message.</p>
+     <form id="research-form"><label for="research-query">What kind of creator, publication, or business are you looking for?</label><input id="research-query" maxlength="400" minlength="3" placeholder="e.g. independent fitness publishers" required><label for="research-count">Maximum results</label><select id="research-count"><option value="5">5 results</option><option value="10" selected>10 results</option><option value="20">20 results</option></select><div class="actions"><button type="submit">Search public web</button></div></form>
+     <p id="research-message" class="message" role="status" aria-live="polite" hidden></p><div id="research-results" class="list" aria-live="polite"></div>
+    </details>
+    <details style="margin:.75rem 0 1rem"><summary style="cursor:pointer;font-weight:750;color:var(--blue)">Add a prospect manually</summary>
      <form id="prospect-form">
       <label for="prospect-name">Contact / creator name</label><input id="prospect-name" maxlength="200" required>
       <label for="prospect-company">Company / publication</label><input id="prospect-company" maxlength="240" required>
@@ -155,6 +160,37 @@ async function renderDeliveries(){const target=$('deliveries-list');target.repla
 async function reviewDraft(id,decision){if(!confirm('Are you sure you want to '+decision+' this draft? This does not send a message.'))return;try{await api('/api/v1/drafts/'+encodeURIComponent(id)+'/review',{method:'POST',body:{workspace_id:state.workspaceId,decision}});message('global-message','Draft '+decision+'. No message was sent.','success');await loadWorkspaceData();}catch(err){message('global-message','Draft review failed. ('+err.message+')','error');}}
 async function queueApprovedEmail(id){if(!confirm('Queue this approved email draft for sending? No email is sent until you separately choose Send now.'))return;try{await api('/api/v1/drafts/'+encodeURIComponent(id)+'/enqueue',{method:'POST',body:{workspace_id:state.workspaceId,idempotency_key:'dash-'+crypto.randomUUID()}});message('global-message','Approved email queued. It has not been sent.','success');await loadWorkspaceData();}catch(err){message('global-message','Email could not be queued. ('+err.message+')','error');}}
 async function sendQueuedEmail(id){if(!confirm('Send this queued email now to the saved prospect email address? This action may contact a real person and cannot be undone.'))return;try{await api('/api/v1/deliveries/'+encodeURIComponent(id)+'/send',{method:'POST',body:{workspace_id:state.workspaceId,idempotency_key:'send-'+id}});message('global-message','Send request processed. Check the recorded delivery status; network/provider acceptance is not inbox-placement proof.','success');await loadWorkspaceData();}catch(err){message('global-message','Email send was not confirmed. Check Delivery activity before retrying. ('+err.message+')','error');await loadWorkspaceData();}}
+$('research-form').addEventListener('submit',async(e)=>{
+ e.preventDefault();
+ if(!state.workspaceId){message('research-message','Choose an active workspace first.','error');return;}
+ if(!canWrite()){message('research-message','Workspace member permission is required to search prospects.','error');return;}
+ const button=e.submitter;if(button)button.disabled=true;
+ $('research-results').replaceChildren();message('research-message','Searching public sources…');
+ try{
+  const result=await api('/api/v1/research/prospects/search',{method:'POST',body:{workspace_id:state.workspaceId,query:$('research-query').value.trim(),count:Number($('research-count').value),idempotency_key:'research-'+Date.now()+'-'+Math.random().toString(36).slice(2,12)}});
+  message('research-message',result.count+' result(s) found. Review sources and evidence before saving a prospect.','success');
+  if(!result.items.length){renderEmpty('research-results','No usable public HTTPS results were returned. Try a more specific query.');return;}
+  const container=$('research-results');
+  result.items.forEach(item=>{
+   const card=node('article','item');const head=node('div','item-head');const title=node('h3','',item.title);const link=node('a','muted','Open source');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';head.append(title,link);card.append(head);
+   if(item.description)card.append(node('p','',item.description));
+   const note=node('p','muted','Unverified search result · '+item.evidence_type);card.append(note);
+   const actions=node('div','item-actions');const use=node('button','secondary','Review in CRM form');use.type='button';
+   use.addEventListener('click',()=>{
+    $('prospect-name').value=item.title.slice(0,200);
+    $('prospect-company').value=item.title.slice(0,240);
+    $('prospect-website').value=item.url;
+    $('prospect-evidence').value=item.url;
+    $('prospect-fit').value=item.description||'Review the linked source and document why this prospect fits the campaign before saving.';
+    const details=$('prospect-form').closest('details');if(details)details.open=true;
+    $('prospect-name').focus();
+    message('global-message','Search result copied into the CRM form only. Verify the name, company, website, and fit before saving.','success');
+   });
+   actions.append(use);card.append(actions);container.append(card);
+  });
+ }catch(err){message('research-message','Search could not complete: '+err.message,'error');}
+ finally{if(button)button.disabled=false;}
+});
 $('prospect-form').addEventListener('submit',async(e)=>{e.preventDefault();if(!state.workspaceId){message('global-message','Choose an active workspace first.','error');return;}if(!canWrite()){message('global-message','Workspace member permission is required to add prospects.','error');return;}const btn=e.submitter;if(btn)btn.disabled=true;try{await api('/api/v1/prospects',{method:'POST',body:{workspace_id:state.workspaceId,name:$('prospect-name').value,company:$('prospect-company').value,role:$('prospect-role').value||null,contact_email:$('prospect-email').value||null,website_url:$('prospect-website').value,evidence_url:$('prospect-evidence').value,fit_reason:$('prospect-fit').value,verified_facts:[]}});$('prospect-form').reset();message('global-message','Prospect saved.','success');await loadWorkspaceData();}catch(err){message('global-message','Prospect could not be saved. Confirm HTTPS URLs and workspace permissions. ('+err.message+')','error');}finally{if(btn)btn.disabled=false;}});
 $('campaign-form').addEventListener('submit',async(e)=>{e.preventDefault();if(!state.workspaceId){message('global-message','Choose an active workspace first.','error');return;}if(!canWrite()){message('global-message','Workspace member permission is required to create campaigns.','error');return;}const btn=e.submitter; if(btn)btn.disabled=true;try{await api('/api/v1/campaigns',{method:'POST',body:{workspace_id:state.workspaceId,name:$('campaign-name').value,client_business:$('business-name').value,client_offer:$('business-offer').value,target_customer_profile:$('target-profile').value}});$('campaign-form').reset();message('global-message','Campaign created.','success');await loadWorkspaceData();}catch(err){message('global-message','Campaign creation failed. ('+err.message+')','error');}finally{if(btn)btn.disabled=false;}});
 $('workspace-select').addEventListener('change',async()=>{state.workspaceId=$('workspace-select').value;await loadWorkspaceData();});$('analytics-period').addEventListener('change',loadAnalytics);$('data-filter').addEventListener('change',renderProspects);$('refresh').addEventListener('click',loadWorkspaceData);
