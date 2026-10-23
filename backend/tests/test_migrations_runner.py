@@ -88,9 +88,9 @@ def test_runner_skips_migrations_already_in_the_ledger(
 
     monkeypatch.setattr(migrations.asyncpg, "connect", fake_connect)
 
-    applied = await migrations.apply_migrations(
+    applied = asyncio.run(migrations.apply_migrations(
         "postgresql://test.invalid/db", migrations_dir=tmp_path
-    )
+    ))
 
     assert applied == ["002_pending.sql"]
     assert connection.executed_sql == ["SELECT 'pending';"]
