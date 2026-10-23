@@ -14,6 +14,10 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="dashboard-view"' in response.text
     assert 'id="campaign-form"' in response.text
     assert 'id="prospect-form"' in response.text
+    assert 'id="research-form"' in response.text
+    assert "/api/v1/research/prospects/search" in response.text
+    assert "Review in CRM form" in response.text
+    assert "Search results are unverified leads" in response.text
     assert 'id="deliveries-list"' in response.text
     assert 'id="integration-status"' in response.text
     assert 'id="analytics-heading"' in response.text
