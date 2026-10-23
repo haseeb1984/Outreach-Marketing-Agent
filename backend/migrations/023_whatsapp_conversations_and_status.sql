@@ -46,6 +46,3 @@ ALTER TABLE meta_whatsapp_webhook_events
 ALTER TABLE meta_whatsapp_webhook_events
     ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0);
 
-INSERT INTO schema_migrations (version)
-VALUES ('023_whatsapp_conversations_and_status.sql')
-ON CONFLICT (version) DO NOTHING;
