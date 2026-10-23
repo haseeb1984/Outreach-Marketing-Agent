@@ -207,6 +207,16 @@ async def update_plan(slug: str, payload: PlanInput, request: Request):
     try:
         async with pool_for(request).acquire() as conn:
             async with conn.transaction():
+                current = await conn.fetchrow("SELECT price_id,entitlements FROM platform_billing_plans WHERE slug=$1 FOR UPDATE",slug)
+                if current is not None and current["price_id"] != payload.price_id:
+                    current_entitlements = current["entitlements"]
+                    if isinstance(current_entitlements, str):
+                        current_entitlements = json.loads(current_entitlements)
+                    linked_subscriptions = await conn.fetchval(
+                        "SELECT count(*) FROM workspace_subscriptions WHERE entitlements=$1::jsonb",
+                        json.dumps(current_entitlements,allow_nan=False))
+                    if linked_subscriptions:
+                        raise HTTPException(status_code=409,detail="price_id_immutable_for_existing_subscriptions_create_new_plan")
                 row = await conn.fetchrow("""UPDATE platform_billing_plans SET name=$2,description=$3,price_id=$4,
                   display_price=$5,currency=$6,billing_interval=$7,entitlements=$8::jsonb,active=$9,updated_at=now()
                   WHERE slug=$1 RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
