@@ -78,7 +78,7 @@ def public_plan(row):
     return result
 
 @router.get("/overview")
-async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000)):
+async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000)):
     await require_platform_admin(request)
     try:
         async with pool_for(request).acquire() as conn:
