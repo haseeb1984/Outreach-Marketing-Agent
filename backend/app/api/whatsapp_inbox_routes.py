@@ -137,7 +137,7 @@ async def list_whatsapp_webhook_events(
     workspace_id: str = Query(min_length=1, max_length=200),
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100000),
-    state: str = Query(default="pending", pattern="^(pending|processed|all)$"),
+    state: str = Query(default="pending", pattern="^(pending|processed|dead_letter|all)$"),
 ) -> dict:
     """Expose safe processing metadata for this workspace's mapped Meta accounts only.
 
@@ -157,14 +157,16 @@ async def list_whatsapp_webhook_events(
                      ON a.phone_number_id=e.phone_number_id
                     AND a.workspace_id=$1
                    WHERE ($2='all'
-                     OR ($2='pending' AND e.processed_at IS NULL)
+                     OR ($2='pending' AND e.processed_at IS NULL AND e.attempts < 8)
+                     OR ($2='dead_letter' AND e.processed_at IS NULL AND e.attempts >= 8)
                      OR ($2='processed' AND e.processed_at IS NOT NULL))
                    ORDER BY e.received_at DESC,e.id DESC
                    LIMIT $3 OFFSET $4""",
                 workspace_id, state, limit, offset,
             )
             counts = await conn.fetchrow(
-                """SELECT count(*) FILTER (WHERE e.processed_at IS NULL)::bigint AS pending,
+                """SELECT count(*) FILTER (WHERE e.processed_at IS NULL AND e.attempts < 8)::bigint AS pending,
+                          count(*) FILTER (WHERE e.processed_at IS NULL AND e.attempts >= 8)::bigint AS dead_letter,
                           count(*) FILTER (WHERE e.processed_at IS NOT NULL)::bigint AS processed,
                           count(*) FILTER (WHERE e.processing_error_code IS NOT NULL)::bigint AS with_errors
                    FROM meta_whatsapp_webhook_events e
