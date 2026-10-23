@@ -60,7 +60,7 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
             async with pool.acquire() as conn:
                 async with conn.transaction():
                     event = await conn.fetchrow(
-                        """SELECT id, phone_number_id, payload
+                        """SELECT id, phone_number_id, payload, received_at
                            FROM meta_whatsapp_webhook_events
                            WHERE processed_at IS NULL AND attempts < 8
                            ORDER BY received_at, id
@@ -97,6 +97,9 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
 
                     workspace_id = str(account["workspace_id"])
                     account_id = account["id"]
+                    # Never extend the 24-hour customer-service window with a future
+                    # provider timestamp. Fall back to trusted server receipt time.
+                    event_received_at = event["received_at"]
                     saved_this_event = 0
                     status_this_event = 0
                     entries = payload.get("entry", []) if isinstance(payload, dict) else []
@@ -138,25 +141,29 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                     workspace_id, account_id, prospect["id"] if prospect else None, wa_id,
                                 )
                                 message_type, body = _text(msg)
+                                provider_timestamp = _timestamp(msg.get("timestamp"))
+                                inbound_at = provider_timestamp or event_received_at
+                                if inbound_at is not None and event_received_at is not None:
+                                    inbound_at = min(inbound_at, event_received_at)
                                 inserted = await conn.fetchval(
                                     """INSERT INTO whatsapp_inbound_messages
                                        (workspace_id,conversation_id,provider_message_id,message_type,text_body,provider_timestamp)
                                        VALUES($1,$2,$3,$4,$5,$6)
                                        ON CONFLICT(provider_message_id) DO NOTHING
                                        RETURNING id""",
-                                    workspace_id, conversation["id"], provider_id, message_type, body, _timestamp(msg.get("timestamp")),
+                                    workspace_id, conversation["id"], provider_id, message_type, body, provider_timestamp,
                                 )
                                 if inserted:
                                     saved_this_event += 1
                                     await conn.execute(
                                         """INSERT INTO whatsapp_contact_preferences
                                            (workspace_id,account_id,wa_id,last_inbound_at,last_inbound_message_id,updated_at)
-                                           VALUES($1,$2,$3,now(),$4,now())
+                                           VALUES($1,$2,$3,$5,$4,now())
                                            ON CONFLICT(workspace_id,account_id,wa_id) DO UPDATE
-                                             SET last_inbound_at=now(),
+                                             SET last_inbound_at=EXCLUDED.last_inbound_at,
                                                  last_inbound_message_id=EXCLUDED.last_inbound_message_id,
                                                  updated_at=now()""",
-                                        workspace_id, account_id, wa_id, provider_id,
+                                        workspace_id, account_id, wa_id, provider_id, inbound_at,
                                     )
                                     opt_out = _is_opt_out(body)
                                     opt_in = _is_opt_in(body)
