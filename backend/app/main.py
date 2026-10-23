@@ -132,6 +132,7 @@ from app.api.dashboard_routes import router as dashboard_router
 from app.api.meta_whatsapp_webhook_routes import router as meta_whatsapp_webhook_router
 from app.api.whatsapp_account_routes import router as whatsapp_account_router
 from app.api.whatsapp_inbox_routes import router as whatsapp_inbox_router
+from app.api.whatsapp_outbound_routes import router as whatsapp_outbound_router
 
 app.include_router(auth_router)
 app.include_router(prospect_router)
@@ -157,6 +158,7 @@ app.include_router(dashboard_router)
 app.include_router(meta_whatsapp_webhook_router)
 app.include_router(whatsapp_account_router)
 app.include_router(whatsapp_inbox_router)
+app.include_router(whatsapp_outbound_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -294,7 +296,8 @@ async def readiness() -> Response:
                             '027_platform_billing_admin.sql',
                             '028_platform_admin_audit.sql',
                             '029_unique_platform_plan_price_ids.sql',
-                            '030_subscription_plan_slug.sql'
+                            '030_subscription_plan_slug.sql',
+                            '031_whatsapp_outbound_queue.sql'
                           )) = 25"""
             )
             if not schema_ready:
