@@ -48,7 +48,7 @@ def _plans() -> dict[str, Any]:
 
 
 
-async def _effective_plans(request: Request) -> dict[str, Any]:
+async def _effective_plans(request: Request, *, include_inactive: bool = False) -> dict[str, Any]:
     """Use the platform-admin catalog once seeded; keep env plans as a bootstrap fallback."""
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
@@ -67,7 +67,7 @@ async def _effective_plans(request: Request) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for row in rows:
         item = dict(row)
-        if not item.get("active"):
+        if not include_inactive and not item.get("active"):
             continue
         value = item.get("entitlements")
         if isinstance(value, str):
@@ -239,7 +239,7 @@ async def paddle_webhook(request: Request):
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         raise HTTPException(status_code=422, detail="workspace_mapping_missing")
 
-    plans = await _effective_plans(request)
+    plans = await _effective_plans(request, include_inactive=True)
     items = data.get("items")
     price_ids = {
         item.get("price", {}).get("id")
