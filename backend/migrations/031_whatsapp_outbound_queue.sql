@@ -25,6 +25,3 @@ CREATE INDEX IF NOT EXISTS whatsapp_outbound_queue_pending
     WHERE status='queued';
 CREATE INDEX IF NOT EXISTS whatsapp_outbound_workspace_history
     ON whatsapp_outbound_deliveries(workspace_id, queued_at DESC, id);
-INSERT INTO schema_migrations (version)
-VALUES ('031_whatsapp_outbound_queue.sql')
-ON CONFLICT (version) DO NOTHING;
