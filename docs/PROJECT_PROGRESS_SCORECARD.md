@@ -173,3 +173,5 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - Latest code-first update: WhatsApp webhook status events now reconcile against a matching outbound queue record by workspace/account/provider message ID and apply a monotonic state progression. Added mapping tests, not executed. This is partial lifecycle coverage only; no provider dispatcher or live sending was enabled. Overall remains **59/100** because no verification evidence was added.
+
+- Account export now includes WhatsApp account metadata, conversation/message history, consent/opt-out preferences, outbound queue records and delivery-status events while excluding encrypted provider credentials. Database compatibility and export acceptance remain unverified; phase scores and overall **59/100** are unchanged until verification.
