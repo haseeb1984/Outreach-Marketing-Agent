@@ -163,3 +163,6 @@
 - Queue invalidation safeguard (2026-10-23): an inbound STOP-family opt-out now cancels any not-yet-dispatched queued WhatsApp deliveries for that matched contact/account; disabling an account atomically clears its encrypted token and cancels its queued deliveries. A future dispatcher must still re-evaluate consent/template/window policy immediately before sending. No tests or deployment were run.
 
 - WhatsApp queue quota lifecycle follow-up (2026-10-23): each queue row now stores its unique usage-reservation ID. When an inbound STOP-family command cancels queued work, or an admin disables the sender account, the same database transaction releases the still-reserved quota for those cancelled items. This avoids stale queued intents and quota reservations lingering after explicit opt-out/account disable. No tests or deployment were run.
+
+
+- WhatsApp queue idempotency follow-up (2026-10-23): added a workspace-scoped lookup before quota reservation so retries after a lost response can return the existing queued record without consuming quota again. Concurrent duplicate requests can still encounter a transient conflict while the first request is creating its reservation/queue row; outbound dispatch remains disabled. No tests, migration, deployment, or workflow were run.
