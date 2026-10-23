@@ -155,3 +155,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - Platform-admin audit history now supports bounded server-side pagination, total count and dashboard navigation alongside client and usage-history paging. Per-feature aggregate reporting remains capped at 2,000 workspace-feature rows. This is source implementation only; tests and authenticated browser acceptance remain pending, so overall score stays **59/100**.
+
+
+- WhatsApp send-policy hardening (2026-10-23): eligibility now fails closed when an active account has no encrypted credential and requires a workspace-matched, approved WhatsApp draft attached to an active campaign before allowing either an open customer-service-window send or a verified-template send. Added/updated deterministic test fixtures for these gates. The evaluator is still not connected to an outbound sender; live WhatsApp sending remains disabled. Tests were not run and the overall score remains **59/100**.
