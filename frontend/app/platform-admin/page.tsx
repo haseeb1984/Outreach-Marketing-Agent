@@ -69,6 +69,16 @@ export default function PlatformAdminPage() {
     finally { setBusy(false); }
   }
 
+  async function importConfiguredPlans() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ imported: number; skipped: number; configured: number }>("/api/v1/platform-admin/plans/import-configured", csrf, { method: "POST", body: "{}" });
+      await refresh(csrf);
+      setNotice("Imported " + result.imported + " package(s); skipped " + result.skipped + " existing or invalid entry/entries from " + result.configured + " configured plan(s). Existing database packages were not overwritten.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Configured packages could not be imported."); }
+    finally { setBusy(false); }
+  }
+
   async function deactivate(plan: Plan) {
     if (!window.confirm("Deactivate package '" + plan.name + "'? Existing subscription history remains intact.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -85,7 +95,7 @@ export default function PlatformAdminPage() {
       <section className="section" aria-labelledby="totals-title"><h2 id="totals-title">Platform totals</h2><div className="metric-grid">
         {Object.entries(overview.totals).map(([key,value]) => <article className="card" key={key}><p className="fine">{key.replaceAll("_"," ")}</p><p className="metric-value">{value.toLocaleString()}</p></article>)}
       </div></section>
-      <section className="section" aria-labelledby="plans-title"><h2 id="plans-title">Package management</h2><p className="fine">Price IDs are shown only to authorized platform admins. Deleting a package is a soft-deactivation so billing history is retained.</p>
+      <section className="section" aria-labelledby="plans-title"><h2 id="plans-title">Package management</h2><p className="fine">Price IDs are shown only to authorized platform admins. Deleting a package is a soft-deactivation so billing history is retained.</p><div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={importConfiguredPlans}>Import configured Paddle packages</button><span className="fine">Imports environment-configured packages only when the slug and price ID are not already present. Existing admin edits are preserved.</span></div>
         <form className="card form-grid" onSubmit={savePlan}>
           <h3>{editing ? "Edit package: " + editing : "Add package"}</h3>
           <div className="field"><label htmlFor="slug">Package slug</label><input id="slug" required maxLength={80} pattern="[a-z0-9][a-z0-9_-]*" disabled={!!editing} value={form.slug} onChange={e=>setForm({...form,slug:e.target.value})}/></div>
