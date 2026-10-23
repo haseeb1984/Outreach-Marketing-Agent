@@ -75,6 +75,26 @@ async def queue_whatsapp_draft(
         reason = str(decision.get("reason", "whatsapp_policy_denied"))
         raise HTTPException(status_code=403, detail=reason)
 
+    # Replay an already-created queue row before touching quota. This makes a
+    # client retry after a lost HTTP response safe and avoids double reservations.
+    try:
+        existing = await WhatsAppOutboundStore(pool).find_by_idempotency_key(
+            workspace_id=payload.workspace_id,
+            idempotency_key=payload.idempotency_key,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_queue_lookup_unavailable") from None
+    if existing is not None:
+        if existing["account_id"] != str(payload.account_id) or existing["draft_id"] != str(draft_id):
+            raise HTTPException(status_code=409, detail="whatsapp_idempotency_conflict")
+        return {
+            **existing,
+            "policy_reason": decision["reason"],
+            "requires_approved_template": decision["requires_approved_template"],
+            "dispatch_enabled": False,
+            "notice": "Existing queue record returned. No WhatsApp message was sent; outbound dispatch remains disabled.",
+        }
+
     reservation_key = "whatsapp-send:" + payload.idempotency_key
     try:
         reservation = await subscriptions.reserve_usage(
