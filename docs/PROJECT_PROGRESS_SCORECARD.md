@@ -140,3 +140,6 @@ A feature marked implemented means repository code exists. It must not be descri
 - Added normalized standalone opt-out and explicit opt-in command recognition for inbound WhatsApp text messages.
 - Delivery-status saved counts now increment only when the database actually inserts a new event, not for duplicates.
 - Added regression tests for command matching, ordinary-prose false positives, message-body truncation, and timestamp parsing. Tests have not been run; this does not enable outbound sending.
+
+
+- WhatsApp reliability follow-up (2026-10-23): service-window timestamps now use the provider timestamp bounded by server receipt time; exhausted webhook events (8+ attempts) are exposed as a separate workspace-scoped `dead_letter` state and count. This improves safety and operator visibility but does not add retry/replay or enable outbound messaging. No tests were run; overall estimate remains **59/100**.
