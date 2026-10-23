@@ -49,6 +49,36 @@ async def enqueue_delivery(draft_id: UUID,payload: EnqueueDelivery,request: Requ
  except LookupError as exc: raise HTTPException(status_code=404,detail=str(exc)) from None
  except ValueError as e: raise HTTPException(status_code=409 if str(e)=="idempotency_key_conflict" else 422,detail=str(e)) from None
  except Exception: raise HTTPException(status_code=503,detail="delivery_enqueue_unavailable") from None
+@router.post("/deliveries/reconcile-stale")
+async def reconcile_stale_deliveries(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    older_than_seconds: int = Query(default=900, ge=60, le=86400),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """Admin-triggered, bounded recovery; ambiguous sends are never automatically retried."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, "admin", session)
+    try:
+        reconciled = await _store(request).reconcile_stale_processing(
+            workspace_id=workspace_id,
+            older_than_seconds=older_than_seconds,
+            limit=limit,
+        )
+        return {
+            "workspace_id": workspace_id,
+            "reconciled_count": reconciled,
+            "status": "uncertain",
+            "automatic_retry": False,
+            "note": "Review provider records before manually resolving any ambiguous send.",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="delivery_reconciliation_unavailable") from None
+
+
 @router.get("/deliveries")
 async def list_deliveries(request: Request,workspace_id: str=Query(min_length=1,max_length=200),limit: int=Query(default=50,ge=1,le=100),offset: int=Query(default=0,ge=0,le=100000)):
  _,_,s=await _authenticated(request); await _authorize(request,workspace_id,"viewer",s)
