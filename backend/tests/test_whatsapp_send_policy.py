@@ -44,6 +44,7 @@ def run_policy(rows, **overrides):
         "workspace_id": workspace_id,
         "account_id": account_id,
         "prospect_id": prospect_id,
+        "draft_id": uuid4(),
         "now": datetime(2026, 10, 23, 12, tzinfo=timezone.utc),
     }
     kwargs.update(overrides)
@@ -120,13 +121,13 @@ def test_open_customer_service_window_does_not_require_template():
         "opted_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "last_inbound_at": datetime(2026, 10, 23, 11, tzinfo=timezone.utc),
     }
-    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect, preference])
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect, preference, {"id": uuid4()}])
     assert result == {
         "allowed": True,
         "reason": "customer_service_window_open",
         "requires_approved_template": False,
     }
-    assert len(conn.queries) == 3
+    assert len(conn.queries) == 4
 
 
 def test_closed_customer_service_window_requires_approved_provider_template():
@@ -143,13 +144,13 @@ def test_closed_customer_service_window_requires_approved_provider_template():
         "last_inbound_at": datetime(2026, 10, 21, 11, tzinfo=timezone.utc),
     }
     result, conn = run_policy(
-        [{"id": uuid4(), "has_credentials": True}, prospect, preference],
+        [{"id": uuid4(), "has_credentials": True}, prospect, preference, {"id": uuid4()}],
         template_name="approved_notice",
         language_code="en",
     )
     # A missing verified provider template must never be treated as permission to send.
     assert result == {"allowed": False, "reason": "approved_provider_template_not_found"}
-    assert len(conn.queries) == 4
+    assert len(conn.queries) == 5
 
 
 def test_active_account_without_encrypted_credentials_fails_closed():
