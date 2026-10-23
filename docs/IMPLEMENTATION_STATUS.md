@@ -147,3 +147,6 @@
 
 
 - Platform-admin scale follow-up (2026-10-23): the overview API now accepts bounded client page size/offset and returns total workspace count plus pagination metadata; the Hostinger-source admin page loads clients in pages of 100, with previous/next controls and search scoped clearly to the current page. This removes the previous hard 500-workspace display ceiling. No tests or browser acceptance were run.
+
+
+- Platform-admin reporting follow-up (2026-10-23): workspace client inventory and feature-usage reservation history now have bounded server-side pagination, totals, and UI navigation. The prior fixed 500-client / 200-history-record view ceilings are removed for these two lists. The per-feature aggregate view and audit-event list still use bounded top-N views; authenticated browser acceptance remains pending. No tests, deployment, or workflow runs were performed.
