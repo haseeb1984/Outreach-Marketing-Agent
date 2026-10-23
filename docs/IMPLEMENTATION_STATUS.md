@@ -166,3 +166,6 @@
 
 
 - WhatsApp queue idempotency follow-up (2026-10-23): added a workspace-scoped lookup before quota reservation so retries after a lost response can return the existing queued record without consuming quota again. Concurrent duplicate requests can still encounter a transient conflict while the first request is creating its reservation/queue row; outbound dispatch remains disabled. No tests, migration, deployment, or workflow were run.
+
+
+- WhatsApp queue recovery hardening (2026-10-23): retries can reuse an existing `reserved` quota reservation after a process interruption, and duplicate queue results expose the linked reservation ID so a reservation backing an existing queue is not accidentally released. Added `backend/scripts/reconcile_whatsapp_queue_reservations.py`, a bounded one-shot worker that releases only `whatsapp_sends` reservations older than one hour when no outbound queue row references them; it emits aggregate counts only and never sends messages. No tests, worker runs, migrations, deployment, or workflows were executed. Configure a trusted scheduler only after code review and runtime acceptance.
