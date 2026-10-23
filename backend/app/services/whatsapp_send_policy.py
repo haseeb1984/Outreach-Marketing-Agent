@@ -24,6 +24,7 @@ class WhatsAppSendPolicy:
         workspace_id: str,
         account_id: UUID,
         prospect_id: UUID,
+        draft_id: UUID,
         template_name: str | None = None,
         language_code: str | None = None,
         now: datetime | None = None,
@@ -79,6 +80,21 @@ class WhatsAppSendPolicy:
                 opted_in_at = preference["opted_in_at"]
                 if opted_in_at is None or preference["opted_out_at"] >= opted_in_at:
                     return {"allowed": False, "reason": "whatsapp_contact_opted_out"}
+
+            draft = await conn.fetchrow(
+                """SELECT d.id
+                   FROM outreach_drafts d
+                   JOIN outreach_campaigns c
+                     ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                   WHERE d.id=$1 AND d.workspace_id=$2 AND d.prospect_id=$3
+                     AND d.channel='whatsapp' AND d.status='approved'
+                     AND c.status='active'""",
+                draft_id,
+                workspace_id,
+                prospect_id,
+            )
+            if draft is None:
+                return {"allowed": False, "reason": "approved_whatsapp_draft_required"}
 
             last_inbound = preference["last_inbound_at"] if preference else None
             in_window = bool(
