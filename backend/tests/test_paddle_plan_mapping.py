@@ -39,3 +39,22 @@ def test_rejects_ambiguous_price_mapping():
     plans = {"starter": {"price_id": "pri_same"}, "growth": {"price_id": "pri_same"}}
     with pytest.raises(ValueError, match="subscription_plan_mapping_invalid"):
         _resolve_subscription_plan({"plan_id": "starter"}, {"pri_same"}, plans)
+
+from fastapi import HTTPException
+
+from app.api import paddle_routes
+from app.core.config import settings
+
+
+def test_bootstrap_catalog_rejects_duplicate_price_ids(monkeypatch):
+    monkeypatch.setattr(settings, "paddle_plans_json", '{"starter":{"price_id":"pri_same","entitlements":{}},"growth":{"price_id":"pri_same","entitlements":{}}}')
+    with pytest.raises(HTTPException) as exc:
+        paddle_routes._plans()
+    assert exc.value.detail == "billing_plan_catalog_invalid"
+
+
+def test_bootstrap_catalog_rejects_invalid_slug(monkeypatch):
+    monkeypatch.setattr(settings, "paddle_plans_json", '{"Starter Plan":{"price_id":"pri_starter","entitlements":{}}}')
+    with pytest.raises(HTTPException) as exc:
+        paddle_routes._plans()
+    assert exc.value.detail == "billing_plan_catalog_invalid"
