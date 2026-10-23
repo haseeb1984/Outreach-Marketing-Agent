@@ -15,6 +15,3 @@ CREATE TABLE IF NOT EXISTS workspace_whatsapp_accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_workspace_whatsapp_accounts_workspace
     ON workspace_whatsapp_accounts (workspace_id, created_at DESC);
-INSERT INTO schema_migrations (version)
-VALUES ('021_workspace_whatsapp_accounts.sql')
-ON CONFLICT (version) DO NOTHING;
