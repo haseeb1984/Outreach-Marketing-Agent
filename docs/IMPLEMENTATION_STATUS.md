@@ -141,3 +141,6 @@
 
 
 - WhatsApp reliability hardening (2026-10-23): the webhook worker now uses provider message time bounded by trusted server receipt time when updating the last-inbound timestamp, preventing future provider timestamps from extending the 24-hour customer-service window. The workspace-scoped webhook-events endpoint now reports exhausted events (8 or more attempts) separately as `dead_letter`, instead of presenting them as ordinary pending work. This is visibility only: no retry or reprocessing action was added. No tests, deployment, or live provider acceptance were run.
+
+
+- Additional WhatsApp safety follow-up (2026-10-23): inbound timestamps are monotonic for the 24-hour window, and delayed/out-of-order inbound STOP/START events cannot overwrite a newer consent decision. Added a workspace-admin-only, CSRF-protected retry action for a single exhausted webhook event, limited to an active WhatsApp account mapped to that workspace; the action only resets the event for the trusted worker and never sends outbound messages. Added helper regression cases for provider timestamps bounded by server receipt time. Tests were authored but not run; no deployment or live Meta acceptance was performed.
