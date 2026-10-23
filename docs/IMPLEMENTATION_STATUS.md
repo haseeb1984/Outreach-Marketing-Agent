@@ -91,3 +91,6 @@
 
 
 - Workspace-scoped delivery recovery follow-up on 2026-10-23: added an authenticated, CSRF-protected workspace-admin endpoint `POST /api/v1/deliveries/reconcile-stale`. It accepts bounded stale-age/batch parameters and only changes records in the authorized workspace; ambiguous outcomes remain `uncertain` and are never auto-retried. The underlying store now requires a workspace ID for reconciliation, and unit cases were updated to assert tenant scoping. No tests or deployment were run; operator/provider reconciliation remains a manual action.
+
+
+- One-shot delivery reconciliation worker added on 2026-10-23: `backend/scripts/reconcile_stale_deliveries.py` scans a bounded list of workspaces with stale processing records and invokes the tenant-scoped store operation per workspace. It emits aggregate counts only, performs no provider sends, and leaves ambiguous messages `uncertain` rather than retrying. A trusted scheduler can invoke `python -m scripts.reconcile_stale_deliveries` from `backend`; no schedule was configured or run. Unit tests were authored but not executed.
