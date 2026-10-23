@@ -21,6 +21,17 @@ def _timestamp(value: Any) -> datetime | None:
         return None
 
 
+def _effective_inbound_timestamp(provider_timestamp: datetime | None, received_at: datetime) -> datetime:
+    """Use provider time when valid, but never let it exceed trusted receipt time."""
+    if received_at.tzinfo is None or received_at.utcoffset() is None:
+        raise ValueError("timezone_required")
+    if provider_timestamp is None:
+        return received_at
+    if provider_timestamp.tzinfo is None or provider_timestamp.utcoffset() is None:
+        raise ValueError("timezone_required")
+    return min(provider_timestamp, received_at)
+
+
 def _is_opt_out(body: str | None) -> bool:
     """Recognize a standalone opt-out command without matching ordinary prose."""
     if not body:
@@ -142,9 +153,7 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                 )
                                 message_type, body = _text(msg)
                                 provider_timestamp = _timestamp(msg.get("timestamp"))
-                                inbound_at = provider_timestamp or event_received_at
-                                if inbound_at is not None and event_received_at is not None:
-                                    inbound_at = min(inbound_at, event_received_at)
+                                inbound_at = _effective_inbound_timestamp(provider_timestamp, event_received_at)
                                 inserted = await conn.fetchval(
                                     """INSERT INTO whatsapp_inbound_messages
                                        (workspace_id,conversation_id,provider_message_id,message_type,text_body,provider_timestamp)
