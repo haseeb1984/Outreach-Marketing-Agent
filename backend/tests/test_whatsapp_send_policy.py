@@ -71,7 +71,7 @@ def test_documented_opt_in_is_required_before_contact_preferences_are_checked():
         "whatsapp_opt_in_at": None,
         "whatsapp_opt_in_evidence_url": None,
     }
-    result, conn = run_policy([{"id": uuid4()}, prospect])
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect])
     assert result == {"allowed": False, "reason": "documented_whatsapp_opt_in_required"}
     assert len(conn.queries) == 2
 
@@ -84,7 +84,7 @@ def test_do_not_contact_stage_blocks_whatsapp_even_with_opt_in():
         "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "whatsapp_opt_in_evidence_url": "https://example.test/consent",
     }
-    result, conn = run_policy([{"id": uuid4()}, prospect])
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect])
     assert result == {"allowed": False, "reason": "contact_suppressed"}
     assert len(conn.queries) == 2
 
@@ -102,7 +102,7 @@ def test_account_specific_opt_out_blocks_send():
         "opted_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "last_inbound_at": datetime(2026, 10, 23, 11, tzinfo=timezone.utc),
     }
-    result, conn = run_policy([{"id": uuid4()}, prospect, preference])
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect, preference])
     assert result == {"allowed": False, "reason": "whatsapp_contact_opted_out"}
     assert len(conn.queries) == 3
 
@@ -120,7 +120,7 @@ def test_open_customer_service_window_does_not_require_template():
         "opted_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "last_inbound_at": datetime(2026, 10, 23, 11, tzinfo=timezone.utc),
     }
-    result, conn = run_policy([{"id": uuid4()}, prospect, preference])
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect, preference])
     assert result == {
         "allowed": True,
         "reason": "customer_service_window_open",
@@ -143,7 +143,7 @@ def test_closed_customer_service_window_requires_approved_provider_template():
         "last_inbound_at": datetime(2026, 10, 21, 11, tzinfo=timezone.utc),
     }
     result, conn = run_policy(
-        [{"id": uuid4()}, prospect, preference],
+        [{"id": uuid4(), "has_credentials": True}, prospect, preference],
         template_name="approved_notice",
         language_code="en",
     )
