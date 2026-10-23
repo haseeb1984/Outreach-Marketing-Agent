@@ -276,6 +276,7 @@ async def integrations_status(request: Request, workspace_id: str=Query(min_leng
   "whatsapp": {
    "provider": "meta_whatsapp_cloud_api",
    **whatsapp_configuration_status(),
-   "reason": "official_webhook_and_send_adapter_not_implemented",
+   "reason": "whatsapp_outbound_queue_implemented_dispatch_disabled_until_verified_worker",
+   "outbound_queue_api_implemented": True,
   },
  }
