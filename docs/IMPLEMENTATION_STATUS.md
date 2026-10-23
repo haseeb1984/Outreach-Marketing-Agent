@@ -113,3 +113,11 @@
 - Package create/update/deactivate now write their audit events in the same database transaction as the catalog change, so the catalog operation rolls back if the audit write fails.
 - Package price IDs are blocked from changing when a subscription snapshot is linked by the existing entitlement set; create a new package/price for future billing changes instead, preserving webhook mapping for existing subscriptions.
 - Added unit tests for package slug, Paddle price ID, entitlement limits, required enabled flags, unexpected fields, and non-finite JSON values. Tests have been authored but intentionally not run in this code-first pass.
+
+
+## Exact subscription-to-package association — 2026-10-23
+
+- Added migration `030_subscription_plan_slug.sql` to store the selected database catalog slug on `workspace_subscriptions`.
+- Signed Paddle subscription events now persist the exact matched package slug alongside entitlements; the platform-admin client list resolves the package by slug first and uses entitlement equality only as a legacy fallback.
+- Updated readiness checks and billing lifecycle validation fixtures for migration 030 and the new required plan identifier.
+- Migration remains unapplied to live data; no tests, deployments, or workflows were run.
