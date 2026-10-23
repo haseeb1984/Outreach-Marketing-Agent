@@ -51,6 +51,8 @@ async def _exercise_password_reset() -> None:
             "009_contact_controls.sql",
             "010_outbound_delivery_queue.sql",
             "011_conversation_webhook_inbox.sql",
+            "013_subscription_entitlements_and_usage.sql",
+            "014_billing_provider_event_ledger.sql",
             "015_workspace_projects.sql",
             "016_workspace_invitations.sql",
             "017_workspace_settings.sql",
