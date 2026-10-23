@@ -105,3 +105,11 @@
 - Tests, live migration, deployment, and authenticated browser acceptance were not run. Configure the backend-only allowlist before operator access.
 
 - Follow-up migration `029_unique_platform_plan_price_ids.sql` adds a unique index so a Paddle price can map to exactly one package; readiness and the PostgreSQL migration fixture include it.
+
+
+## Follow-up billing admin safeguards — 2026-10-23
+
+- Added an admin-only import action for existing server-configured Paddle plans. It imports only entries not already present by slug or price ID, does not overwrite database-managed package edits, and writes an audit event with aggregate counts only.
+- Package create/update/deactivate now write their audit events in the same database transaction as the catalog change, so the catalog operation rolls back if the audit write fails.
+- Package price IDs are blocked from changing when a subscription snapshot is linked by the existing entitlement set; create a new package/price for future billing changes instead, preserving webhook mapping for existing subscriptions.
+- Added unit tests for package slug, Paddle price ID, entitlement limits, required enabled flags, unexpected fields, and non-finite JSON values. Tests have been authored but intentionally not run in this code-first pass.
