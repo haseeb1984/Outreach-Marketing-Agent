@@ -19,7 +19,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 5 — Automation and analytics | 51% | Entitlements, activity analytics, and a quota-gated WhatsApp queue exist; dispatch/scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 30% | Production deployment and basic HTTP smoke checks verified; CI for the exact commit, full test suite and live provider acceptance remain unverified |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(60×0.20)+(70×0.20)+(51×0.15)+(20×0.10)=59.15`, rounded to **59%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(60×0.20)+(70×0.20)+(51×0.15)+(30×0.10)=60.15`, rounded to **60%**.
 
 ## Phase-by-phase checkpoints
 
