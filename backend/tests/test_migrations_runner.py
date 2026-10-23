@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -44,8 +45,7 @@ class _FakeConnection:
         self.closed = True
 
 
-@pytest.mark.asyncio
-async def test_runner_applies_pending_migrations_in_filename_order_and_records_them(
+def test_runner_applies_pending_migrations_in_filename_order_and_records_them(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     (tmp_path / "003_third.sql").write_text("SELECT 'third';", encoding="utf-8")
@@ -60,9 +60,9 @@ async def test_runner_applies_pending_migrations_in_filename_order_and_records_t
 
     monkeypatch.setattr(migrations.asyncpg, "connect", fake_connect)
 
-    applied = await migrations.apply_migrations(
+    applied = asyncio.run(migrations.apply_migrations(
         "postgresql://test.invalid/db", migrations_dir=tmp_path
-    )
+    ))
 
     assert applied == ["001_first.sql", "002_second.sql", "003_third.sql"]
     assert connection.applied == set(applied)
@@ -74,8 +74,7 @@ async def test_runner_applies_pending_migrations_in_filename_order_and_records_t
     assert connection.closed
 
 
-@pytest.mark.asyncio
-async def test_runner_skips_migrations_already_in_the_ledger(
+def test_runner_skips_migrations_already_in_the_ledger(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     (tmp_path / "001_already_applied.sql").write_text(
@@ -99,8 +98,7 @@ async def test_runner_skips_migrations_already_in_the_ledger(
     assert connection.closed
 
 
-@pytest.mark.asyncio
-async def test_runner_rejects_missing_database_url_before_connecting(
+def test_runner_rejects_missing_database_url_before_connecting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     async def unexpected_connect(*args, **kwargs):
@@ -109,4 +107,4 @@ async def test_runner_rejects_missing_database_url_before_connecting(
     monkeypatch.setattr(migrations.asyncpg, "connect", unexpected_connect)
 
     with pytest.raises(ValueError, match="DATABASE_URL is required"):
-        await migrations.apply_migrations("", migrations_dir=tmp_path)
+        asyncio.run(migrations.apply_migrations("", migrations_dir=tmp_path))
