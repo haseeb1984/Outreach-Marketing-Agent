@@ -129,6 +129,55 @@ async def overview(request: Request):
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
+@router.post("/plans/import-configured")
+async def import_configured_plans(request: Request):
+    """Import existing server-configured Paddle plans once, without overwriting admin edits."""
+    actor = await require_platform_admin(request, write=True)
+    try:
+        from app.api.paddle_routes import _plans
+        configured = _plans()
+        imported = 0
+        skipped = 0
+        async with pool_for(request).acquire() as conn:
+            async with conn.transaction():
+                for slug, raw in configured.items():
+                    if not isinstance(slug, str) or not isinstance(raw, dict):
+                        skipped += 1
+                        continue
+                    display_name = raw.get("name")
+                    if not isinstance(display_name, str) or not display_name.strip():
+                        display_name = slug.replace("-", " ").replace("_", " ").title()
+                    try:
+                        item = PlanInput(
+                            slug=slug, name=display_name, description=raw.get("description", ""),
+                            price_id=raw.get("price_id"), display_price=raw.get("display_price"),
+                            currency=raw.get("currency"), billing_interval=raw.get("billing_interval"),
+                            entitlements=raw.get("entitlements"), active=raw.get("active", True),
+                        )
+                    except Exception:
+                        skipped += 1
+                        continue
+                    row = await conn.fetchrow("""INSERT INTO platform_billing_plans
+                        (slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active)
+                        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+                        ON CONFLICT DO NOTHING RETURNING slug""",
+                        item.slug,item.name.strip(),item.description,item.price_id,item.display_price,
+                        item.currency,item.billing_interval,json.dumps(item.entitlements,allow_nan=False),item.active)
+                    if row is None:
+                        skipped += 1
+                    else:
+                        imported += 1
+                await conn.execute("""INSERT INTO platform_admin_audit_events
+                    (actor_user_id,event_type,target_type,target_id,metadata)
+                    VALUES($1::uuid,'billing_plan.catalog_imported','billing_catalog','environment',
+                           $2::jsonb)""", actor["user_id"],
+                    json.dumps({"imported": imported, "skipped": skipped}))
+        return {"imported": imported, "skipped": skipped, "configured": len(configured)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_plan_import_unavailable") from None
+
 @router.post("/plans", status_code=201)
 async def create_plan(payload: PlanInput, request: Request):
     actor = await require_platform_admin(request, write=True)
