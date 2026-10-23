@@ -16,6 +16,8 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="prospect-form"' in response.text
     assert 'id="research-form"' in response.text
     assert 'id="website-audit-heading"' in response.text
+    assert 'id="account-export-link"' in response.text
+    assert '/api/v1/account/export' in response.text
     assert 'id="domain-challenge-form"' in response.text
     assert 'id="domain-verify-form"' in response.text
     assert 'id="website-audit-form"' in response.text
