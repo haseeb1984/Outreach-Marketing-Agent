@@ -8,7 +8,7 @@ type Client = { workspace_id: string; workspace_name: string; owner_email: strin
 type UsageFeature = { workspace_id: string; feature: string; consumed: number; reserved: number; released: number };
 type UsageRecord = { reservation_id: string; workspace_id: string; workspace_name: string | null; feature: string; status: string; created_at: string; updated_at: string; billing_period_starts_at: string; billing_period_ends_at: string };
 type AdminEvent = { id: number; actor_email: string; event_type: string; target_type: string; target_id: string; created_at: string };
-type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number };
+type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number; usage_offset: number; usage_limit: number; usage_total: number; usage_truncated: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "prospect_search": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
@@ -33,6 +33,7 @@ export default function PlatformAdminPage() {
   const [notice, setNotice] = useState("");
   const [clientSearch, setClientSearch] = useState("");
   const [clientOffset, setClientOffset] = useState(0);
+  const [usageOffset, setUsageOffset] = useState(0);
   const filteredClients = (overview?.clients ?? []).filter((client) => {
     const query = clientSearch.trim().toLowerCase();
     if (!query) return true;
@@ -40,10 +41,11 @@ export default function PlatformAdminPage() {
       .some((value) => (value ?? "").toLowerCase().includes(query));
   });
 
-  const refresh = useCallback(async (token: string, offset = 0) => {
-    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset, token);
+  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0) => {
+    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset + "&usage_limit=100&usage_offset=" + usagePageOffset, token);
     setOverview(data);
     setClientOffset(data.clients_offset);
+    setUsageOffset(data.usage_offset);
   }, []);
 
   useEffect(() => {
@@ -132,8 +134,13 @@ export default function PlatformAdminPage() {
       <section className="section" aria-labelledby="feature-usage-title"><h2 id="feature-usage-title">Usage by client and feature</h2>
         <div className="card table-wrap"><table><thead><tr><th>Workspace ID</th><th>Feature</th><th>Consumed</th><th>Reserved</th><th>Released</th></tr></thead><tbody>{overview.usage_by_feature.map((item,index)=><tr key={item.workspace_id + ":" + item.feature + ":" + index}><td>{item.workspace_id}</td><td>{item.feature}</td><td>{item.consumed}</td><td>{item.reserved}</td><td>{item.released}</td></tr>)}</tbody></table>{!overview.usage_by_feature.length && <p>No feature usage records yet.</p>}</div>
       </section>
-      <section className="section" aria-labelledby="usage-history-title"><h2 id="usage-history-title">Recent usage history</h2><p className="fine">Latest 200 persisted reservation records; no prompts, credentials, or message bodies are exposed.</p>
+      <section className="section" aria-labelledby="usage-history-title"><h2 id="usage-history-title">Recent usage history</h2><p className="fine">Paginated persisted reservation history; no prompts, credentials, or message bodies are exposed.</p>
         <div className="card table-wrap"><table><thead><tr><th>Created</th><th>Client</th><th>Feature</th><th>Status</th><th>Billing period</th><th>Reservation ID</th></tr></thead><tbody>{overview.recent_usage.map(item=><tr key={item.reservation_id}><td>{new Date(item.created_at).toLocaleString()}</td><td>{item.workspace_name || item.workspace_id}</td><td>{item.feature}</td><td>{item.status}</td><td>{item.billing_period_starts_at ? new Date(item.billing_period_starts_at).toLocaleDateString() : "—"} – {item.billing_period_ends_at ? new Date(item.billing_period_ends_at).toLocaleDateString() : "—"}</td><td>{item.reservation_id}</td></tr>)}</tbody></table>{!overview.recent_usage.length && <p>No usage history yet.</p>}</div>
+        <div className="actions" aria-label="Usage history pagination">
+          <button className="button secondary" type="button" disabled={busy || usageOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, Math.max(0, usageOffset - overview.usage_limit)); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous usage records."); } finally { setBusy(false); } }}>Previous usage</button>
+          <span className="fine">Records {overview.usage_total === 0 ? 0 : usageOffset + 1}–{Math.min(usageOffset + overview.recent_usage.length, overview.usage_total)} of {overview.usage_total.toLocaleString()}</span>
+          <button className="button secondary" type="button" disabled={busy || !overview.usage_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset + overview.usage_limit); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next usage records."); } finally { setBusy(false); } }}>Next usage</button>
+        </div>
       </section>
       <section className="section" aria-labelledby="admin-audit-title"><h2 id="admin-audit-title">Platform admin audit history</h2>
         <div className="card table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody>{overview.admin_events.map(event=><tr key={event.id}><td>{new Date(event.created_at).toLocaleString()}</td><td>{event.actor_email}</td><td>{event.event_type}</td><td>{event.target_type}: {event.target_id}</td></tr>)}</tbody></table>{!overview.admin_events.length && <p>No platform admin changes recorded yet.</p>}</div>
