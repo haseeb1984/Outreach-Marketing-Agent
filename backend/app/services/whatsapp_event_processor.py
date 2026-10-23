@@ -6,6 +6,7 @@ send messages; it only stores inbound conversations and provider delivery-status
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from typing import Any
 from uuid import UUID
 
@@ -18,6 +19,22 @@ def _timestamp(value: Any) -> datetime | None:
         return parsed
     except (ValueError, OverflowError, OSError):
         return None
+
+
+def _is_opt_out(body: str | None) -> bool:
+    """Recognize a standalone opt-out command without matching ordinary prose."""
+    if not body:
+        return False
+    normalized = re.sub(r"[.!?,;:]+$", "", body.strip()).strip().upper()
+    return normalized in {"STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
+
+
+def _is_opt_in(body: str | None) -> bool:
+    """Recognize an explicit standalone START command for renewed consent."""
+    if not body:
+        return False
+    normalized = re.sub(r"[.!?,;:]+$", "", body.strip()).strip().upper()
+    return normalized in {"START", "UNSTOP", "SUBSCRIBE"}
 
 
 def _text(message: dict[str, Any]) -> tuple[str, str | None]:
@@ -141,7 +158,8 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                                  updated_at=now()""",
                                         workspace_id, account_id, wa_id, provider_id,
                                     )
-                                    opt_out = bool(body and body.strip().upper() in {"STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"})
+                                    opt_out = _is_opt_out(body)
+                                    opt_in = _is_opt_in(body)
                                     if opt_out:
                                         await conn.execute(
                                             """UPDATE whatsapp_contact_preferences
@@ -149,6 +167,15 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                                    last_opt_out_message_id=$4, updated_at=now()
                                                WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3""",
                                             workspace_id, account_id, wa_id, provider_id,
+                                        )
+                                    elif opt_in:
+                                        # Explicit inbound START-family commands re-enable contact only after
+                                        # the contact themselves initiates it; preserve the audit timestamp.
+                                        await conn.execute(
+                                            """UPDATE whatsapp_contact_preferences
+                                               SET opted_in_at=now(), updated_at=now()
+                                               WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3""",
+                                            workspace_id, account_id, wa_id,
                                         )
                                     elif prospect:
                                         await conn.execute(
@@ -165,17 +192,18 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                 recipient = status.get("recipient_id")
                                 if not isinstance(provider_id, str) or not provider_id or not isinstance(state, str) or not state:
                                     continue
-                                await conn.execute(
+                                inserted_status = await conn.fetchval(
                                     """INSERT INTO whatsapp_delivery_status_events
                                        (workspace_id,account_id,provider_message_id,recipient_wa_id,status,provider_timestamp,errors)
                                        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
-                                       ON CONFLICT DO NOTHING""",
+                                       ON CONFLICT DO NOTHING RETURNING id""",
                                     workspace_id, account_id, provider_id,
                                     recipient[:64] if isinstance(recipient, str) else None,
                                     state[:40], _timestamp(status.get("timestamp")),
                                     __import__("json").dumps(status.get("errors", []) if isinstance(status.get("errors", []), list) else []),
                                 )
-                                status_this_event += 1
+                                if inserted_status:
+                                    status_this_event += 1
                     await conn.execute(
                         """UPDATE meta_whatsapp_webhook_events
                            SET processed_at=now(), processing_error_code=NULL WHERE id=$1""",
