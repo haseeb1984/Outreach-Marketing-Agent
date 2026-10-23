@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json, re
 from typing import Any
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
@@ -78,7 +78,7 @@ def public_plan(row):
     return result
 
 @router.get("/overview")
-async def overview(request: Request):
+async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000)):
     await require_platform_admin(request)
     try:
         async with pool_for(request).acquire() as conn:
@@ -104,7 +104,7 @@ async def overview(request: Request):
               LEFT JOIN LATERAL (SELECT count(*) FILTER(WHERE status='consumed') consumed,
                 count(*) FILTER(WHERE status='reserved') reserved,count(*) FILTER(WHERE status='released') released
                 FROM feature_usage_reservations r WHERE r.workspace_id=w.id) v ON true
-              ORDER BY w.created_at DESC LIMIT 500""")
+              ORDER BY w.created_at DESC LIMIT $1 OFFSET $2""", client_limit, client_offset)
             plans = await conn.fetch("SELECT slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at FROM platform_billing_plans ORDER BY created_at DESC")
             usage_by_feature = await conn.fetch("""SELECT workspace_id::text AS workspace_id,feature,
               count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
@@ -126,7 +126,7 @@ async def overview(request: Request):
           "usage_by_feature":[dict(row) for row in usage_by_feature],
           "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
           "admin_events":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in admin_events],
-          "clients_truncated":len(clients)==500}
+          "clients_truncated":client_offset + len(clients) < int(totals["workspaces_total"] or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(totals["workspaces_total"] or 0)}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
