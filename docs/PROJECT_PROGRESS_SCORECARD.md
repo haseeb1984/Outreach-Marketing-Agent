@@ -11,7 +11,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **58/100** | Weighted score across the six product phases below |
+| Overall implementation progress | **59/100** | Weighted score across the six product phases below |
 | Phase 1 — Core platform | 80% | Identity, workspace, CRM and project foundations |
 | Phase 2 — Discovery and research | 50% | Public-web research and site-audit foundations; deeper competitor/influencer intelligence remains incomplete |
 | Phase 3 — Provider integrations | 58% | SMTP and WhatsApp integration foundations exist; WhatsApp outbound is disabled |
@@ -19,7 +19,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 5 — Automation and analytics | 45% | Entitlements and activity analytics exist; durable scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 20% | Some safety/readiness code exists; CI, live provider acceptance and release validation are not complete |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(58×0.20)+(70×0.20)+(45×0.15)+(20×0.10)=57.85`, rounded to **58%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(58×0.20)+(70×0.20)+(50×0.15)+(20×0.10)=58.60`, rounded to **59%**.
 
 ## Phase-by-phase checkpoints
 
@@ -64,7 +64,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [x] Workspace activity analytics use persisted records and avoid inventing ROI or sales figures.
 - [x] Dashboard analytics now include WhatsApp inbound-message and status-event counts.
 - [~] Added bounded, workspace-scoped stale-send reconciliation plus an authenticated workspace-admin recovery endpoint. Ambiguous sends remain `uncertain` and are not automatically retried; recurring scheduling and provider-record review/resolution are still incomplete.
-- [~] A bounded one-shot delivery reconciliation worker is implemented; a trusted recurring schedule, safe retries across other provider operations, and verified conversion/revenue attribution remain incomplete.
+- [~] A bounded one-shot delivery reconciliation worker is implemented; a trusted recurring schedule, safe retries across other provider operations, and verified conversion/revenue attribution remain incomplete.\n- [x] Added a platform-admin dashboard API protected by an explicit server-side email allowlist; it summarizes clients/subscriptions, package catalog, per-feature quota usage, recent reservation history, and admin action history.\n- [x] Added database-backed package create/edit/deactivate controls and connected the catalog to Paddle checkout/public plans/webhook mapping. Deactivation preserves historical plan mapping for existing subscription events.\n- [~] Admin plan catalog and audit migrations are in code but have not been applied to a live database; frontend/API acceptance has not been run. Configure `PLATFORM_ADMIN_EMAILS` with exact verified operator email(s) before using the admin surface.
 
 ### Phase 6 — Production verification: 20%
 
@@ -96,3 +96,4 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 A feature marked implemented means repository code exists. It must not be described as production-ready until tests pass and the relevant provider/database/deployment acceptance evidence is recorded.
 
 - Added a one-shot, bounded `backend/scripts/reconcile_stale_deliveries.py` worker that processes up to 100 workspaces per run, with a per-workspace batch of 100. It never sends or retries messages and emits aggregate counters only. Scheduler configuration and provider-side resolution remain outstanding; new worker tests were authored but not run.
+\n\n## Update — platform admin and billing catalog (2026-10-23)\n\n- Added migrations `027_platform_billing_admin.sql` and `028_platform_admin_audit.sql`.\n- Added `backend/app/api/platform_admin_routes.py`: allowlist-protected global overview, package create/update/soft-deactivate, per-feature usage summaries, recent usage records, and admin action audit history. Writes require authenticated session + CSRF and package edits validate Paddle price IDs and entitlement structures.\n- Added `frontend/app/platform-admin/page.tsx` for admin totals, package management, client subscriptions/usage, and audit history. Frontend is source-only; no Vercel frontend deployment was triggered.\n- Paddle plans now prefer the database catalog once seeded, with environment-configured plans retained only as the bootstrap fallback. Inactive plans are excluded from new checkout but retained for webhook mapping so existing subscriptions can still update.\n- No tests, migrations against a live database, deployment, or workflow runs were performed in this code-first pass.\n
