@@ -114,6 +114,7 @@ from app.api.campaign_routes import router as campaign_router
 from app.api.delivery_routes import router as delivery_router
 from app.api.conversation_routes import router as conversation_router
 from app.api.billing_routes import router as billing_router
+from app.api.platform_admin_routes import router as platform_admin_router
 from app.api.paddle_routes import router as paddle_router
 from app.api.analytics_routes import router as analytics_router
 from app.api.integration_routes import router as integration_router
@@ -138,6 +139,7 @@ app.include_router(campaign_router)
 app.include_router(delivery_router)
 app.include_router(conversation_router)
 app.include_router(billing_router)
+app.include_router(platform_admin_router)
 app.include_router(paddle_router)
 app.include_router(analytics_router)
 app.include_router(integration_router)
@@ -288,8 +290,9 @@ async def readiness() -> Response:
                             '023_whatsapp_conversations_and_status.sql',
                             '024_whatsapp_contact_preferences.sql',
                             '025_whatsapp_status_event_dedup.sql',
-                            '026_whatsapp_template_and_window_policy.sql'
-                          )) = 21"""
+                            '026_whatsapp_template_and_window_policy.sql',
+                            '027_platform_billing_admin.sql'
+                          )) = 22"""
             )
             if not schema_ready:
                 return JSONResponse(
