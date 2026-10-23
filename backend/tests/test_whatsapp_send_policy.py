@@ -144,7 +144,7 @@ def test_closed_customer_service_window_requires_approved_provider_template():
         "last_inbound_at": datetime(2026, 10, 21, 11, tzinfo=timezone.utc),
     }
     result, conn = run_policy(
-        [{"id": uuid4(), "has_credentials": True}, prospect, preference, {"id": uuid4()}],
+        [{"id": uuid4(), "has_credentials": True}, prospect, preference, {"id": uuid4()}, None],
         template_name="approved_notice",
         language_code="en",
     )
