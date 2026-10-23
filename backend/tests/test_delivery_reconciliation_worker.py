@@ -10,28 +10,31 @@ from scripts.reconcile_stale_deliveries import reconcile_once
 
 
 class FakeConnection:
-    def __init__(self, rows):
+    def __init__(self, rows, execute_results=None):
         self.rows = rows
         self.fetch_calls = []
+        self.execute_results = list(execute_results or [])
+        self.execute_calls = []
 
     async def fetch(self, query, *args):
         self.fetch_calls.append((query, args))
         return self.rows
 
+    async def execute(self, query, *args):
+        self.execute_calls.append((query, args))
+        result = self.execute_results.pop(0) if self.execute_results else "UPDATE 1"
+        if isinstance(result, Exception):
+            raise result
+        return result
+
 
 class FakePool:
     def __init__(self, rows, execute_results=None):
-        self.connection = FakeConnection(rows)
-        self.execute_results = list(execute_results or [])
-        self.execute_calls = []
+        self.connection = FakeConnection(rows, execute_results)
 
     @asynccontextmanager
     async def acquire(self):
         yield self.connection
-
-    async def execute(self, query, *args):
-        self.execute_calls.append((query, args))
-        return self.execute_results.pop(0) if self.execute_results else "UPDATE 1"
 
 
 def test_reconcile_once_processes_only_bounded_workspace_batches():
@@ -47,7 +50,7 @@ def test_reconcile_once_processes_only_bounded_workspace_batches():
     assert "SELECT DISTINCT workspace_id" in query
     assert "LIMIT $2" in query
     assert args == (600, 5)
-    assert [args for _, args in pool.execute_calls] == [("w1", 600, 20), ("w2", 600, 20)]
+    assert [args for _, args in pool.connection.execute_calls] == [("w1", 600, 20), ("w2", 600, 20)]
 
 
 @pytest.mark.parametrize(
@@ -67,19 +70,10 @@ def test_reconcile_once_rejects_unbounded_settings(kwargs):
 
 
 def test_reconcile_once_reports_workspace_errors_without_aborting_other_workspaces():
-    pool = FakePool([{"workspace_id": "w1"}, {"workspace_id": "w2"}], ["UPDATE 1"])
-    # The fake pool can raise for the first update to exercise the worker's fail-safe path.
-    original_execute = pool.execute
-    calls = 0
-
-    async def execute(query, *args):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise RuntimeError("sensitive connection detail")
-        return await original_execute(query, *args)
-
-    pool.execute = execute
+    pool = FakePool(
+        [{"workspace_id": "w1"}, {"workspace_id": "w2"}],
+        [RuntimeError("sensitive connection detail"), "UPDATE 1"],
+    )
     result = asyncio.run(reconcile_once(pool))
     assert result["workspaces_seen"] == 2
     assert result["deliveries_marked_uncertain"] == 1
