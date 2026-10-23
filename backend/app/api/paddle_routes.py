@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Any
@@ -38,12 +39,17 @@ def _plans() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid") from None
     if not isinstance(value, dict):
         raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
+    seen_price_ids: set[str] = set()
     for slug, plan in value.items():
-        if (not isinstance(slug, str) or not isinstance(plan, dict)
-                or not isinstance(plan.get("price_id"), str)
-                or not plan["price_id"].startswith("pri_")
+        price_id = plan.get("price_id") if isinstance(plan, dict) else None
+        if (not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,79}", slug)
+                or not isinstance(plan, dict)
+                or not isinstance(price_id, str)
+                or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", price_id)
+                or price_id in seen_price_ids
                 or not isinstance(plan.get("entitlements"), dict)):
             raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
+        seen_price_ids.add(price_id)
     return value
 
 
