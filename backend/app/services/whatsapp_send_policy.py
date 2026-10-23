@@ -35,13 +35,16 @@ class WhatsAppSendPolicy:
 
         async with self._pool.acquire() as conn:
             account = await conn.fetchrow(
-                """SELECT id FROM workspace_whatsapp_accounts
+                """SELECT id, (encrypted_access_token IS NOT NULL) AS has_credentials
+                   FROM workspace_whatsapp_accounts
                    WHERE id=$1 AND workspace_id=$2 AND status='active'""",
                 account_id,
                 workspace_id,
             )
             if account is None:
                 return {"allowed": False, "reason": "whatsapp_account_not_active"}
+            if not account["has_credentials"]:
+                return {"allowed": False, "reason": "whatsapp_account_credentials_missing"}
 
             prospect = await conn.fetchrow(
                 """SELECT p.id,p.contact_phone_e164,p.stage,
