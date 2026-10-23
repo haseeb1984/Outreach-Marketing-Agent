@@ -91,8 +91,9 @@ async def overview(request: Request):
               (SELECT count(*) FROM feature_usage_reservations WHERE status='reserved') AS usage_reserved""")
             clients = await conn.fetch("""SELECT w.id::text AS workspace_id,w.name AS workspace_name,
               u.email AS owner_email,s.status AS subscription_status,
-              (SELECT p.name FROM platform_billing_plans p WHERE p.entitlements=s.entitlements
-                ORDER BY p.active DESC,p.created_at DESC LIMIT 1) AS package_name,
+              COALESCE((SELECT p.name FROM platform_billing_plans p WHERE p.slug=s.plan_slug),
+                (SELECT p.name FROM platform_billing_plans p WHERE p.entitlements=s.entitlements
+                  ORDER BY p.active DESC,p.created_at DESC LIMIT 1)) AS package_name,
               s.billing_period_starts_at,s.billing_period_ends_at,
               COALESCE(v.consumed,0)::bigint AS usage_consumed,COALESCE(v.reserved,0)::bigint AS usage_reserved,
               COALESCE(v.released,0)::bigint AS usage_released
