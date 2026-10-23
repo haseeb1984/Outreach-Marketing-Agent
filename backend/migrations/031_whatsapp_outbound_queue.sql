@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_outbound_deliveries (
     draft_id UUID NOT NULL REFERENCES outreach_drafts(id) ON DELETE RESTRICT,
     prospect_id UUID NOT NULL REFERENCES crm_prospects(id) ON DELETE RESTRICT,
     idempotency_key VARCHAR(200) NOT NULL,
+    usage_reservation_id UUID NOT NULL REFERENCES feature_usage_reservations(id) ON DELETE RESTRICT UNIQUE,
     status VARCHAR(24) NOT NULL DEFAULT 'queued'
         CHECK (status IN ('queued','processing','sent','delivered','read','failed','uncertain','cancelled')),
     provider_message_id VARCHAR(256),
