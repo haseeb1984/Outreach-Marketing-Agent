@@ -196,11 +196,19 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                         # The future dispatcher must still re-check policy immediately before send.
                                         if prospect:
                                             await conn.execute(
-                                                """UPDATE whatsapp_outbound_deliveries
-                                                   SET status='cancelled', error_code='contact_opted_out',
-                                                       updated_at=now()
-                                                   WHERE workspace_id=$1 AND account_id=$2 AND prospect_id=$3
-                                                     AND status='queued'""",
+                                                """WITH cancelled AS (
+                                                       UPDATE whatsapp_outbound_deliveries
+                                                       SET status='cancelled', error_code='contact_opted_out',
+                                                           updated_at=now()
+                                                       WHERE workspace_id=$1 AND account_id=$2 AND prospect_id=$3
+                                                         AND status='queued'
+                                                       RETURNING usage_reservation_id
+                                                   )
+                                                   UPDATE feature_usage_reservations AS u
+                                                   SET status='released', updated_at=now()
+                                                   FROM cancelled AS q
+                                                   WHERE u.id=q.usage_reservation_id
+                                                     AND u.workspace_id=$1 AND u.status='reserved'""",
                                                 workspace_id, account_id, prospect["id"],
                                             )
                                     elif opt_in:
