@@ -18,6 +18,13 @@ from app.services.auth_store import AuthStore
 from app.services.auth_rate_limiter import AuthRateLimiter
 
 
+async def _ensure_schema_migrations(connection: asyncpg.Connection) -> None:
+    """Bootstrap the migration ledger before applying SQL files that record themselves."""
+    await connection.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+    )
+
+
 @pytest.mark.skipif(
     not os.getenv("OMA_TEST_DATABASE_URL"),
     reason="requires a dedicated disposable PostgreSQL test database",
@@ -30,6 +37,7 @@ async def _exercise_password_reset() -> None:
     database_url = os.environ["OMA_TEST_DATABASE_URL"]
     connection = await asyncpg.connect(database_url)
     try:
+        await _ensure_schema_migrations(connection)
         migrations = Path(__file__).resolve().parents[1] / "migrations"
         for migration_name in (
             "001_workspace_domain_verification.sql",
@@ -158,6 +166,7 @@ async def _exercise_workspace_authorization() -> None:
     database_url = os.environ["OMA_TEST_DATABASE_URL"]
     connection = await asyncpg.connect(database_url)
     try:
+        await _ensure_schema_migrations(connection)
         migrations = Path(__file__).resolve().parents[1] / "migrations"
         for migration_name in (
             "001_workspace_domain_verification.sql",
