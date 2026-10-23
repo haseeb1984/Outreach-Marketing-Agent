@@ -124,3 +124,5 @@ A feature marked implemented means repository code exists. It must not be descri
 - Hardened Paddle subscription mapping: signed webhooks require custom_data.plan_id to match the single package identified by provider price ID, and reject missing event/subscription identities instead of stringifying absent values. Added backend/tests/test_paddle_plan_mapping.py for matching, mismatch, missing metadata, unknown price and ambiguous mapping cases. Tests were authored but not run.
 
 - Bootstrap billing configuration now validates package slug syntax, Paddle price-ID syntax and duplicate price IDs before exposing plans or accepting checkout/webhook mapping. Expanded the Paddle mapping test file for malformed bootstrap catalog cases; tests remain unrun.
+
+- WhatsApp operations visibility: added a workspace-authorized, paginated webhook-event listing with pending/processed/error counts, restricted to Meta phone-number IDs mapped to that workspace. The endpoint deliberately withholds raw event payloads and message content and does not trigger processing or retries. Code committed on `main`; tests and deployment were not run.
