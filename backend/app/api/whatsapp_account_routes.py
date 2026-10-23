@@ -249,9 +249,17 @@ async def disable_whatsapp_account(
                 )
                 if row is not None:
                     await connection.execute(
-                        """UPDATE whatsapp_outbound_deliveries
-                           SET status='cancelled', error_code='whatsapp_account_disabled', updated_at=now()
-                           WHERE workspace_id=$1 AND account_id=$2 AND status='queued'""",
+                        """WITH cancelled AS (
+                               UPDATE whatsapp_outbound_deliveries
+                               SET status='cancelled', error_code='whatsapp_account_disabled', updated_at=now()
+                               WHERE workspace_id=$1 AND account_id=$2 AND status='queued'
+                               RETURNING usage_reservation_id
+                           )
+                           UPDATE feature_usage_reservations AS u
+                           SET status='released', updated_at=now()
+                           FROM cancelled AS q
+                           WHERE u.id=q.usage_reservation_id
+                             AND u.workspace_id=$1 AND u.status='reserved'""",
                         workspace_id, account_id,
                     )
         if row is None:
