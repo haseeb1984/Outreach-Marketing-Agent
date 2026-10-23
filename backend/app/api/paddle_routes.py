@@ -300,6 +300,7 @@ async def paddle_webhook(request: Request):
             workspace_id=workspace_id,
             provider_customer_id=data.get("customer_id"),
             provider_subscription_id=str(data["id"]),
+            plan_slug=matching[0][0],
             event_created_at=occurred_at,
             subscription_status=status,
             period_starts_at=period_starts_at,
