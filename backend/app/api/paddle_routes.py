@@ -198,6 +198,23 @@ def _verify_signature(raw_body: bytes, header: str | None, secret: str) -> bool:
     )
 
 
+def _resolve_subscription_plan(custom_data: Any, price_ids: set[Any], plans: dict[str, Any]) -> tuple[str, Any]:
+    """Require provider price and our signed custom metadata to identify one same plan."""
+    if not isinstance(custom_data, dict):
+        raise ValueError("workspace_mapping_missing")
+    declared_plan = custom_data.get("plan_id")
+    if not isinstance(declared_plan, str) or not declared_plan:
+        raise ValueError("subscription_plan_metadata_missing")
+    matching = [(slug, plan) for slug, plan in plans.items()
+                if isinstance(plan, dict) and plan.get("price_id") in price_ids]
+    if len(matching) != 1:
+        raise ValueError("subscription_plan_mapping_invalid")
+    matched_slug, plan = matching[0]
+    if declared_plan != matched_slug:
+        raise ValueError("subscription_plan_metadata_mismatch")
+    return matched_slug, plan
+
+
 def _datetime(value: Any) -> datetime:
     if not isinstance(value, str):
         raise ValueError("missing_billing_timestamp")
@@ -245,13 +262,10 @@ async def paddle_webhook(request: Request):
         item.get("price", {}).get("id")
         for item in items if isinstance(item, dict) and isinstance(item.get("price"), dict)
     } if isinstance(items, list) else set()
-    matching = [(slug, plan) for slug, plan in plans.items() if plan["price_id"] in price_ids]
-    if len(matching) != 1:
-        raise HTTPException(status_code=422, detail="subscription_plan_mapping_invalid")
-    matched_slug, plan = matching[0]
-    declared_plan = custom_data.get("plan_id")
-    if not isinstance(declared_plan, str) or declared_plan != matched_slug:
-        raise HTTPException(status_code=422, detail="subscription_plan_metadata_mismatch")
+    try:
+        matched_slug, plan = _resolve_subscription_plan(custom_data, price_ids, plans)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     provider_subscription_id = data.get("id")
     provider_event_id = payload.get("event_id")
     if (not isinstance(provider_subscription_id, str) or not provider_subscription_id.strip()
