@@ -63,7 +63,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [x] Server-side usage reservation and idempotency foundations exist for key operations.
 - [x] Workspace activity analytics use persisted records and avoid inventing ROI or sales figures.
 - [x] Dashboard analytics now include WhatsApp inbound-message and status-event counts.
-- [~] Added bounded stale-send reconciliation that marks abandoned processing rows `uncertain` instead of blindly retrying; recurring scheduling and operator recovery workflow are still incomplete.
+- [~] Added bounded, workspace-scoped stale-send reconciliation plus an authenticated workspace-admin recovery endpoint. Ambiguous sends remain `uncertain` and are not automatically retried; recurring scheduling and provider-record review/resolution are still incomplete.
 - [ ] Trusted recurring worker scheduling, safe retries across all provider operations, and verified conversion/revenue attribution remain incomplete.
 
 ### Phase 6 — Production verification: 20%
@@ -80,7 +80,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - Dashboard analytics adds separate **WhatsApp inbound** and **WhatsApp status events** metrics.
 - Consent and opt-out safeguards, migrations 024/025/026 and readiness/test migration setup were committed in the preceding implementation rounds.
 - Added `backend/tests/test_whatsapp_send_policy.py` with seven deterministic policy decision cases; tests were authored but not run in this code-first pass.
-- Added `DeliveryStore.reconcile_stale_processing` plus unit cases to keep abandoned in-flight sends visible as `uncertain`, avoiding duplicate-risk automatic retries. The tests were authored but not run, and recurring scheduling is not wired yet.
+- Added `DeliveryStore.reconcile_stale_processing`, tenant scoping, and the CSRF-protected `POST /api/v1/deliveries/reconcile-stale` workspace-admin endpoint. It marks abandoned in-flight sends `uncertain` without automatic retries. Unit cases were updated but not run; recurring scheduling and provider-record review remain incomplete.
 
 ## Next implementation order
 
