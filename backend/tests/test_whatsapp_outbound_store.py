@@ -49,6 +49,29 @@ def test_queue_requires_approved_whatsapp_draft_and_active_campaign():
         ))
 
 
+def test_find_by_idempotency_key_is_workspace_scoped_and_serializes_record():
+    queue_id, account_id, draft_id = uuid4(), uuid4(), uuid4()
+    queued_at = datetime(2026, 10, 23, tzinfo=timezone.utc)
+    pool = FakePool([{
+        "id": queue_id, "account_id": account_id, "draft_id": draft_id,
+        "status": "queued", "queued_at": queued_at,
+    }])
+    result = asyncio.run(WhatsAppOutboundStore(pool).find_by_idempotency_key(
+        workspace_id="workspace-test", idempotency_key="queue-key-123",
+    ))
+    assert result == {
+        "id": str(queue_id),
+        "account_id": str(account_id),
+        "draft_id": str(draft_id),
+        "status": "queued",
+        "queued_at": queued_at.isoformat(),
+        "replayed": True,
+    }
+    query, args = pool.connection.queries[0]
+    assert "WHERE workspace_id=$1 AND idempotency_key=$2" in query
+    assert args == ("workspace-test", "queue-key-123")
+
+
 def test_queue_persists_only_after_database_gate_checks():
     draft_id, prospect_id, account_id, queue_id = uuid4(), uuid4(), uuid4(), uuid4()
     pool = FakePool([
@@ -63,11 +86,13 @@ def test_queue_persists_only_after_database_gate_checks():
             "queued_at": datetime(2026, 10, 23, tzinfo=timezone.utc),
         },
     ])
+    reservation_id = uuid4()
     result = asyncio.run(WhatsAppOutboundStore(pool).enqueue(
         workspace_id="workspace-test", account_id=account_id, draft_id=draft_id,
-        actor_id=uuid4(), idempotency_key="queue-key-123", usage_reservation_id=uuid4(),
+        actor_id=uuid4(), idempotency_key="queue-key-123", usage_reservation_id=reservation_id,
     ))
     assert result["id"] == str(queue_id)
+    assert result["usage_reservation_id"] == str(reservation_id)
     assert result["status"] == "queued"
     assert result["replayed"] is False
     assert len(pool.connection.queries) == 3
