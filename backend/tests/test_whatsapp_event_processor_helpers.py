@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.services.whatsapp_event_processor import _is_opt_in, _is_opt_out, _text, _timestamp
+from app.services.whatsapp_event_processor import _effective_inbound_timestamp, _is_opt_in, _is_opt_out, _text, _timestamp
 
 
 @pytest.mark.parametrize("body", ["STOP", " stop ", "STOP!", "Unsubscribe.", "cancel", "END;", "QUIT?"])
@@ -44,3 +44,20 @@ def test_timestamp_parses_epoch_to_utc():
 @pytest.mark.parametrize("value", [None, {}, "not-a-time", float("inf"), -10**100])
 def test_invalid_timestamps_return_none(value):
     assert _timestamp(value) is None
+
+
+def test_effective_inbound_timestamp_uses_provider_time_when_not_future():
+    received = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
+    provider = datetime(2026, 10, 23, 11, 55, tzinfo=timezone.utc)
+    assert _effective_inbound_timestamp(provider, received) == provider
+
+
+def test_effective_inbound_timestamp_clamps_future_provider_time():
+    received = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
+    provider = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
+    assert _effective_inbound_timestamp(provider, received) == received
+
+
+def test_effective_inbound_timestamp_falls_back_to_server_receipt_time():
+    received = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
+    assert _effective_inbound_timestamp(None, received) == received
