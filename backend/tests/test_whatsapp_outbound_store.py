@@ -65,9 +65,9 @@ def test_queue_persists_only_after_database_gate_checks():
     ])
     result = asyncio.run(WhatsAppOutboundStore(pool).enqueue(
         workspace_id="workspace-test", account_id=account_id, draft_id=draft_id,
-        actor_id=uuid4(), idempotency_key="queue-key-123",
+        actor_id=uuid4(), idempotency_key="queue-key-123", usage_reservation_id=uuid4(),
     ))
     assert result["id"] == str(queue_id)
     assert result["status"] == "queued"
     assert result["replayed"] is False
-    assert len(pool.connection.queries) == 2
+    assert len(pool.connection.queries) == 3
