@@ -112,18 +112,23 @@ async def overview(request: Request):
               r.billing_period_starts_at,r.billing_period_ends_at
               FROM feature_usage_reservations r LEFT JOIN workspaces w ON w.id=r.workspace_id
               ORDER BY r.created_at DESC LIMIT 200""")
+            admin_events = await conn.fetch("""SELECT e.id,e.actor_user_id::text AS actor_user_id,
+              u.email AS actor_email,e.event_type,e.target_type,e.target_id,e.metadata,e.created_at
+              FROM platform_admin_audit_events e JOIN app_users u ON u.id=e.actor_user_id
+              ORDER BY e.created_at DESC LIMIT 100""")
         return {"totals": {k:int(v or 0) for k,v in dict(totals).items()},
           "clients":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in clients],
           "plans":[public_plan(row) for row in plans],
           "usage_by_feature":[dict(row) for row in usage_by_feature],
           "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
+          "admin_events":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in admin_events],
           "clients_truncated":len(clients)==500}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
 @router.post("/plans", status_code=201)
 async def create_plan(payload: PlanInput, request: Request):
-    await require_platform_admin(request, write=True)
+    actor = await require_platform_admin(request, write=True)
     try:
         async with pool_for(request).acquire() as conn:
             row = await conn.fetchrow("""INSERT INTO platform_billing_plans
@@ -132,6 +137,10 @@ async def create_plan(payload: PlanInput, request: Request):
               RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
               payload.slug,payload.name.strip(),payload.description,payload.price_id,payload.display_price,
               payload.currency,payload.billing_interval,json.dumps(payload.entitlements,allow_nan=False),payload.active)
+            await conn.execute("""INSERT INTO platform_admin_audit_events
+              (actor_user_id,event_type,target_type,target_id,metadata)
+              VALUES($1::uuid,'billing_plan.created','billing_plan',$2,$3::jsonb)""",
+              actor["user_id"],payload.slug,json.dumps({"active":payload.active}))
         return {"plan":public_plan(row)}
     except Exception as exc:
         if "unique" in str(exc).casefold() or "duplicate" in str(exc).casefold():
@@ -140,7 +149,7 @@ async def create_plan(payload: PlanInput, request: Request):
 
 @router.patch("/plans/{slug}")
 async def update_plan(slug: str, payload: PlanInput, request: Request):
-    await require_platform_admin(request, write=True)
+    actor = await require_platform_admin(request, write=True)
     if slug != payload.slug: raise HTTPException(status_code=422,detail="plan_slug_mismatch")
     try:
         async with pool_for(request).acquire() as conn:
@@ -149,6 +158,11 @@ async def update_plan(slug: str, payload: PlanInput, request: Request):
               WHERE slug=$1 RETURNING slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at""",
               slug,payload.name.strip(),payload.description,payload.price_id,payload.display_price,payload.currency,
               payload.billing_interval,json.dumps(payload.entitlements,allow_nan=False),payload.active)
+            if row is not None:
+                await conn.execute("""INSERT INTO platform_admin_audit_events
+                  (actor_user_id,event_type,target_type,target_id,metadata)
+                  VALUES($1::uuid,'billing_plan.updated','billing_plan',$2,$3::jsonb)""",
+                  actor["user_id"],slug,json.dumps({"active":payload.active}))
         if row is None: raise HTTPException(status_code=404,detail="billing_plan_not_found")
         return {"plan":public_plan(row)}
     except HTTPException: raise
@@ -156,10 +170,15 @@ async def update_plan(slug: str, payload: PlanInput, request: Request):
 
 @router.delete("/plans/{slug}")
 async def deactivate_plan(slug: str, request: Request):
-    await require_platform_admin(request, write=True)
+    actor = await require_platform_admin(request, write=True)
     try:
         async with pool_for(request).acquire() as conn:
             row = await conn.fetchrow("UPDATE platform_billing_plans SET active=false,updated_at=now() WHERE slug=$1 AND active=true RETURNING slug",slug)
+            if row is not None:
+                await conn.execute("""INSERT INTO platform_admin_audit_events
+                  (actor_user_id,event_type,target_type,target_id,metadata)
+                  VALUES($1::uuid,'billing_plan.deactivated','billing_plan',$2,'{}'::jsonb)""",
+                  actor["user_id"],slug)
         if row is None: raise HTTPException(status_code=404,detail="active_billing_plan_not_found")
         return {"slug":slug,"active":False,"deleted":True}
     except HTTPException: raise
