@@ -99,4 +99,14 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 A feature marked implemented means repository code exists. It must not be described as production-ready until tests pass and the relevant provider/database/deployment acceptance evidence is recorded.
 
 - Added a one-shot, bounded `backend/scripts/reconcile_stale_deliveries.py` worker that processes up to 100 workspaces per run, with a per-workspace batch of 100. It never sends or retries messages and emits aggregate counters only. Scheduler configuration and provider-side resolution remain outstanding; new worker tests were authored but not run.
-\n\n## Update — platform admin and billing catalog (2026-10-23)\n\n- Added migrations `027_platform_billing_admin.sql` and `028_platform_admin_audit.sql`.\n- Added `backend/app/api/platform_admin_routes.py`: allowlist-protected global overview, package create/update/soft-deactivate, per-feature usage summaries, recent usage records, and admin action audit history. Writes require authenticated session + CSRF and package edits validate Paddle price IDs and entitlement structures.\n- Added `frontend/app/platform-admin/page.tsx` for admin totals, package management, client subscriptions/usage, and audit history. Frontend is source-only; no Vercel frontend deployment was triggered.\n- Paddle plans now prefer the database catalog once seeded, with environment-configured plans retained only as the bootstrap fallback. Inactive plans are excluded from new checkout but retained for webhook mapping so existing subscriptions can still update.\n- No tests, migrations against a live database, deployment, or workflow runs were performed in this code-first pass.\n
+
+
+## Update — platform admin and billing catalog (2026-10-23)
+
+- Added migrations `027_platform_billing_admin.sql` and `028_platform_admin_audit.sql`.
+- Added `backend/app/api/platform_admin_routes.py`: allowlist-protected global overview, package create/update/soft-deactivate, per-feature usage summaries, recent usage records, and admin action audit history. Writes require authenticated session + CSRF and package edits validate Paddle price IDs and entitlement structures.
+- Added `frontend/app/platform-admin/page.tsx` for admin totals, package management, client subscriptions/usage, and audit history. Frontend is source-only; no Vercel frontend deployment was triggered.
+- Paddle plans now prefer the database catalog once seeded, with environment-configured plans retained only as the bootstrap fallback. Inactive plans are excluded from new checkout but retained for webhook mapping so existing subscriptions can still update.
+- No tests, migrations against a live database, deployment, or workflow runs were performed in this code-first pass.
+
+- Follow-up migration `029_unique_platform_plan_price_ids.sql` enforces one-to-one Paddle price-to-package mapping and is included in readiness and the PostgreSQL migration fixture.
