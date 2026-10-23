@@ -150,3 +150,6 @@
 
 
 - Platform-admin reporting follow-up (2026-10-23): workspace client inventory and feature-usage reservation history now have bounded server-side pagination, totals, and UI navigation. The prior fixed 500-client / 200-history-record view ceilings are removed for these two lists. The per-feature aggregate view and audit-event list still use bounded top-N views; authenticated browser acceptance remains pending. No tests, deployment, or workflow runs were performed.
+
+
+- Platform-admin audit reporting follow-up (2026-10-23): the admin overview now paginates the platform audit-event history with bounded page size/offset and total count; the dashboard has previous/next audit navigation alongside client and usage-history pagination. The per-feature aggregate remains a bounded top-2000 view. No tests, deployment, or authenticated browser acceptance were run.
