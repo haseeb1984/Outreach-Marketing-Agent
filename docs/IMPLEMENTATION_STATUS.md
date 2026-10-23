@@ -134,3 +134,5 @@
 
 - Added workspace-authorized `GET /api/v1/integrations/whatsapp/inbox/webhook-events` for operational visibility into Meta webhook intake. It returns pending/processed/error counts and bounded event metadata only, filtered to phone-number IDs mapped to the caller's workspace; raw payloads and message content are withheld. This is observability only: it does not process events, retry them, or enable outbound sends.
 - The endpoint is committed on `main`; no tests, deployment, or live webhook acceptance were run for this change.
+
+- Platform-admin usability follow-up (2026-10-23): added an accessible client search filter covering workspace name/ID, owner email, package, and subscription status. The UI reports filtered versus loaded workspace counts and distinguishes an empty search from an empty client list. This is client-side filtering over the API's existing maximum of 500 loaded workspaces; it does not replace full-dataset reporting. No tests, deployment, or workflow were run.
