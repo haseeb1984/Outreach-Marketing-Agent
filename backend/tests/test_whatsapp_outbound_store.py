@@ -45,7 +45,7 @@ def test_queue_requires_approved_whatsapp_draft_and_active_campaign():
     with pytest.raises(ValueError, match="approved_draft_and_active_campaign_required"):
         asyncio.run(WhatsAppOutboundStore(pool).enqueue(
             workspace_id="workspace-test", account_id=uuid4(), draft_id=uuid4(),
-            actor_id=uuid4(), idempotency_key="queue-key-123",
+            actor_id=uuid4(), idempotency_key="queue-key-123", usage_reservation_id=uuid4(),
         ))
 
 
