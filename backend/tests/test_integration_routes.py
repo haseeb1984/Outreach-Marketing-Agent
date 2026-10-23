@@ -66,11 +66,11 @@ def test_provider_status_hides_non_member_workspace(monkeypatch):
 
 
 def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
-    from app.api import integration_routes
+    from app.api import delivery_routes
 
     from app.core import config
 
-    monkeypatch.setattr(integration_routes.settings, "environment", "production")
+    monkeypatch.setattr(delivery_routes.settings, "environment", "production")
     monkeypatch.setattr(config.settings, "smtp_host", "smtp.example.test")
     monkeypatch.setattr(config.settings, "smtp_port", 587)
     monkeypatch.setattr(config.settings, "smtp_username", "mailer")
@@ -82,7 +82,7 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
     async def fake_test_connection(self):
         calls.append("tested")
 
-    monkeypatch.setattr(integration_routes.SMTPEmailDelivery, "test_connection", fake_test_connection)
+    monkeypatch.setattr(delivery_routes.SMTPEmailDelivery, "test_connection", fake_test_connection)
     with _client(monkeypatch) as client:
         rejected = client.post(
             "/api/v1/integrations/smtp/test?workspace_id=workspace-1",
@@ -98,6 +98,7 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
             },
         )
     assert accepted.status_code == 200, accepted.text
-    assert accepted.json()["ok"] is True
-    assert "No email was sent." in accepted.json()["message"]
+    assert accepted.json()["status"] == "authenticated"
+    assert accepted.json()["email_sent"] is False
+    assert "no email was sent" in accepted.json()["message"].lower()
     assert calls == ["tested"]
