@@ -94,3 +94,12 @@
 
 
 - One-shot delivery reconciliation worker added on 2026-10-23: `backend/scripts/reconcile_stale_deliveries.py` scans a bounded list of workspaces with stale processing records and invokes the tenant-scoped store operation per workspace. It emits aggregate counts only, performs no provider sends, and leaves ambiguous messages `uncertain` rather than retrying. A trusted scheduler can invoke `python -m scripts.reconcile_stale_deliveries` from `backend`; no schedule was configured or run. Unit tests were authored but not executed.
+
+
+## Platform administration update — 2026-10-23
+
+- Added a platform-admin API protected by an exact server-side `PLATFORM_ADMIN_EMAILS` allowlist, distinct from workspace roles.
+- Added database-managed package create/edit/soft-deactivate controls and connected the catalog to public Paddle plans, checkout, and webhook mapping. Inactive plans remain mapped for existing subscription events.
+- Added client/subscription overview, per-feature usage counters, recent usage history, and platform-admin audit history, plus a Hostinger-source frontend page at `frontend/app/platform-admin/page.tsx`.
+- Added migrations `027_platform_billing_admin.sql` and `028_platform_admin_audit.sql`; readiness and the PostgreSQL migration fixture now include them.
+- Tests, live migration, deployment, and authenticated browser acceptance were not run. Configure the backend-only allowlist before operator access.
