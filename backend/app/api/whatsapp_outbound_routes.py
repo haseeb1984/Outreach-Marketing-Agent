@@ -97,6 +97,7 @@ async def queue_whatsapp_draft(
             draft_id=draft_id,
             actor_id=session["user_id"],
             idempotency_key=payload.idempotency_key,
+            usage_reservation_id=reservation["reservation_id"],
         )
         if result.get("replayed"):
             await subscriptions.finish_reservation(
