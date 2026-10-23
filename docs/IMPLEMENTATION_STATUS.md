@@ -1,8 +1,8 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Reviewed/deployed commit at smoke-audit time:** `2e6616d1d64070214b4d1d830ae42169b3aaf06d`  
-**Historical dashboard CI evidence:** [Run 428](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39679387084) passed for Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL auth integration tests and dependency audit passed. The CI result for the deployed commit was not independently verified in the smoke audit.  
+**Latest verified deployed commit:** `013863fc03a5133ad67e6e253e8e7c9b473319bc`  
+**Latest backend CI evidence:** [Run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619) passed on the deployed commit: Python 3.11/3.12/3.13 automated tests, Python 3.12 PostgreSQL auth integration tests, and dependency audit.  
 **Scope:** Repository/source review and automated CI. The dashboard route is deployed through the Vercel Git integration, but an authenticated production browser journey has not been verified. This is not a penetration test or proof that external provider credentials work.
 
 ## Evidence-based phase matrix
@@ -189,3 +189,11 @@
 - Production `/`, `/health`, `/openapi.json`, and `/docs` returned HTTP 200. Grouped runtime errors were empty for 24h; error/fatal runtime logs were empty for the most recent 30m query.
 - Full automated test suite, frontend build, live database/migration verification, authenticated browser journey and external provider acceptance were not run. Sandbox provisioning failed and local GitHub clone was blocked by network DNS; do not interpret smoke checks as complete QA.
 - Detailed scope and blockers: [Production audit report](PRODUCTION_AUDIT_REPORT_2026-10-23.md).
+
+
+## Latest production verification — 2026-10-23
+
+- Latest verified deployment: `013863fc03a5133ad67e6e253e8e7c9b473319bc`, [Vercel inspector](https://vercel.com/junction-tec/outreach-marketing-agent/9QDSA7jLbEJWF98gTKuMLfRTGCBo).
+- Backend CI [run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619) passed on Python 3.11/3.12/3.13; PostgreSQL authentication integration tests and dependency audit passed on Python 3.12.
+- Audit discovered seven known advisories for `cryptography==46.0.7`; the dependency constraint was raised to `cryptography>=50.0.0,<51.0.0`, and the next dependency audit passed.
+- Public production smoke routes `/`, `/health`, `/openapi.json`, and `/docs` returned HTTP 200. This does not verify the production database, live provider accounts, or authenticated browser flows.

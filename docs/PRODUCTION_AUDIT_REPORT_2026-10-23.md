@@ -4,10 +4,10 @@
 
 **Deployment:** READY on Vercel production  
 **Target:** `main`  
-**Deployed commit:** `2e6616d1d64070214b4d1d830ae42169b3aaf06d` — “Fix WhatsApp inbox route syntax error”  
-**Deployment ID:** `dpl_FeZ1Biqfqd8wMHhEiEUeyB4TivgS`  
+**Latest verified deployed commit:** `013863fc03a5133ad67e6e253e8e7c9b473319bc` — “Upgrade cryptography beyond audited vulnerable releases”  
+**Deployment ID:** `dpl_9QDSA7jLbEJWF98gTKuMLfRTGCBo`  
 **Deployment URL:** https://outreach-marketing-agent.vercel.app  
-**Audit type:** production HTTP smoke checks, deployment metadata review, and Vercel runtime-error/log review. This is not a full regression suite, penetration test, or external-provider acceptance test.
+**Audit type:** production HTTP smoke checks, GitHub Actions backend CI, dependency audit, deployment metadata review, and Vercel runtime-error/log review. This is not a penetration test or external-provider acceptance test.
 
 ## Checks performed
 
@@ -25,7 +25,16 @@ Two paths, `/health-check` and `/api/v1/health`, returned HTTP 404. The configur
 
 ## Automated test-suite status
 
-**Not run in this audit.** A Vercel sandbox could not be provisioned through the available API, and the local environment could not clone GitHub because DNS/network access to github.com failed. No pytest, frontend build, database integration suite, migration, or end-to-end browser suite was executed. Existing CI evidence in the repository relates to a prior commit; the latest commit's CI result was not independently verified in this audit.
+**Backend CI: PASS on the latest verified commit.** [GitHub Actions run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619) completed successfully for commit `013863fc03a5133ad67e6e253e8e7c9b473319bc`.
+
+- Python 3.11 automated tests: passed.
+- Python 3.12 automated tests: passed.
+- Python 3.13 automated tests: passed.
+- Python 3.12 PostgreSQL authentication integration tests: passed.
+- Backend `pip-audit` dependency audit: passed after upgrading the allowed `cryptography` range from `>=43,<47` to `>=50.0.0,<51.0.0`. The preceding run found seven advisories against cryptography 46.0.7; that vulnerable range is no longer permitted by the dependency manifest.
+- The workflow skips PostgreSQL integration and dependency audit on Python 3.11/3.13 by design.
+
+The full frontend build, production-database migration check, authenticated browser journey, accessibility/performance suite, and live SMTP/Meta/Paddle acceptance were not run. A local clone/sandbox was unavailable, so no local test run is claimed.
 
 ## Scope and release-readiness findings
 
@@ -54,8 +63,8 @@ These are implementation estimates, not test pass rates:
 - Phase 3 — Provider integrations: **60%**
 - Phase 4 — Outreach & replies: **70%**
 - Phase 5 — Automation, billing & analytics: **51%**
-- Phase 6 — Production verification: **30%** (production deployment and basic HTTP smoke checks confirmed; full test suite and external acceptance still pending)
-- Weighted overall: **60/100** (weights 20%, 15%, 20%, 20%, 15%, 10%; unrounded score 60.15)
+- Phase 6 — Production verification: **40%** (production deployment, HTTP smoke checks, cross-version backend tests, PostgreSQL auth integration and dependency audit verified; external acceptance still pending)
+- Weighted overall: **61/100** (weights 20%, 15%, 20%, 20%, 15%, 10%; unrounded score 61.15)
 
 ## Recommended next gate
 
