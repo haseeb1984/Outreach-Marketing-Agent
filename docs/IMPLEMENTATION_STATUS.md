@@ -121,3 +121,11 @@
 - Signed Paddle subscription events now persist the exact matched package slug alongside entitlements; the platform-admin client list resolves the package by slug first and uses entitlement equality only as a legacy fallback.
 - Updated readiness checks and billing lifecycle validation fixtures for migration 030 and the new required plan identifier.
 - Migration remains unapplied to live data; no tests, deployments, or workflows were run.
+
+
+## Paddle subscription mapping hardening — 2026-10-23
+
+- Extracted strict plan resolution into _resolve_subscription_plan: a signed subscription event must identify exactly one package by provider price ID and its custom_data.plan_id must match that package slug.
+- Webhook processing now rejects missing/blank provider event IDs and subscription IDs instead of coercing absent values to strings.
+- Added backend/tests/test_paddle_plan_mapping.py for valid mapping, metadata mismatch, missing metadata, unknown price and ambiguous price mapping.
+- No tests, deployment, workflow or live Paddle calls were run. Billing remains unverified until migration 030 is applied and provider acceptance is completed.
