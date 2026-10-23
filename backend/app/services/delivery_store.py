@@ -91,10 +91,10 @@ class DeliveryStore:
                        WHERE workspace_id=$1
                          AND status='processing'
                          AND processing_at IS NOT NULL
-                         AND processing_at < now() - ($1 * interval '1 second')
+                         AND processing_at < now() - ($2 * interval '1 second')
                        ORDER BY processing_at ASC, id
                        FOR UPDATE SKIP LOCKED
-                       LIMIT $2
+                       LIMIT $3
                    )
                    UPDATE outreach_deliveries AS q
                    SET status='uncertain',
