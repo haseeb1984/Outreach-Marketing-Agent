@@ -58,7 +58,7 @@ def test_inactive_or_wrong_workspace_account_fails_closed():
 
 
 def test_missing_prospect_fails_closed():
-    result, conn = run_policy([{"id": uuid4()}, None])
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, None])
     assert result == {"allowed": False, "reason": "prospect_not_found"}
     assert len(conn.queries) == 2
 
@@ -150,3 +150,9 @@ def test_closed_customer_service_window_requires_approved_provider_template():
     # A missing verified provider template must never be treated as permission to send.
     assert result == {"allowed": False, "reason": "approved_provider_template_not_found"}
     assert len(conn.queries) == 4
+
+
+def test_active_account_without_encrypted_credentials_fails_closed():
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": False}])
+    assert result == {"allowed": False, "reason": "whatsapp_account_credentials_missing"}
+    assert len(conn.queries) == 1
