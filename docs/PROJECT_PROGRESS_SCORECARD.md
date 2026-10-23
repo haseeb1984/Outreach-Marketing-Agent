@@ -133,3 +133,10 @@ A feature marked implemented means repository code exists. It must not be descri
 - Added client-side filtering by workspace name/ID, owner email, package, and subscription status, with visible filtered/loaded counts.
 - This improves lookup for the loaded set only (API currently returns up to 500 clients); it is not full historical reporting.
 - No tests, deployment, or workflow were run.
+
+
+### WhatsApp event-processing hardening — 2026-10-23
+
+- Added normalized standalone opt-out and explicit opt-in command recognition for inbound WhatsApp text messages.
+- Delivery-status saved counts now increment only when the database actually inserts a new event, not for duplicates.
+- Added regression tests for command matching, ordinary-prose false positives, message-body truncation, and timestamp parsing. Tests have not been run; this does not enable outbound sending.
