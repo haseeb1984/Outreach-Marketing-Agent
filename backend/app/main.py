@@ -270,6 +270,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.whatsapp_delivery_status_events') IS NOT NULL
                      AND to_regclass('public.whatsapp_contact_preferences') IS NOT NULL
                      AND to_regclass('public.whatsapp_message_templates') IS NOT NULL
+                     AND to_regclass('public.whatsapp_outbound_deliveries') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
@@ -298,7 +299,7 @@ async def readiness() -> Response:
                             '029_unique_platform_plan_price_ids.sql',
                             '030_subscription_plan_slug.sql',
                             '031_whatsapp_outbound_queue.sql'
-                          )) = 25"""
+                          )) = 26"""
             )
             if not schema_ready:
                 return JSONResponse(
