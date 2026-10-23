@@ -129,3 +129,5 @@
 - Webhook processing now rejects missing/blank provider event IDs and subscription IDs instead of coercing absent values to strings.
 - Added backend/tests/test_paddle_plan_mapping.py for valid mapping, metadata mismatch, missing metadata, unknown price and ambiguous price mapping.
 - No tests, deployment, workflow or live Paddle calls were run. Billing remains unverified until migration 030 is applied and provider acceptance is completed.
+
+- Additional bootstrap catalog guard: configured plans now fail closed on malformed slugs, malformed Paddle price IDs or duplicate price IDs. Added corresponding unit cases; no tests were executed.
