@@ -102,9 +102,22 @@ async def overview(request: Request):
                 FROM feature_usage_reservations r WHERE r.workspace_id=w.id) v ON true
               ORDER BY w.created_at DESC LIMIT 500""")
             plans = await conn.fetch("SELECT slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at FROM platform_billing_plans ORDER BY created_at DESC")
+            usage_by_feature = await conn.fetch("""SELECT workspace_id::text AS workspace_id,feature,
+              count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
+              count(*) FILTER(WHERE status='reserved')::bigint AS reserved,
+              count(*) FILTER(WHERE status='released')::bigint AS released
+              FROM feature_usage_reservations GROUP BY workspace_id,feature ORDER BY workspace_id,feature LIMIT 2000""")
+            recent_usage = await conn.fetch("""SELECT r.id::text AS reservation_id,r.workspace_id::text AS workspace_id,
+              w.name AS workspace_name,r.feature,r.status,r.created_at,r.updated_at,
+              r.billing_period_starts_at,r.billing_period_ends_at
+              FROM feature_usage_reservations r LEFT JOIN workspaces w ON w.id=r.workspace_id
+              ORDER BY r.created_at DESC LIMIT 200""")
         return {"totals": {k:int(v or 0) for k,v in dict(totals).items()},
           "clients":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in clients],
-          "plans":[public_plan(row) for row in plans],"clients_truncated":len(clients)==500}
+          "plans":[public_plan(row) for row in plans],
+          "usage_by_feature":[dict(row) for row in usage_by_feature],
+          "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
+          "clients_truncated":len(clients)==500}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
