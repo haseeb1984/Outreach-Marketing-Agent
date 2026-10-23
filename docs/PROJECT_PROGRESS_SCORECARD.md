@@ -164,3 +164,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - WhatsApp queue idempotency follow-up (2026-10-23): workspace-scoped queue lookup now returns an existing matching queue record before reserving quota, and the queue insert replay path releases the duplicate reservation instead of reporting a conflict. This is a code-only hardening change; concurrent first-write races and end-to-end behavior still require later verification. No tests, migrations, deployment, or workflows were run. Overall score remains **59/100**.
+
+
+- WhatsApp quota crash-recovery follow-up (2026-10-23): queue retries now reuse an existing still-reserved idempotency reservation, and queue replay handling preserves the reservation referenced by the durable row. Added a bounded one-shot orphan-reservation reconciler that releases only WhatsApp send reservations older than one hour with no queue row. This worker has not been run or scheduled; no tests, migration, deployment, or workflows were executed. Concurrent DB behavior and SQL acceptance remain unverified. Overall score remains **59/100**.
