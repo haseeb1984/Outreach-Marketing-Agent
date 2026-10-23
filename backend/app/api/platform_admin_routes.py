@@ -115,7 +115,8 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               w.name AS workspace_name,r.feature,r.status,r.created_at,r.updated_at,
               r.billing_period_starts_at,r.billing_period_ends_at
               FROM feature_usage_reservations r LEFT JOIN workspaces w ON w.id=r.workspace_id
-              ORDER BY r.created_at DESC LIMIT 200""")
+              ORDER BY r.created_at DESC LIMIT $1 OFFSET $2""", usage_limit, usage_offset)
+            usage_total = await conn.fetchval("SELECT count(*) FROM feature_usage_reservations")
             admin_events = await conn.fetch("""SELECT e.id,e.actor_user_id::text AS actor_user_id,
               u.email AS actor_email,e.event_type,e.target_type,e.target_id,e.metadata,e.created_at
               FROM platform_admin_audit_events e JOIN app_users u ON u.id=e.actor_user_id
@@ -126,7 +127,7 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
           "usage_by_feature":[dict(row) for row in usage_by_feature],
           "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
           "admin_events":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in admin_events],
-          "clients_truncated":client_offset + len(clients) < int(totals["workspaces_total"] or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(totals["workspaces_total"] or 0)}
+          "clients_truncated":client_offset + len(clients) < int(totals["workspaces_total"] or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(totals["workspaces_total"] or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0)}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
