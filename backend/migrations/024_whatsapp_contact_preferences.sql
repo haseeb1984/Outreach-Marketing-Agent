@@ -10,4 +10,3 @@ CREATE TABLE IF NOT EXISTS whatsapp_contact_preferences (
     CHECK (wa_id ~ '^[0-9]{1,64}$')
 );
 CREATE INDEX IF NOT EXISTS whatsapp_contact_preferences_opted_out ON whatsapp_contact_preferences(workspace_id, wa_id) WHERE opted_out_at IS NOT NULL;
-INSERT INTO schema_migrations (version) VALUES ('024_whatsapp_contact_preferences.sql') ON CONFLICT (version) DO NOTHING;
