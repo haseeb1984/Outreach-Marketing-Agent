@@ -170,3 +170,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - Hostinger packaging groundwork (2026-10-23): added a Windows PowerShell source-ZIP packager that excludes `.env` secrets and build/dependency/Git folders, plus usage documentation. The script and resulting ZIP have not been executed/verified, and no Hostinger runtime acceptance was performed, so Phase 6 and the overall **59/100** estimate remain unchanged. No tests, deployment, or workflows were run.
+
+
+- Latest code-first update: WhatsApp webhook status events now reconcile against a matching outbound queue record by workspace/account/provider message ID and apply a monotonic state progression. Added mapping tests, not executed. This is partial lifecycle coverage only; no provider dispatcher or live sending was enabled. Overall remains **59/100** because no verification evidence was added.
