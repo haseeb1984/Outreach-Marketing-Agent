@@ -169,3 +169,6 @@
 
 
 - WhatsApp queue recovery hardening (2026-10-23): retries can reuse an existing `reserved` quota reservation after a process interruption, and duplicate queue results expose the linked reservation ID so a reservation backing an existing queue is not accidentally released. Added `backend/scripts/reconcile_whatsapp_queue_reservations.py`, a bounded one-shot worker that releases only `whatsapp_sends` reservations older than one hour when no outbound queue row references them; it emits aggregate counts only and never sends messages. No tests, worker runs, migrations, deployment, or workflows were executed. Configure a trusted scheduler only after code review and runtime acceptance.
+
+
+- Hostinger release packaging groundwork (2026-10-23): added `frontend/scripts/package-hostinger.ps1` to assemble a source ZIP for manual Hostinger upload, exclude dependency/build/Git folders and reject any real `.env` file found in the staged package. Documented the Windows command in `frontend/README.md`. The script has not been executed and no ZIP has been produced or verified; Hostinger install/build/origin-cookie acceptance remains pending. No deployment or workflow was triggered.
