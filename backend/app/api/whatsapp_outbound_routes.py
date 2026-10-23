@@ -107,8 +107,10 @@ async def queue_whatsapp_draft(
     if not reservation.get("allowed"):
         reason = reservation.get("reason", "entitlement_denied")
         raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
-    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+    if reservation.get("status") == "consumed":
         raise HTTPException(status_code=409, detail="whatsapp_queue_key_already_used")
+    # An existing reserved key may be an interrupted request that crashed after
+    # quota reservation but before queue insertion. Reuse it to complete the queue.
 
     try:
         result = await WhatsAppOutboundStore(pool).enqueue(
@@ -119,34 +121,42 @@ async def queue_whatsapp_draft(
             idempotency_key=payload.idempotency_key,
             usage_reservation_id=reservation["reservation_id"],
         )
-        if result.get("replayed"):
+        if result.get("replayed") and (
+            result.get("usage_reservation_id") != reservation.get("reservation_id")
+        ):
+            # Only release a separate, newly-created reservation. Never release the
+            # reservation that the already-existing queue row depends on.
+            if reservation.get("reason") == "reserved":
+                await subscriptions.finish_reservation(
+                    workspace_id=payload.workspace_id,
+                    reservation_id=reservation["reservation_id"],
+                    outcome="released",
+                )
+    except HTTPException:
+        raise
+    except LookupError as exc:
+        if reservation.get("reason") == "reserved":
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id,
                 reservation_id=reservation["reservation_id"],
                 outcome="released",
             )
-    except HTTPException:
-        raise
-    except LookupError as exc:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id,
-            reservation_id=reservation["reservation_id"],
-            outcome="released",
-        )
         raise HTTPException(status_code=404, detail=str(exc)) from None
     except ValueError as exc:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id,
-            reservation_id=reservation["reservation_id"],
-            outcome="released",
-        )
+        if reservation.get("reason") == "reserved":
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id,
+                reservation_id=reservation["reservation_id"],
+                outcome="released",
+            )
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except Exception:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id,
-            reservation_id=reservation["reservation_id"],
-            outcome="released",
-        )
+        if reservation.get("reason") == "reserved":
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id,
+                reservation_id=reservation["reservation_id"],
+                outcome="released",
+            )
         raise HTTPException(status_code=503, detail="whatsapp_queue_unavailable") from None
 
     return {
