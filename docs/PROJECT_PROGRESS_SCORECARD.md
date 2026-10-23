@@ -120,3 +120,5 @@ A feature marked implemented means repository code exists. It must not be descri
 - Package catalog writes and audit events now share a database transaction.
 - Price IDs cannot be changed when subscription snapshots are linked to the package entitlement set; use a new package for future price changes.
 - Added plan-input validation tests. They have not been run, and no score increase is claimed from unverified code.
+
+- Hardened Paddle subscription mapping: signed webhooks require custom_data.plan_id to match the single package identified by provider price ID, and reject missing event/subscription identities instead of stringifying absent values. Added backend/tests/test_paddle_plan_mapping.py for matching, mismatch, missing metadata, unknown price and ambiguous mapping cases. Tests were authored but not run.
