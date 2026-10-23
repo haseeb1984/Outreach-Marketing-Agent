@@ -240,15 +240,23 @@ async def disable_whatsapp_account(
     await _authorize(request, workspace_id, "admin", session)
     try:
         async with _pool(request).acquire() as connection:
-            row = await connection.fetchrow(
-                """UPDATE workspace_whatsapp_accounts SET status='disabled', encrypted_access_token=NULL, updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
-                   RETURNING id""",
-                account_id, workspace_id,
-            )
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """UPDATE workspace_whatsapp_accounts SET status='disabled', encrypted_access_token=NULL, updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
+                       RETURNING id""",
+                    account_id, workspace_id,
+                )
+                if row is not None:
+                    await connection.execute(
+                        """UPDATE whatsapp_outbound_deliveries
+                           SET status='cancelled', error_code='whatsapp_account_disabled', updated_at=now()
+                           WHERE workspace_id=$1 AND account_id=$2 AND status='queued'""",
+                        workspace_id, account_id,
+                    )
         if row is None:
             raise HTTPException(status_code=404, detail="whatsapp_account_not_found")
-        return {"disabled": True, "account_id": str(account_id)}
+        return {"disabled": True, "account_id": str(account_id), "queued_deliveries_cancelled": True}
     except HTTPException:
         raise
     except Exception:
