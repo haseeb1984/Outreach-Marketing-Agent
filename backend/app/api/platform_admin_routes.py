@@ -227,12 +227,13 @@ async def deactivate_plan(slug: str, request: Request):
     actor = await require_platform_admin(request, write=True)
     try:
         async with pool_for(request).acquire() as conn:
-            row = await conn.fetchrow("UPDATE platform_billing_plans SET active=false,updated_at=now() WHERE slug=$1 AND active=true RETURNING slug",slug)
-            if row is not None:
-                await conn.execute("""INSERT INTO platform_admin_audit_events
-                  (actor_user_id,event_type,target_type,target_id,metadata)
-                  VALUES($1::uuid,'billing_plan.deactivated','billing_plan',$2,'{}'::jsonb)""",
-                  actor["user_id"],slug)
+            async with conn.transaction():
+                row = await conn.fetchrow("UPDATE platform_billing_plans SET active=false,updated_at=now() WHERE slug=$1 AND active=true RETURNING slug",slug)
+                if row is not None:
+                    await conn.execute("""INSERT INTO platform_admin_audit_events
+                      (actor_user_id,event_type,target_type,target_id,metadata)
+                      VALUES($1::uuid,'billing_plan.deactivated','billing_plan',$2,'{}'::jsonb)""",
+                      actor["user_id"],slug)
         if row is None: raise HTTPException(status_code=404,detail="active_billing_plan_not_found")
         return {"slug":slug,"active":False,"deleted":True}
     except HTTPException: raise
