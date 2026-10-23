@@ -16,7 +16,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 2 — Discovery and research | 50% | Public-web research and site-audit foundations; deeper competitor/influencer intelligence remains incomplete |
 | Phase 3 — Provider integrations | 58% | SMTP and WhatsApp integration foundations exist; WhatsApp outbound is disabled |
 | Phase 4 — Outreach and replies | 70% | Campaigns, approval queue, email delivery and reply ingestion foundations |
-| Phase 5 — Automation and analytics | 45% | Entitlements and activity analytics exist; durable scheduling and outcome attribution remain incomplete |
+| Phase 5 — Automation and analytics | 50% | Entitlements and activity analytics exist; durable scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 20% | Some safety/readiness code exists; CI, live provider acceptance and release validation are not complete |
 
 Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(58×0.20)+(70×0.20)+(50×0.15)+(20×0.10)=58.60`, rounded to **59%**.
@@ -57,7 +57,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [~] CRM reply-stage and contact-control safeguards are implemented in part; full lifecycle acceptance remains pending.
 - [~] Email and WhatsApp conversation surfaces exist, but unified follow-up orchestration is not complete.
 
-### Phase 5 — Controlled automation and analytics: 45%
+### Phase 5 — Controlled automation and analytics: 50%
 
 - [~] Server-configured Paddle plan/checkout and signed subscription lifecycle foundations; live billing has not been verified.
 - [x] Server-side usage reservation and idempotency foundations exist for key operations.
