@@ -64,7 +64,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [x] Workspace activity analytics use persisted records and avoid inventing ROI or sales figures.
 - [x] Dashboard analytics now include WhatsApp inbound-message and status-event counts.
 - [~] Added bounded, workspace-scoped stale-send reconciliation plus an authenticated workspace-admin recovery endpoint. Ambiguous sends remain `uncertain` and are not automatically retried; recurring scheduling and provider-record review/resolution are still incomplete.
-- [ ] Trusted recurring worker scheduling, safe retries across all provider operations, and verified conversion/revenue attribution remain incomplete.
+- [~] A bounded one-shot delivery reconciliation worker is implemented; a trusted recurring schedule, safe retries across other provider operations, and verified conversion/revenue attribution remain incomplete.
 
 ### Phase 6 — Production verification: 20%
 
@@ -94,3 +94,5 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 ## Release rule
 
 A feature marked implemented means repository code exists. It must not be described as production-ready until tests pass and the relevant provider/database/deployment acceptance evidence is recorded.
+
+- Added a one-shot, bounded `backend/scripts/reconcile_stale_deliveries.py` worker that processes up to 100 workspaces per run, with a per-workspace batch of 100. It never sends or retries messages and emits aggregate counters only. Scheduler configuration and provider-side resolution remain outstanding; new worker tests were authored but not run.
