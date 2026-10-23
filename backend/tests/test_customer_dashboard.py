@@ -16,6 +16,14 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="prospect-form"' in response.text
     assert 'id="research-form"' in response.text
     assert 'id="website-audit-heading"' in response.text
+    assert 'id="projects-heading"' in response.text
+    assert 'id="project-form"' in response.text
+    assert 'id="projects-list"' in response.text
+    assert "/api/v1/projects?workspace_id=" in response.text
+    assert 'id="invitations-heading"' in response.text
+    assert 'id="invitation-form"' in response.text
+    assert 'id="invitations-list"' in response.text
+    assert "/api/v1/workspaces/invitations?workspace_id=" in response.text
     assert 'id="account-export-link"' in response.text
     assert '/api/v1/account/export' in response.text
     assert 'id="domain-challenge-form"' in response.text
