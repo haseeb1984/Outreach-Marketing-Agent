@@ -167,3 +167,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - WhatsApp quota crash-recovery follow-up (2026-10-23): queue retries now reuse an existing still-reserved idempotency reservation, and queue replay handling preserves the reservation referenced by the durable row. Added a bounded one-shot orphan-reservation reconciler that releases only WhatsApp send reservations older than one hour with no queue row. This worker has not been run or scheduled; no tests, migration, deployment, or workflows were executed. Concurrent DB behavior and SQL acceptance remain unverified. Overall score remains **59/100**.
+
+
+- Hostinger packaging groundwork (2026-10-23): added a Windows PowerShell source-ZIP packager that excludes `.env` secrets and build/dependency/Git folders, plus usage documentation. The script and resulting ZIP have not been executed/verified, and no Hostinger runtime acceptance was performed, so Phase 6 and the overall **59/100** estimate remain unchanged. No tests, deployment, or workflows were run.
