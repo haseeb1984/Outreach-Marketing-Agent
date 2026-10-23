@@ -45,7 +45,7 @@ class WhatsAppOutboundStore:
                 if draft["stage"] == "do_not_contact":
                     raise ValueError("contact_suppressed")
                 existing = await conn.fetchrow(
-                    """SELECT id,account_id,draft_id,status,idempotency_key
+                    """SELECT id,account_id,draft_id,status,idempotency_key,usage_reservation_id
                        FROM whatsapp_outbound_deliveries
                        WHERE workspace_id=$1 AND (idempotency_key=$2 OR draft_id=$3)
                        FOR UPDATE""",
@@ -56,7 +56,12 @@ class WhatsAppOutboundStore:
                         raise ValueError("whatsapp_idempotency_conflict")
                     if existing["account_id"] != account_id:
                         raise ValueError("whatsapp_account_conflict")
-                    return {"id": str(existing["id"]), "status": existing["status"], "replayed": True}
+                    return {
+                        "id": str(existing["id"]),
+                        "status": existing["status"],
+                        "usage_reservation_id": str(existing["usage_reservation_id"]),
+                        "replayed": True,
+                    }
                 row = await conn.fetchrow(
                     """INSERT INTO whatsapp_outbound_deliveries
                        (workspace_id,account_id,draft_id,prospect_id,idempotency_key,usage_reservation_id,queued_by)
@@ -69,6 +74,7 @@ class WhatsAppOutboundStore:
                     "id": str(row["id"]),
                     "status": row["status"],
                     "queued_at": row["queued_at"].isoformat(),
+                    "usage_reservation_id": str(UUID(str(usage_reservation_id))),
                     "replayed": False,
                 }
 
