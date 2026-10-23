@@ -764,7 +764,7 @@ export default function DashboardPage() {
   ];
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Workspace navigation"><Link href="/product">Product</Link><Link href="/pricing">Billing</Link><button className="button secondary" type="button" onClick={logout} disabled={busy}>Sign out</button></nav></header>
+    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Workspace navigation"><Link href="/product">Product</Link><Link href="/pricing">Billing</Link><Link href="/platform-admin">Platform admin</Link><button className="button secondary" type="button" onClick={logout} disabled={busy}>Sign out</button></nav></header>
     <main className="wrap">
       <section className="page-head"><p className="eyebrow">Private workspace</p><h1>Your outreach workspace</h1><p className="lead">Signed in as {email || "your account"}. Research, campaigns and approvals stay separated by workspace.</p></section>
       <ErrorNotice message={error} />
