@@ -47,6 +47,41 @@ def _plans() -> dict[str, Any]:
     return value
 
 
+
+async def _effective_plans(request: Request) -> dict[str, Any]:
+    """Use the platform-admin catalog once seeded; keep env plans as a bootstrap fallback."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        return _plans()
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT slug,name,description,price_id,display_price,currency,billing_interval,
+                          entitlements,active
+                   FROM platform_billing_plans ORDER BY slug"""
+            )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_plan_catalog_unavailable") from None
+    if not rows:
+        return _plans()
+    result: dict[str, Any] = {}
+    for row in rows:
+        item = dict(row)
+        if not item.get("active"):
+            continue
+        value = item.get("entitlements")
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, json.JSONDecodeError):
+                raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid") from None
+        if not isinstance(value, dict) or not isinstance(item.get("price_id"), str) or not item["price_id"].startswith("pri_"):
+            raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
+        item["entitlements"] = value
+        result[item["slug"]] = item
+    return result
+
+
 def _api_base() -> str:
     if settings.paddle_environment == "sandbox":
         return "https://sandbox-api.paddle.com"
@@ -56,9 +91,9 @@ def _api_base() -> str:
 
 
 @router.get("/plans")
-async def list_public_plans():
+async def list_public_plans(request: Request):
     """Expose only display-safe, server-configured plans; never return Paddle price IDs or secrets."""
-    plans = _plans()
+    plans = await _effective_plans(request)
     items = []
     for slug, plan in plans.items():
         name = plan.get("name")
@@ -97,7 +132,7 @@ async def create_checkout(body: CheckoutRequest, request: Request):
         raise HTTPException(status_code=403, detail="paddle_live_checkout_disabled")
     if not settings.paddle_api_key:
         raise HTTPException(status_code=503, detail="paddle_not_configured")
-    plan = _plans().get(body.plan_id)
+    plan = (await _effective_plans(request)).get(body.plan_id)
     if plan is None:
         raise HTTPException(status_code=422, detail="unknown_billing_plan")
 
@@ -204,7 +239,7 @@ async def paddle_webhook(request: Request):
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         raise HTTPException(status_code=422, detail="workspace_mapping_missing")
 
-    plans = _plans()
+    plans = await _effective_plans(request)
     items = data.get("items")
     price_ids = {
         item.get("price", {}).get("id")
