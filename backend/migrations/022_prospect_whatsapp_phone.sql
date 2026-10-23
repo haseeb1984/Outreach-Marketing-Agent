@@ -9,6 +9,3 @@ ALTER TABLE crm_prospects
 CREATE UNIQUE INDEX IF NOT EXISTS crm_prospects_workspace_phone_unique
     ON crm_prospects (workspace_id, contact_phone_e164)
     WHERE archived_at IS NULL AND contact_phone_e164 IS NOT NULL;
-INSERT INTO schema_migrations (version)
-VALUES ('022_prospect_whatsapp_phone.sql')
-ON CONFLICT (version) DO NOTHING;
