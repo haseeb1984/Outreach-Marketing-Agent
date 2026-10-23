@@ -55,7 +55,7 @@ def test_whatsapp_configuration_status_reports_missing_names_and_never_values():
  assert status["configuration_complete"] is True
  assert status["missing_fields"] == []
  assert status["live_send_enabled"] is False
- assert status["webhook_signature_verification_implemented"] is False
+ assert status["webhook_signature_verification_implemented"] is True
  assert "private-access-token" not in repr(status)
  assert "private-app-secret" not in repr(status)
 
