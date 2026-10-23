@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.api.auth_routes import _authenticated
+from app.api.auth_routes import _authenticated, _check_csrf
 
 router = APIRouter(prefix="/api/v1/integrations/whatsapp/inbox", tags=["WhatsApp inbox"])
 
@@ -21,12 +21,12 @@ def _pool(request: Request):
     return pool
 
 
-async def _authorize(request: Request, workspace_id: str, session: dict) -> None:
+async def _authorize(request: Request, workspace_id: str, session: dict, role: str = "viewer") -> None:
     auth = getattr(request.app.state, "auth_store", None)
     if auth is None:
         raise HTTPException(status_code=503, detail="authentication_not_configured")
     if not await auth.authorize_workspace(
-        user_id=session["user_id"], workspace_id=workspace_id, minimum_role="viewer"
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role=role
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
 
@@ -196,3 +196,44 @@ async def list_whatsapp_webhook_events(
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_webhook_event_list_unavailable") from None
 
+@router.post("/webhook-events/{event_id}/retry")
+async def retry_dead_letter_whatsapp_event(
+    event_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Explicitly requeue one exhausted event after workspace-admin review.
+
+    This does not send messages. Provider message IDs remain deduplicated by the worker.
+    """
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="admin")
+    try:
+        async with _pool(request).acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE meta_whatsapp_webhook_events e
+                       SET attempts=0, processing_error_code=NULL, processing_started_at=NULL
+                       WHERE e.id=$1 AND e.processed_at IS NULL AND e.attempts >= 8
+                         AND EXISTS (
+                           SELECT 1 FROM workspace_whatsapp_accounts a
+                           WHERE a.workspace_id=$2 AND a.phone_number_id=e.phone_number_id
+                             AND a.status='active'
+                         )
+                       RETURNING e.id""",
+                    event_id, workspace_id,
+                )
+        if row is None:
+            raise HTTPException(status_code=404, detail="retryable_workspace_dead_letter_not_found")
+        return {
+            "event_id": str(row["id"]),
+            "state": "pending",
+            "notice": "One exhausted event was requeued. Processing occurs only when the trusted worker next runs.",
+            "outbound_sending_enabled": False,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_event_retry_unavailable") from None
+\n
