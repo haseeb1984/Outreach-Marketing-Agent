@@ -248,7 +248,15 @@ async def paddle_webhook(request: Request):
     matching = [(slug, plan) for slug, plan in plans.items() if plan["price_id"] in price_ids]
     if len(matching) != 1:
         raise HTTPException(status_code=422, detail="subscription_plan_mapping_invalid")
-    _, plan = matching[0]
+    matched_slug, plan = matching[0]
+    declared_plan = custom_data.get("plan_id")
+    if not isinstance(declared_plan, str) or declared_plan != matched_slug:
+        raise HTTPException(status_code=422, detail="subscription_plan_metadata_mismatch")
+    provider_subscription_id = data.get("id")
+    provider_event_id = payload.get("event_id")
+    if (not isinstance(provider_subscription_id, str) or not provider_subscription_id.strip()
+            or not isinstance(provider_event_id, str) or not provider_event_id.strip()):
+        raise HTTPException(status_code=422, detail="subscription_event_identity_missing")
 
     status_map = {
         "active": "active", "trialing": "trialing", "past_due": "past_due",
@@ -296,11 +304,11 @@ async def paddle_webhook(request: Request):
             raise ValueError("missing_billing_period")
         event = VerifiedBillingEvent(
             provider="paddle",
-            event_id=str(payload["event_id"]),
+            event_id=provider_event_id,
             workspace_id=workspace_id,
             provider_customer_id=data.get("customer_id"),
-            provider_subscription_id=str(data["id"]),
-            plan_slug=matching[0][0],
+            provider_subscription_id=provider_subscription_id,
+            plan_slug=matched_slug,
             event_created_at=occurred_at,
             subscription_status=status,
             period_starts_at=period_starts_at,
