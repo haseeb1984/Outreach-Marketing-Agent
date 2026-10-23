@@ -126,3 +126,10 @@ A feature marked implemented means repository code exists. It must not be descri
 - Bootstrap billing configuration now validates package slug syntax, Paddle price-ID syntax and duplicate price IDs before exposing plans or accepting checkout/webhook mapping. Expanded the Paddle mapping test file for malformed bootstrap catalog cases; tests remain unrun.
 
 - WhatsApp operations visibility: added a workspace-authorized, paginated webhook-event listing with pending/processed/error counts, restricted to Meta phone-number IDs mapped to that workspace. The endpoint deliberately withholds raw event payloads and message content and does not trigger processing or retries. Code committed on `main`; tests and deployment were not run.
+
+
+### Platform admin client search — 2026-10-23
+
+- Added client-side filtering by workspace name/ID, owner email, package, and subscription status, with visible filtered/loaded counts.
+- This improves lookup for the loaded set only (API currently returns up to 500 clients); it is not full historical reporting.
+- No tests, deployment, or workflow were run.
