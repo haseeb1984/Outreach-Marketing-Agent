@@ -249,6 +249,48 @@ async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) ->
                                 )
                                 if inserted_status:
                                     status_this_event += 1
+                                # Reconcile only when a future approved dispatcher has
+                                # persisted the provider message ID. Status webhooks never
+                                # trigger a send and must not move delivery state backwards.
+                                target_status = {
+                                    "sent": "sent",
+                                    "delivered": "delivered",
+                                    "read": "read",
+                                    "failed": "failed",
+                                }.get(state.lower())
+                                if target_status:
+                                    await conn.execute(
+                                        """UPDATE whatsapp_outbound_deliveries
+                                           SET status=$3,
+                                               sent_at=CASE
+                                                 WHEN $3 IN ('sent','delivered','read')
+                                                 THEN COALESCE(sent_at, $4)
+                                                 ELSE sent_at END,
+                                               error_code=CASE
+                                                 WHEN $3='failed' THEN 'provider_delivery_failed'
+                                                 WHEN $3 IN ('sent','delivered','read') THEN NULL
+                                                 ELSE error_code END,
+                                               updated_at=now()
+                                           WHERE workspace_id=$1 AND account_id=$2
+                                             AND provider_message_id=$5
+                                             AND status IN ('processing','uncertain','sent','delivered','read')
+                                             AND CASE status
+                                               WHEN 'processing' THEN 0
+                                               WHEN 'uncertain' THEN 0
+                                               WHEN 'sent' THEN 1
+                                               WHEN 'delivered' THEN 2
+                                               WHEN 'read' THEN 3
+                                               WHEN 'failed' THEN 4
+                                               ELSE 5 END
+                                             <= CASE $3
+                                               WHEN 'sent' THEN 1
+                                               WHEN 'delivered' THEN 2
+                                               WHEN 'read' THEN 3
+                                               WHEN 'failed' THEN 4
+                                               ELSE 5 END""",
+                                        workspace_id, account_id, target_status,
+                                        _timestamp(status.get("timestamp")), provider_id,
+                                    )
                     await conn.execute(
                         """UPDATE meta_whatsapp_webhook_events
                            SET processed_at=now(), processing_error_code=NULL WHERE id=$1""",
