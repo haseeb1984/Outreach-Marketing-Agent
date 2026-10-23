@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
 Last assessed: 2026-10-23  
-Source: current `main` branch code and documentation inventory. No deployment or tests were run for this scorecard.
+Source: current `main` code/documentation plus production HTTP smoke checks and Vercel deployment metadata. Full automated tests were not run.
 
 ## How to read these numbers
 
@@ -11,13 +11,13 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **59/100** | Weighted score across the six product phases below |
+| Overall implementation progress | **60/100** | Weighted score across the six product phases below; deployment smoke checks verified, full suite still pending |
 | Phase 1 — Core platform | 80% | Identity, workspace, CRM and project foundations |
 | Phase 2 — Discovery and research | 50% | Public-web research and site-audit foundations; deeper competitor/influencer intelligence remains incomplete |
 | Phase 3 — Provider integrations | 60% | SMTP, WhatsApp intake, policy-gated queue foundations exist; provider dispatch remains disabled |
 | Phase 4 — Outreach and replies | 70% | Campaigns, approval queue, email delivery and reply ingestion foundations |
 | Phase 5 — Automation and analytics | 51% | Entitlements, activity analytics, and a quota-gated WhatsApp queue exist; dispatch/scheduling and outcome attribution remain incomplete |
-| Phase 6 — Production verification | 20% | Some safety/readiness code exists; CI, live provider acceptance and release validation are not complete |
+| Phase 6 — Production verification | 30% | Production deployment and basic HTTP smoke checks verified; CI for the exact commit, full test suite and live provider acceptance remain unverified |
 
 Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(60×0.20)+(70×0.20)+(51×0.15)+(20×0.10)=59.15`, rounded to **59%**.
 
@@ -69,7 +69,7 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 - [x] Added database-backed package create/edit/deactivate controls and connected the catalog to Paddle checkout/public plans/webhook mapping. Deactivation preserves historical plan mapping for existing subscription events.
 - [~] Admin plan catalog and audit migrations are in code but have not been applied to a live database; frontend/API acceptance has not been run. Configure `PLATFORM_ADMIN_EMAILS` with exact verified operator email(s) before using the admin surface.
 
-### Phase 6 — Production verification: 20%
+### Phase 6 — Production verification: 30%
 
 - [x] Secret-safe logging and environment-based provider configuration foundations.
 - [~] Database readiness and migration checks are present; the latest migrations have not been applied/verified against a live database in this work.
@@ -175,3 +175,12 @@ A feature marked implemented means repository code exists. It must not be descri
 - Latest code-first update: WhatsApp webhook status events now reconcile against a matching outbound queue record by workspace/account/provider message ID and apply a monotonic state progression. Added mapping tests, not executed. This is partial lifecycle coverage only; no provider dispatcher or live sending was enabled. Overall remains **59/100** because no verification evidence was added.
 
 - Account export now includes WhatsApp account metadata, conversation/message history, consent/opt-out preferences, outbound queue records and delivery-status events while excluding encrypted provider credentials. Database compatibility and export acceptance remain unverified; phase scores and overall **59/100** are unchanged until verification.
+
+
+## Production smoke audit — 2026-10-23
+
+- Vercel production deployment reported `READY` on `main`, deployed commit `2e6616d1d64070214b4d1d830ae42169b3aaf06d` at the time inspected.
+- `GET /`, `GET /health`, `GET /openapi.json`, and `GET /docs` returned HTTP 200.
+- Vercel reported no grouped runtime-error clusters for the last 24 hours and no matching error/fatal runtime logs for the last 30 minutes.
+- Full pytest/frontend build/database integration/browser tests were **not run**: sandbox creation failed and local GitHub clone was blocked by DNS/network access. The latest commit's CI status was not independently verified.
+- See [Production Audit Report](PRODUCTION_AUDIT_REPORT_2026-10-23.md) for blockers and exact scope. Overall score is now 60/100 due to smoke-test evidence only; it is not a release-readiness score.
