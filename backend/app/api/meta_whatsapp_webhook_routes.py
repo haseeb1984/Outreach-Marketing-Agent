@@ -86,9 +86,10 @@ async def receive_meta_webhook(request: Request) -> dict[str, object]:
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
         raise HTTPException(status_code=503, detail="webhook_storage_not_configured")
-    payload_hash = hashlib.sha256(raw).hexdigest()
-    phone_ids: set[str] = set()
-    event_kinds: set[str] = set()
+    # One provider payload may contain changes for multiple phone numbers. Split it
+    # into independently routable inbox rows so no valid tenant event is lost because
+    # a single nullable phone_number_id cannot represent the whole payload.
+    grouped: dict[str, list[dict[str, object]]] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -99,28 +100,77 @@ async def receive_meta_webhook(request: Request) -> dict[str, object]:
             if not isinstance(change, dict):
                 continue
             value = change.get("value")
-            if not isinstance(value, dict):
+            metadata = value.get("metadata") if isinstance(value, dict) else None
+            phone_id = metadata.get("phone_number_id") if isinstance(metadata, dict) else None
+            if not isinstance(phone_id, str) or not phone_id.strip():
                 continue
-            metadata = value.get("metadata")
-            if isinstance(metadata, dict) and isinstance(metadata.get("phone_number_id"), str):
-                phone_ids.add(metadata["phone_number_id"][:128])
-            if isinstance(value.get("messages"), list) and value["messages"]:
-                event_kinds.add("messages")
-            if isinstance(value.get("statuses"), list) and value["statuses"]:
-                event_kinds.add("statuses")
-    phone_number_id = next(iter(phone_ids)) if len(phone_ids) == 1 else None
-    event_kind = next(iter(event_kinds)) if len(event_kinds) == 1 else "other"
+            phone_id = phone_id[:128]
+            grouped.setdefault(phone_id, []).append({
+                "entry_id": entry.get("id"),
+                "change": change,
+            })
+
+    event_rows: list[tuple[str | None, str, dict[str, object], str]] = []
+    if not grouped:
+        canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        event_rows.append((None, "other", payload, hashlib.sha256(canonical.encode("utf-8")).hexdigest()))
+    else:
+        for phone_id, changes in grouped.items():
+            grouped_entries: dict[str, dict[str, object]] = {}
+            kinds: set[str] = set()
+            for item in changes:
+                entry_id = item.get("entry_id")
+                key = str(entry_id) if entry_id is not None else "__entry_without_id__"
+                target = grouped_entries.setdefault(key, {"changes": []})
+                if entry_id is not None:
+                    target["id"] = entry_id
+                target_changes = target["changes"]
+                change = item["change"]
+                target_changes.append(change)  # type: ignore[union-attr]
+                value = change.get("value") if isinstance(change, dict) else None
+                if isinstance(value, dict):
+                    if isinstance(value.get("messages"), list) and value["messages"]:
+                        kinds.add("messages")
+                    if isinstance(value.get("statuses"), list) and value["statuses"]:
+                        kinds.add("statuses")
+            scoped_payload: dict[str, object] = {
+                "object": payload["object"],
+                "entry": list(grouped_entries.values()),
+            }
+            event_kind = next(iter(kinds)) if len(kinds) == 1 else "other"
+            canonical = json.dumps(
+                {"phone_number_id": phone_id, "payload": scoped_payload},
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            event_rows.append((
+                phone_id, event_kind, scoped_payload,
+                hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+            ))
+
+    accepted = duplicates = 0
     try:
         async with pool.acquire() as connection:
-            row = await connection.fetchrow(
-                """INSERT INTO meta_whatsapp_webhook_events
-                   (payload_sha256, phone_number_id, event_kind, payload)
-                   VALUES ($1,$2,$3,$4::jsonb)
-                   ON CONFLICT (payload_sha256) DO NOTHING
-                   RETURNING id""",
-                payload_hash, phone_number_id, event_kind, json.dumps(payload, separators=(",", ":")),
-            )
+            async with connection.transaction():
+                for phone_id, event_kind, scoped_payload, payload_hash in event_rows:
+                    row = await connection.fetchrow(
+                        """INSERT INTO meta_whatsapp_webhook_events
+                           (payload_sha256, phone_number_id, event_kind, payload)
+                           VALUES ($1,$2,$3,$4::jsonb)
+                           ON CONFLICT (payload_sha256) DO NOTHING
+                           RETURNING id""",
+                        payload_hash, phone_id, event_kind,
+                        json.dumps(scoped_payload, separators=(",", ":")),
+                    )
+                    if row is None:
+                        duplicates += 1
+                    else:
+                        accepted += 1
     except Exception:
         # Do not include raw provider payloads, tokens, or message content in logs/errors.
         raise HTTPException(status_code=503, detail="meta_webhook_persistence_failed") from None
-    return {"accepted": True, "duplicate": row is None}
+    return {
+        "accepted": True,
+        "events_accepted": accepted,
+        "duplicates": duplicates,
+    }
