@@ -172,3 +172,10 @@
 
 
 - Hostinger release packaging groundwork (2026-10-23): added `frontend/scripts/package-hostinger.ps1` to assemble a source ZIP for manual Hostinger upload, exclude dependency/build/Git folders and reject any real `.env` file found in the staged package. Documented the Windows command in `frontend/README.md`. The script has not been executed and no ZIP has been produced or verified; Hostinger install/build/origin-cookie acceptance remains pending. No deployment or workflow was triggered.
+
+
+## Implementation update — 2026-10-23 (GitHub-only; no tests/deployment/workflows run)
+
+- WhatsApp inbound status processing now maps recognized Meta `sent`, `delivered`, `read`, and `failed` events onto an existing outbound queue row only when its workspace, account, and persisted provider message ID match.
+- Delivery updates are monotonic: older status events cannot move a delivered/read message backwards, and provider status ingestion never dispatches a message. Failure codes are normalized rather than copying provider error payloads into queue logs.
+- Added deterministic mapping tests. They have been authored but not run. The behavior is not production-verified; no dispatcher was added and live WhatsApp sending remains disabled.
