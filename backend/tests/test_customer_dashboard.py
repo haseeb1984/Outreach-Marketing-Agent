@@ -21,6 +21,10 @@ def test_customer_dashboard_is_responsive_noindex_and_no_store():
     assert 'id="projects-list"' in response.text
     assert "/api/v1/projects?workspace_id=" in response.text
     assert 'id="invitations-heading"' in response.text
+    assert 'id="invitation-accept-heading"' in response.text
+    assert 'id="invitation-accept-button"' in response.text
+    assert "/api/v1/workspaces/invitations/accept" in response.text
+    assert "invite_token" in response.text
     assert 'id="invitation-form"' in response.text
     assert 'id="invitations-list"' in response.text
     assert 'id="workspace-admin-heading"' in response.text
