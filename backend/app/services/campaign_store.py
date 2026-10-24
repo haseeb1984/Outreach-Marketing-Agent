@@ -71,6 +71,8 @@ class CampaignStore:
                 )
                 if campaign is None or prospect is None:
                     return None
+                if campaign["status"] == "paused":
+                    raise ValueError("campaign_paused")
                 p = dict(prospect)
                 if p.get("stage") == "do_not_contact":
                     raise ValueError("contact_suppressed")

@@ -47,7 +47,7 @@ async def enqueue_delivery(draft_id: UUID,payload: EnqueueDelivery,request: Requ
  _,_,s=await _authenticated(request); _check_csrf(request,s); await _authorize(request,payload.workspace_id,"admin",s)
  try: return await _store(request).enqueue(workspace_id=payload.workspace_id,draft_id=draft_id,actor_id=s["user_id"],idempotency_key=payload.idempotency_key,email_account_id=payload.email_account_id)
  except LookupError as exc: raise HTTPException(status_code=404,detail=str(exc)) from None
- except ValueError as e: raise HTTPException(status_code=409 if str(e)=="idempotency_key_conflict" else 422,detail=str(e)) from None
+ except ValueError as e: raise HTTPException(status_code=409 if str(e) in {"idempotency_key_conflict", "campaign_archived", "campaign_paused"} else 422,detail=str(e)) from None
  except Exception: raise HTTPException(status_code=503,detail="delivery_enqueue_unavailable") from None
 @router.post("/deliveries/reconcile-stale")
 async def reconcile_stale_deliveries(
