@@ -24,7 +24,7 @@ type ResearchResult = { title: string; url: string; description: string; evidenc
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
 type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
-type GrowthReviewReport = { report_type?: string; start_url: string; status?: string; crawl_summary?: { pages_crawled?: number }; strategy?: { actions?: Array<{ id: string; title: string; priority: string; priority_score: number; recommended_action: string; evidence_url: string; confidence: string }>; measurement_plan?: string[] }; limitations?: string[]; review_required?: boolean };
+type GrowthReviewReport = { report_type?: string; project_id?: string; project_name?: string; start_url: string; status?: string; crawl_summary?: { pages_crawled?: number }; strategy?: { actions?: Array<{ id: string; title: string; priority: string; priority_score: number; recommended_action: string; evidence_url: string; confidence: string }>; measurement_plan?: string[] }; limitations?: string[]; review_required?: boolean };
 type GrowthReviewResult = { report_id: string; workspace_id: string; project_id: string; project_name: string; report: GrowthReviewReport; created_at: string; notice: string };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
@@ -580,8 +580,22 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf) return;
     setAuditBusy(true); setError(""); setNotice("");
     try {
-      const result = await api<WebsiteAudit>("/api/v1/website-audits/" + encodeURIComponent(reportId) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf);
-      setAuditReport(result);
+      const result = await api<{ report_id: string; workspace_id: string; start_url: string; status: string; created_at: string; report: WebsiteAudit["report"] & GrowthReviewReport }>("/api/v1/website-audits/" + encodeURIComponent(reportId) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf);
+      if (result.report.report_type === "website_growth_review") {
+        setAuditReport(null);
+        setGrowthReviewResult({
+          report_id: result.report_id,
+          workspace_id: result.workspace_id,
+          project_id: result.report.project_id || "",
+          project_name: result.report.project_name || "Saved project",
+          report: result.report,
+          created_at: result.created_at,
+          notice: "Saved growth review loaded for human review.",
+        });
+      } else {
+        setGrowthReviewResult(null);
+        setAuditReport(result as WebsiteAudit);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Saved website audit could not be opened.");
     } finally { setAuditBusy(false); }

@@ -288,6 +288,8 @@ async def create_website_growth_review(payload: WebsiteGrowthReviewRequest, requ
                 max_depth=1, max_sitemaps=2,
                 limits=FetchLimits(timeout_seconds=3.0, max_redirects=2, max_bytes=400_000),
             )
+        report["project_id"] = str(payload.project_id)
+        report["project_name"] = project["name"]
         status = "crawl_skipped" if report.get("status") == "crawl_skipped" else "completed"
         async with pool.acquire() as conn:
             saved = await conn.fetchrow(
