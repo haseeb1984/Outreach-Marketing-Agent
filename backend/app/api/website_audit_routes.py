@@ -252,6 +252,8 @@ async def create_website_growth_review(payload: WebsiteGrowthReviewRequest, requ
         start_url = str(project["website_url"] or "").strip()
         if not start_url:
             raise HTTPException(status_code=422, detail="project_website_required")
+        if not str(project["business_model"] or "").strip() or not str(project["target_market"] or "").strip():
+            raise HTTPException(status_code=422, detail="project_business_context_required")
         await domain_store.authorize_url(workspace_id=payload.workspace_id, url=start_url)
     except HTTPException:
         raise

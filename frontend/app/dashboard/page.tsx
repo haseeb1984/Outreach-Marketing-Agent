@@ -56,6 +56,9 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       whatsapp_account_required_for_consent: "Choose the WhatsApp account covered by the documented consent.",
       whatsapp_opt_in_evidence_required: "Add an HTTPS URL to the consent evidence before saving opt-in.",
       invalid_prospect_stage: "Choose a valid CRM stage.",
+      project_business_context_required: "Complete the project's business model and target market before running a growth review.",
+      project_website_required: "Add a website URL to this project before running a growth review.",
+      domain_not_verified: "Verify this website domain in the workspace before running a growth review.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
