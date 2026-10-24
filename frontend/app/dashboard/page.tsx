@@ -733,6 +733,22 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function processWhatsAppInboxEvents() {
+    if (!workspaceId || !csrf || !window.confirm("Process up to 25 pending inbound Meta webhook events for this workspace's active WhatsApp accounts? This will not send any messages.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ processed: number; messages_saved: number; statuses_saved: number; unmapped: number; failed: number }>(
+        "/api/v1/integrations/whatsapp/inbox/webhook-events/process-pending?workspace_id=" + encodeURIComponent(workspaceId) + "&batch_size=25",
+        csrf,
+        { method: "POST" },
+      );
+      setNotice("WhatsApp inbox processing: " + result.processed + " events processed, " + result.messages_saved + " inbound messages saved, " + result.statuses_saved + " status events saved, " + result.unmapped + " unmapped, " + result.failed + " failed. No messages were sent.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp inbox processing failed.");
+    } finally { setBusy(false); }
+  }
+
   async function reconcileStaleDeliveries() {
     if (!workspaceId || !csrf || !window.confirm("Mark email sends stuck in processing for at least 15 minutes as uncertain? This will not retry or resend any email.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -966,7 +982,8 @@ export default function DashboardPage() {
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
             </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
             <h3>WhatsApp inbox</h3>
-            <p className="fine">Inbound messages received by the configured Meta webhook appear here. This is a read-only inbox for now; replies and outbound sending remain disabled until opt-in, template and delivery safeguards are complete.</p>
+            <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; replies and outbound sending remain disabled until opt-in, template and delivery safeguards are complete.</p>
+            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !whatsappAccounts.some(account=>account.status==="active")} onClick={processWhatsAppInboxEvents}>Process pending inbound events</button><p className="fine">Processes at most 25 pending events for active accounts in this workspace. Does not send messages.</p></div>}
             <div className="cards">
               <article className="card">
                 <h4>Conversations ({whatsappConversations.length})</h4>
