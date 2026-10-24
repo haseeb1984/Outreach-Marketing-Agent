@@ -22,7 +22,8 @@ class ProspectStore:
                           p.website_url, p.evidence_url, p.evidence_observed_at, p.fit_reason,
                           p.verified_facts, p.stage, p.notes, p.created_by, p.created_at, p.updated_at,
                           COALESCE(cc.email_suppressed, FALSE) AS email_suppressed,
-                          (cc.whatsapp_opt_in_at IS NOT NULL AND cc.whatsapp_opt_in_evidence_url IS NOT NULL) AS whatsapp_opt_in_documented
+                          (cc.whatsapp_opt_in_at IS NOT NULL AND cc.whatsapp_opt_in_evidence_url IS NOT NULL) AS whatsapp_opt_in_documented,
+                          cc.whatsapp_account_id AS whatsapp_opt_in_account_id
                    FROM crm_prospects p
                    LEFT JOIN outreach_contact_controls cc
                      ON cc.workspace_id=p.workspace_id AND cc.prospect_id=p.id
@@ -105,7 +106,7 @@ class ProspectStore:
             except json.JSONDecodeError:
                 facts = []
         row["verified_facts"] = facts if isinstance(facts, list) else []
-        for key in ("id", "created_by"):
+        for key in ("id", "created_by", "whatsapp_opt_in_account_id"):
             if row.get(key) is not None:
                 row[key] = str(row[key])
         return row
