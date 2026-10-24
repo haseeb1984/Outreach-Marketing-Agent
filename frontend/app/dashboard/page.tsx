@@ -733,6 +733,24 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function reconcileStaleDeliveries() {
+    if (!workspaceId || !csrf || !window.confirm("Mark email sends stuck in processing for at least 15 minutes as uncertain? This will not retry or resend any email.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ reconciled_count: number; automatic_retry: boolean }>(
+        "/api/v1/deliveries/reconcile-stale?workspace_id=" + encodeURIComponent(workspaceId) + "&older_than_seconds=900&limit=100",
+        csrf,
+        { method: "POST" },
+      );
+      setNotice(result.reconciled_count
+        ? result.reconciled_count + " stale delivery record(s) marked uncertain. Check SMTP/provider logs before taking any further action."
+        : "No stale processing deliveries found. No messages were sent or retried.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Stale delivery reconciliation failed.");
+    } finally { setBusy(false); }
+  }
+
   async function reviewDraft(draft: Draft, decision: "approved" | "rejected") {
     if (!workspaceId || !csrf || !window.confirm("Confirm " + decision + " for this draft? This does not send a message.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -986,7 +1004,7 @@ export default function DashboardPage() {
             <p className="fine">Inbound Meta webhook signatures are validated and events are stored in a private inbox. A worker can map events to workspace-owned accounts and persist inbound messages/statuses; configure a trusted scheduler to process the inbox. Outbound sending remains disabled until opt-in and approved-template safeguards are complete.</p>
           </article>
         </section>
-        <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p><div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
+        <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && deliveries.some(delivery=>delivery.status==="processing") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={reconcileStaleDeliveries}>Reconcile sends stuck for 15+ minutes</button><p className="fine">This only marks stale sends as uncertain. It never automatically retries messages.</p></div>}<div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
       </>}
     </main>
     <footer className="wrap"><p>Private workspace · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/contact">Contact</Link> · <a href="/api/v1/account/export">Download account data (JSON)</a> · <Link href="/">Public site</Link></p></footer>
