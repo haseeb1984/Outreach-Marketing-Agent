@@ -631,7 +631,7 @@ export default function DashboardPage() {
     event.preventDefault();
     if (!workspaceId || !csrf || !project.website_url) return;
     const form = new FormData(event.currentTarget);
-    const targetQueries = String(form.get("target_queries") || "").split(/[\\r\\n,]+/).map(value => value.trim()).filter(Boolean);
+    const targetQueries = String(form.get("target_queries") || "").split(/[\r\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!targetQueries.length) { setError("Enter at least one target search query."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
