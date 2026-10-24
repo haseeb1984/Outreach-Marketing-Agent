@@ -24,6 +24,8 @@ type ResearchResult = { title: string; url: string; description: string; evidenc
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
 type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
+type GrowthReviewReport = { report_type?: string; start_url: string; status?: string; crawl_summary?: { pages_crawled?: number }; strategy?: { actions?: Array<{ id: string; title: string; priority: string; priority_score: number; recommended_action: string; evidence_url: string; confidence: string }>; measurement_plan?: string[] }; limitations?: string[]; review_required?: boolean };
+type GrowthReviewResult = { report_id: string; workspace_id: string; project_id: string; project_name: string; report: GrowthReviewReport; created_at: string; notice: string };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
 async function api<T>(path: string, csrf: string | null, options: RequestInit = {}): Promise<T> {
@@ -116,6 +118,7 @@ export default function DashboardPage() {
   const [auditReport, setAuditReport] = useState<WebsiteAudit | null>(null);
   const [auditHistory, setAuditHistory] = useState<Array<{ id: string; start_url: string; status: string; created_at: string }>>([]);
   const [auditBusy, setAuditBusy] = useState(false);
+  const [growthReviewResult, setGrowthReviewResult] = useState<GrowthReviewResult | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -624,6 +627,26 @@ export default function DashboardPage() {
     } finally { setResearchBusy(false); }
   }
 
+  async function runProjectGrowthReview(event: FormEvent<HTMLFormElement>, project: Project) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !project.website_url) return;
+    const form = new FormData(event.currentTarget);
+    const targetQueries = String(form.get("target_queries") || "").split(/[\\n,]+/).map(value => value.trim()).filter(Boolean);
+    if (!targetQueries.length) { setError("Enter at least one target search query."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<GrowthReviewResult>("/api/v1/website-audits/growth-review", csrf, {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceId, project_id: project.id, target_queries: targetQueries, max_pages: 8, idempotency_key: "growth-review-" + crypto.randomUUID() }),
+      });
+      setGrowthReviewResult(result);
+      setNotice(result.notice);
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Website growth review could not be completed.");
+    } finally { setBusy(false); }
+  }
+
   async function createProspect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
@@ -991,7 +1014,9 @@ export default function DashboardPage() {
               <div className="field"><label>Competitors (one per line)</label><textarea name="competitors" maxLength={10000} defaultValue={(project.competitors || []).join(String.fromCharCode(10))} /></div>
               <button className="button" type="submit" disabled={busy}>Save changes</button>
             </form></details>}
+            {project.website_url && <details><summary>Run evidence-based website growth review</summary><p className="fine">Requires a verified domain and available website-audit entitlement. This creates prioritized recommendations from observed crawl evidence; it does not modify the website.</p><form onSubmit={event=>runProjectGrowthReview(event,project)}><div className="field"><label htmlFor={"growth-queries-"+project.id}>Target search queries (one per line or comma-separated)</label><textarea id={"growth-queries-"+project.id} name="target_queries" required maxLength={4000} rows={3} placeholder={"best service in target city\\nrelated service near me"} /></div><button className="button secondary" type="submit" disabled={busy || !csrf || !workspaceId}>Generate growth review</button></form></details>}
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={() => archiveProject(project)}>Archive project</button>}</article>) : <article className="card"><p>No project profiles yet. Create one for each website or client business.</p></article>}</div>
+          {growthReviewResult?.workspace_id === workspaceId && <article className="card"><h3>Growth review: {growthReviewResult.project_name}</h3><p className="fine">Report ID: {growthReviewResult.report_id} · {growthReviewResult.report.crawl_summary?.pages_crawled ?? 0} pages crawled · Saved for human review</p>{growthReviewResult.report.strategy?.actions?.length ? <div className="cards">{growthReviewResult.report.strategy.actions.map(action=><article className="card" key={action.id}><p className="eyebrow">{action.priority} priority · score {action.priority_score}</p><h4>{action.title}</h4><p>{action.recommended_action}</p><p className="fine">Confidence: {action.confidence}</p><p><a href={action.evidence_url} target="_blank" rel="noreferrer">Review evidence</a></p></article>)}</div> : <p>No evidence-backed actions were generated. Check crawl status and domain verification before trying again.</p>}{growthReviewResult.report.strategy?.measurement_plan && <><h4>Measurement plan</h4><ul>{growthReviewResult.report.strategy.measurement_plan.map(item=><li key={item}>{item}</li>)}</ul></>}{growthReviewResult.report.limitations?.map(item=><p className="fine" key={item}>{item}</p>)}</article>}
           <article className="card"><h3>Create project profile</h3><form onSubmit={createProject}>
             <div className="field"><label htmlFor="project-name">Project name</label><input id="project-name" required maxLength={160} value={projectName} onChange={e=>setProjectName(e.target.value)} /></div>
             <div className="field"><label htmlFor="project-website">Website URL (optional)</label><input id="project-website" type="url" maxLength={2048} placeholder="https://example.com" value={projectWebsite} onChange={e=>setProjectWebsite(e.target.value)} /></div>

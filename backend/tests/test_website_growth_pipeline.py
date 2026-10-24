@@ -92,3 +92,24 @@ def test_pipeline_rejects_unverified_or_cross_workspace_domain_before_fetch(monk
             pass
         else:
             raise AssertionError("unauthorized domain should be rejected")
+
+
+def test_growth_review_request_requires_bounded_queries_and_rejects_extra_fields():
+    from uuid import uuid4
+    from pydantic import ValidationError
+    from app.api.website_audit_routes import WebsiteGrowthReviewRequest
+
+    base = {
+        "workspace_id": "workspace-a",
+        "project_id": uuid4(),
+        "target_queries": ["local plumber", "emergency plumber"],
+        "idempotency_key": "growth-review-123",
+    }
+    payload = WebsiteGrowthReviewRequest(**base)
+    assert payload.target_queries == ["local plumber", "emergency plumber"]
+    with pytest.raises(ValidationError):
+        WebsiteGrowthReviewRequest(**{**base, "target_queries": ["  ", ""]})
+    with pytest.raises(ValidationError):
+        WebsiteGrowthReviewRequest(**{**base, "target_queries": ["x" * 201]})
+    with pytest.raises(ValidationError):
+        WebsiteGrowthReviewRequest(**{**base, "auto_publish": True})
