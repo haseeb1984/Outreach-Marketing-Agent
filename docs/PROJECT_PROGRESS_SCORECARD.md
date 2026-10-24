@@ -15,11 +15,11 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
 | Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
 | Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
-| Phase 4 — Outreach and replies | 72% | Campaigns, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
+| Phase 4 — Outreach and replies | 74% | Campaigns, editable/audited pending drafts, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
 | Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 42% | Backend CI and frontend production build/Hostinger packaging pass on recent commits; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(72×0.20)+(53×0.15)+(42×0.10)=64.0`, rounded to **64%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(74×0.20)+(53×0.15)+(42×0.10)=64.4`, rounded to **64%**.
 
 
 
@@ -216,3 +216,5 @@ A feature marked implemented means repository code exists. It must not be descri
 - Website growth engine update: verified project websites can now run a bounded, quota-controlled growth review that persists an evidence-backed SEO action plan, exposes cited findings and a measurement plan in the dashboard, and never modifies the target website. Backend CI and frontend build/packaging passed on `103437f` (runs [40081163953](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081163953) and [40081163948](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081163948)). Live domain/provider acceptance remains pending.
 
 - Saved report continuity: website growth-review payloads now persist their project identity with the report, and the dashboard can reopen a saved growth review from audit history rather than losing it after navigation. Backend CI and frontend build/packaging passed on `7d1eb5f` (runs [40081502067](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081502067) and [40081502085](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081502085)).
+
+- Human draft editing update: workspace members can edit pending email/WhatsApp draft content before approval; edits are recorded in the draft-event audit trail. Approved/rejected drafts cannot be edited through this endpoint. Migration `033_draft_edit_audit_event.sql` extends the event constraint, and readiness now checks migrations 032–033. Backend CI and frontend production build/Hostinger packaging passed on `cc78131` (runs [40081811654](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081811654) and [40081811655](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081811655)).
