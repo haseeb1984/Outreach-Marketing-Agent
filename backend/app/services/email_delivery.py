@@ -97,18 +97,20 @@ class SMTPEmailDelivery:
             raise ValueError("invalid_workspace_name")
         if role not in {"admin", "member", "viewer"}:
             raise ValueError("invalid_invitation_role")
-        # The authenticated dashboard and invitation API live on the backend origin.
-        # Keep the one-time token in the query string and never log this URL.
-        base = (self._settings.public_base_url or "").strip()
+        # Invitees use the Hostinger frontend route; a URL fragment keeps the
+        # bearer token out of HTTP request logs and referrer headers.
+        base = (self._settings.frontend_public_url or "").strip() or next(
+            (item.strip() for item in (self._settings.frontend_origins or "").split(",") if item.strip()), ""
+        )
         parts = urlsplit(base)
         if (parts.scheme.lower() != "https" or not parts.hostname
                 or parts.username is not None or parts.password is not None
-                or parts.query or parts.fragment):
-            raise ValueError("public_https_origin_required")
+                or parts.path not in ("", "/") or parts.query or parts.fragment):
+            raise ValueError("frontend_https_origin_required")
         link = urlunsplit((
-            "https", parts.netloc, parts.path.rstrip("/") + "/app", "",
-            urlencode({"invite_token": token}),
-        ))
+            "https", parts.netloc, "/invitations/accept", "",
+            "",
+        )) + "#token=" + token
         message = EmailMessage()
         message["Subject"] = "You're invited to an Outreach Marketing Agent workspace"
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
