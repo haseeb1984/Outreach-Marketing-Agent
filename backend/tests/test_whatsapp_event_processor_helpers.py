@@ -61,3 +61,27 @@ def test_effective_inbound_timestamp_clamps_future_provider_time():
 def test_effective_inbound_timestamp_falls_back_to_server_receipt_time():
     received = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
     assert _effective_inbound_timestamp(None, received) == received
+
+
+def test_event_processor_rejects_invalid_workspace_scope_before_database_access():
+    import asyncio
+    from app.services.whatsapp_event_processor import process_pending_whatsapp_events
+
+    class NoDatabase:
+        def acquire(self):
+            raise AssertionError("invalid workspace must be rejected before DB access")
+
+    with pytest.raises(ValueError, match="workspace_id_invalid"):
+        asyncio.run(process_pending_whatsapp_events(NoDatabase(), workspace_id=" "))
+
+
+def test_event_processor_rejects_boolean_batch_size():
+    import asyncio
+    from app.services.whatsapp_event_processor import process_pending_whatsapp_events
+
+    class NoDatabase:
+        def acquire(self):
+            raise AssertionError("invalid batch must be rejected before DB access")
+
+    with pytest.raises(ValueError, match="batch_size_out_of_range"):
+        asyncio.run(process_pending_whatsapp_events(NoDatabase(), batch_size=True))

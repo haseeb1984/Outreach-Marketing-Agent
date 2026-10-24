@@ -236,3 +236,33 @@ async def retry_dead_letter_whatsapp_event(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_event_retry_unavailable") from None
+
+
+@router.post("/webhook-events/process-pending")
+async def process_pending_whatsapp_events_for_workspace(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    batch_size: int = Query(default=25, ge=1, le=100),
+) -> dict:
+    """Admin-triggered, bounded processing limited to this workspace's active accounts."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="admin")
+    try:
+        from app.services.whatsapp_event_processor import process_pending_whatsapp_events
+
+        result = await process_pending_whatsapp_events(
+            _pool(request), batch_size=batch_size, workspace_id=workspace_id,
+        )
+        return {
+            "workspace_id": workspace_id,
+            **result,
+            "outbound_sending_enabled": False,
+            "notice": "Inbound events processed only for this workspace's active WhatsApp accounts. No messages were sent.",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_event_processing_unavailable") from None

@@ -72,23 +72,47 @@ def _text(message: dict[str, Any]) -> tuple[str, str | None]:
     return kind[:40], body
 
 
-async def process_pending_whatsapp_events(pool: Any, *, batch_size: int = 25) -> dict[str, int]:
-    """Process a bounded batch using row locks; safe for concurrent worker instances."""
-    if not 1 <= batch_size <= 100:
+async def process_pending_whatsapp_events(
+    pool: Any, *, batch_size: int = 25, workspace_id: str | None = None,
+) -> dict[str, int]:
+    """Process a bounded batch, optionally scoped to one workspace's active accounts.
+
+    Workspace-triggered runs must not claim another tenant's webhook events.
+    """
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 1 <= batch_size <= 100:
         raise ValueError("batch_size_out_of_range")
+    if workspace_id is not None and (
+        not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200
+    ):
+        raise ValueError("workspace_id_invalid")
     processed = messages_saved = statuses_saved = unmapped = failed = 0
     for _ in range(batch_size):
         last_event_id = None
         try:
             async with pool.acquire() as conn:
                 async with conn.transaction():
-                    event = await conn.fetchrow(
-                        """SELECT id, phone_number_id, payload, received_at
-                           FROM meta_whatsapp_webhook_events
-                           WHERE processed_at IS NULL AND attempts < 8
-                           ORDER BY received_at, id
-                           LIMIT 1 FOR UPDATE SKIP LOCKED"""
-                    )
+                    if workspace_id is None:
+                        event = await conn.fetchrow(
+                            """SELECT id, phone_number_id, payload, received_at
+                               FROM meta_whatsapp_webhook_events
+                               WHERE processed_at IS NULL AND attempts < 8
+                               ORDER BY received_at, id
+                               LIMIT 1 FOR UPDATE SKIP LOCKED"""
+                        )
+                    else:
+                        event = await conn.fetchrow(
+                            """SELECT e.id, e.phone_number_id, e.payload, e.received_at
+                               FROM meta_whatsapp_webhook_events e
+                               WHERE e.processed_at IS NULL AND e.attempts < 8
+                                 AND EXISTS (
+                                   SELECT 1 FROM workspace_whatsapp_accounts a
+                                   WHERE a.phone_number_id=e.phone_number_id
+                                     AND a.workspace_id=$1 AND a.status='active'
+                                 )
+                               ORDER BY e.received_at, e.id
+                               LIMIT 1 FOR UPDATE OF e SKIP LOCKED""",
+                            workspace_id,
+                        )
                     if event is None:
                         break
                     last_event_id = event["id"]
