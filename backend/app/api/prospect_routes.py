@@ -75,6 +75,7 @@ class ContactControlsUpdate(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=200)
     email_suppressed: bool | None = None
     whatsapp_opt_in_confirmed: bool = False
+    whatsapp_account_id: UUID | None = None
     whatsapp_opt_in_evidence_url: str | None = Field(default=None, max_length=2048)
 
     @field_validator("whatsapp_opt_in_evidence_url")
@@ -163,6 +164,8 @@ async def update_contact_controls(prospect_id: UUID, payload: ContactControlsUpd
     await _authorize(request, payload.workspace_id, "admin", session)
     if payload.whatsapp_opt_in_confirmed and not payload.whatsapp_opt_in_evidence_url:
         raise HTTPException(status_code=422, detail="whatsapp_opt_in_evidence_required")
+    if payload.whatsapp_opt_in_confirmed and payload.whatsapp_account_id is None:
+        raise HTTPException(status_code=422, detail="whatsapp_account_required_for_consent")
     store = getattr(request.app.state, "campaign_store", None)
     if store is None:
         raise HTTPException(status_code=503, detail="contact_controls_not_configured")
@@ -173,6 +176,7 @@ async def update_contact_controls(prospect_id: UUID, payload: ContactControlsUpd
             actor_id=session["user_id"],
             email_suppressed=payload.email_suppressed,
             whatsapp_opt_in_confirmed=payload.whatsapp_opt_in_confirmed,
+            whatsapp_account_id=payload.whatsapp_account_id,
             whatsapp_opt_in_evidence_url=payload.whatsapp_opt_in_evidence_url,
         )
     except Exception:
