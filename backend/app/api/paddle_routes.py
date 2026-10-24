@@ -10,6 +10,7 @@ import hmac
 import json
 import re
 import time
+from urllib.parse import urlsplit
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -167,13 +168,41 @@ async def create_checkout(body: CheckoutRequest, request: Request):
             raise HTTPException(status_code=502, detail="paddle_checkout_creation_failed")
         data = response.json().get("data", {})
         checkout_url = data.get("checkout", {}).get("url") if isinstance(data, dict) else None
-        if not isinstance(checkout_url, str) or not checkout_url.startswith("https://"):
+        if not _trusted_checkout_url(checkout_url):
             raise HTTPException(status_code=502, detail="paddle_checkout_url_unavailable")
         return {"checkout_url": checkout_url, "transaction_id": data.get("id"), "plan_id": body.plan_id}
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=502, detail="paddle_checkout_unavailable") from None
+
+
+def _trusted_checkout_url(value: Any) -> bool:
+    """Only redirect users to the Paddle checkout host for the configured environment."""
+    if not isinstance(value, str) or len(value) > 2048:
+        return False
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    expected_host = (
+        "sandbox-checkout.paddle.com"
+        if settings.paddle_environment == "sandbox"
+        else "checkout.paddle.com"
+        if settings.paddle_environment == "production"
+        else None
+    )
+    return bool(
+        expected_host
+        and parsed.scheme == "https"
+        and hostname == expected_host
+        and parsed.username is None
+        and parsed.password is None
+        and port is None
+        and parsed.path.startswith("/")
+    )
 
 
 def _verify_signature(raw_body: bytes, header: str | None, secret: str) -> bool:

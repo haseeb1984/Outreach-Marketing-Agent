@@ -42,3 +42,28 @@ def test_paddle_signature_rejects_expired_timestamp():
 
 def test_paddle_signature_rejects_malformed_header():
     assert not _verify_signature(b"{}", "not-a-signature", "test-webhook-secret")
+
+
+
+def test_checkout_url_requires_exact_paddle_host_for_environment(monkeypatch):
+    from app.api import paddle_routes
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "sandbox")
+    assert paddle_routes._trusted_checkout_url("https://sandbox-checkout.paddle.com/checkout/abc")
+    assert not paddle_routes._trusted_checkout_url("https://checkout.paddle.com/checkout/abc")
+    assert not paddle_routes._trusted_checkout_url("https://attacker.example/checkout/abc")
+    assert not paddle_routes._trusted_checkout_url("https://sandbox-checkout.paddle.com.attacker.example/checkout")
+    assert not paddle_routes._trusted_checkout_url("https://user@sandbox-checkout.paddle.com/checkout")
+    assert not paddle_routes._trusted_checkout_url("http://sandbox-checkout.paddle.com/checkout")
+    assert not paddle_routes._trusted_checkout_url("https://sandbox-checkout.paddle.com:444/checkout")
+    assert not paddle_routes._trusted_checkout_url(None)
+
+
+def test_checkout_url_requires_production_host(monkeypatch):
+    from app.api import paddle_routes
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "production")
+    assert paddle_routes._trusted_checkout_url("https://checkout.paddle.com/checkout/abc")
+    assert not paddle_routes._trusted_checkout_url("https://sandbox-checkout.paddle.com/checkout/abc")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "invalid")
+    assert not paddle_routes._trusted_checkout_url("https://checkout.paddle.com/checkout/abc")
