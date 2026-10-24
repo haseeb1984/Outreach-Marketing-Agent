@@ -130,7 +130,7 @@ def test_password_reset_email_uses_backend_landing_route(monkeypatch):
     assert "https://app.example/api/v1/auth/reset-password?token=" in captured["body"]
 
 def test_workspace_invitation_links_to_authenticated_dashboard(monkeypatch):
-    delivery = SMTPEmailDelivery(_config())
+    delivery = SMTPEmailDelivery(_config(frontend_public_url="https://host.example", frontend_origins=""))
     captured = {}
 
     def capture(message):
@@ -144,5 +144,5 @@ def test_workspace_invitation_links_to_authenticated_dashboard(monkeypatch):
         role="member",
         expires_at=datetime.now(timezone.utc),
     ))
-    assert "https://app.example/app?invite_token=opaque-invitation-token-123456789" in captured["body"]
-    assert "/invitations/accept" not in captured["body"]
+    assert "https://host.example/invitations/accept#token=opaque-invitation-token-123456789" in captured["body"]
+    assert "app.example/app" not in captured["body"]
