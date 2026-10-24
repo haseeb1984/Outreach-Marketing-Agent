@@ -179,6 +179,8 @@ async def update_contact_controls(prospect_id: UUID, payload: ContactControlsUpd
             whatsapp_account_id=payload.whatsapp_account_id,
             whatsapp_opt_in_evidence_url=payload.whatsapp_opt_in_evidence_url,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="contact_controls_update_unavailable") from None
     if result is None:

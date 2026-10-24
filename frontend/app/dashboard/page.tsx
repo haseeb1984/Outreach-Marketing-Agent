@@ -49,6 +49,9 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       search_provider_not_configured: "Live public-web research is not configured on the server yet.",
       search_provider_unavailable: "The search provider is temporarily unavailable. Try again later.",
       search_response_invalid: "The search provider returned an unexpected response.",
+      whatsapp_account_not_active: "Choose an active, verified WhatsApp account in this workspace.",
+      whatsapp_account_required_for_consent: "Choose the WhatsApp account covered by the documented consent.",
+      whatsapp_opt_in_evidence_required: "Add an HTTPS URL to the consent evidence before saving opt-in.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
@@ -648,6 +651,35 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function recordWhatsAppConsent(event: FormEvent<HTMLFormElement>, prospect: Prospect) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    const form = new FormData(event.currentTarget);
+    const accountId = String(form.get("whatsapp_account_id") || "");
+    const evidenceUrl = String(form.get("whatsapp_opt_in_evidence_url") || "").trim();
+    if (!accountId || !evidenceUrl.startsWith("https://")) {
+      setError("Select an active WhatsApp account and provide an HTTPS consent evidence URL.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/prospects/" + encodeURIComponent(prospect.id) + "/contact-controls", csrf, {
+        method: "PUT",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          whatsapp_opt_in_confirmed: true,
+          whatsapp_account_id: accountId,
+          whatsapp_opt_in_evidence_url: evidenceUrl,
+        }),
+      });
+      setNotice("WhatsApp opt-in evidence saved for the selected account. This records consent; it does not send a message.");
+      event.currentTarget.reset();
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp consent could not be saved.");
+    } finally { setBusy(false); }
+  }
+
   async function generateDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !selectedCampaign || !selectedProspect) return;
@@ -892,7 +924,7 @@ export default function DashboardPage() {
           </article>
           {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Evidence: public search result · Review required · Not saved to CRM</p></article>)}</div>}
         </section>
-        <section className="section"><h2>Prospect CRM</h2><div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p>{p.contact_email && <p className="fine">Email outreach: {p.email_suppressed ? "Suppressed" : "Not suppressed"}</p>}<p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p>{p.contact_email && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEmailSuppression(p, !p.email_suppressed)}>{p.email_suppressed ? "Allow email outreach" : "Suppress email outreach"}</button></div>}</article>) : <article className="card"><p>No prospects saved yet.</p></article>}</div></section>
+        <section className="section"><h2>Prospect CRM</h2><div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p>{p.contact_email && <p className="fine">Email outreach: {p.email_suppressed ? "Suppressed" : "Not suppressed"}</p>}{p.contact_phone_e164 && <p className="fine">WhatsApp consent: {p.whatsapp_opt_in_documented ? "Evidence recorded — verify account scope before use" : "Not documented"}</p>}<p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions">{p.contact_email && <button className="button secondary" type="button" disabled={busy} onClick={() => setEmailSuppression(p, !p.email_suppressed)}>{p.email_suppressed ? "Allow email outreach" : "Suppress email outreach"}</button>}</div>}{p.contact_phone_e164 && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details><summary>Record WhatsApp opt-in evidence</summary><p className="fine">Only record this after the contact has actually opted in. A phone number or public profile is not consent. Outbound WhatsApp sending remains disabled until provider and operational checks are completed.</p><form onSubmit={event=>recordWhatsAppConsent(event,p)}><div className="field"><label htmlFor={"whatsapp-account-"+p.id}>WhatsApp business account</label><select id={"whatsapp-account-"+p.id} name="whatsapp_account_id" required defaultValue=""><option value="">Choose an active account</option>{whatsappAccounts.filter(account=>account.status==="active").map(account=><option key={account.id} value={account.id}>{account.label} · {account.phone_number_id}</option>)}</select></div><div className="field"><label htmlFor={"whatsapp-consent-evidence-"+p.id}>Consent evidence URL (HTTPS)</label><input id={"whatsapp-consent-evidence-"+p.id} name="whatsapp_opt_in_evidence_url" type="url" required pattern="https://.+" maxLength={2048} placeholder="https://example.com/consent-record" /></div><button className="button secondary" type="submit" disabled={busy || !whatsappAccounts.some(account=>account.status==="active")}>Save documented opt-in</button></form></details>}</article>) : <article className="card"><p>No prospects saved yet.</p></article>}</div></section>
         <section className="section"><h2>Prepare an outreach draft</h2><article className="card"><p className="fine">Draft generation uses workspace entitlements and saved prospect evidence. Every draft enters review; this form never sends a message.</p><form onSubmit={generateDraft}><div className="field"><label htmlFor="draft-campaign">Campaign</label><select id="draft-campaign" required value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}><option value="">Choose a campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="field"><label htmlFor="draft-prospect">Prospect</label><select id="draft-prospect" required value={selectedProspect} onChange={e=>setSelectedProspect(e.target.value)}><option value="">Choose a prospect</option>{prospects.map(p=><option key={p.id} value={p.id}>{p.name} · {p.company}</option>)}</select></div><div className="field"><label htmlFor="draft-channel">Channel</label><select id="draft-channel" value={draftChannel} onChange={e=>setDraftChannel(e.target.value)}><option value="email">Email</option><option value="whatsapp">WhatsApp draft (eligibility checked by backend)</option></select></div><div className="field"><label htmlFor="draft-cta">Call to action</label><textarea id="draft-cta" required maxLength={500} value={draftCallToAction} onChange={e=>setDraftCallToAction(e.target.value)} placeholder="Suggest a short, relevant next step" /></div><button className="button" disabled={busy || !canWrite || !workspaceId || !campaigns.length || !prospects.length}>Generate draft for review</button></form></article></section>
         <section className="section"><h2>Draft review queue</h2><p className="fine">Approving a draft does not send it. Sending remains a separate explicit action.</p><div className="cards">{drafts.length ? drafts.map(d=><article className="card" key={d.id}><p className="eyebrow">{d.channel || "Outreach"} · {d.status}</p><h3>{d.subject || d.prospect_name || "Outreach draft"}</h3><p>{d.body || "Draft content is not available."}</p>{d.status === "approved" && d.channel === "email" && <div className="actions"><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => queueDraft(d)}>Queue email</button></div>}{d.status === "pending_approval" && <div className="actions"><button type="button" className="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"approved")}>Approve draft</button><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"rejected")}>Reject</button></div>}</article>) : <article className="card"><p>No drafts yet. Draft generation requires configured paid entitlements and eligible prospect evidence.</p></article>}</div></section>
         <section className="section" aria-labelledby="integrations-title"><h2 id="integrations-title">Provider connections</h2>
