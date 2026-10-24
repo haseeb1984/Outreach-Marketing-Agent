@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 type Workspace = { id: string; name: string; role: string };
 type Prospect = { id: string; name: string; company: string; role?: string | null; contact_email?: string | null; contact_phone_e164?: string | null; website_url: string; evidence_url: string; fit_reason: string; stage: string; notes?: string | null; email_suppressed?: boolean; whatsapp_opt_in_documented?: boolean; whatsapp_opt_in_account_id?: string | null };
-type Campaign = { id: string; name: string; client_business: string; target_customer_profile: string; status?: string };
+type Campaign = { id: string; name: string; client_business: string; client_offer: string; target_customer_profile: string; status?: string };
 type Draft = { id: string; subject?: string; body?: string; channel?: string; status: string; prospect_name?: string };
 type Plan = { id: string; name: string; description: string; display_price: string | null; currency: string | null; billing_interval: string | null; checkout_available: boolean };
 type Delivery = { id: string; subject?: string; channel?: string; status: string; error_code?: string | null; created_at?: string };
@@ -58,6 +58,7 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       invalid_prospect_stage: "Choose a valid CRM stage.",
       project_business_context_required: "Complete the project's business model and target market before running a growth review.",
       project_website_required: "Add a website URL to this project before running a growth review.",
+      campaign_archived: "This campaign is archived, so its drafts cannot be queued or sent.",
       domain_not_verified: "Verify this website domain in the workspace before running a growth review.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
@@ -525,6 +526,31 @@ export default function DashboardPage() {
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Project could not be saved.");
+    } finally { setBusy(false); }
+  }
+
+  async function updateCampaign(event: FormEvent<HTMLFormElement>, campaign: Campaign) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    const form = new FormData(event.currentTarget);
+    const status = String(form.get("status") || "draft");
+    if (status === "archived" && !window.confirm("Archive campaign " + campaign.name + "? New drafts and queued sends will be blocked; existing history is retained.")) return;
+    const payload = {
+      workspace_id: workspaceId,
+      name: String(form.get("name") || "").trim(),
+      client_business: String(form.get("client_business") || "").trim(),
+      client_offer: String(form.get("client_offer") || "").trim(),
+      target_customer_profile: String(form.get("target_customer_profile") || "").trim(),
+      status,
+    };
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/campaigns/" + encodeURIComponent(campaign.id), csrf, { method: "PATCH", body: JSON.stringify(payload) });
+      if (status === "archived") setSelectedCampaign(current => current === campaign.id ? "" : current);
+      setNotice("Campaign settings saved.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Campaign could not be updated.");
     } finally { setBusy(false); }
   }
 
@@ -1071,7 +1097,7 @@ export default function DashboardPage() {
             <button className="button" type="submit" disabled={busy || !canWrite || !workspaceId || !csrf}>Save project profile</button>
           </form></article>
         </section>
-        <section className="section"><h2>Campaigns</h2><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div></section>
+        <section className="section"><h2>Campaigns</h2><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span><details><summary>Edit campaign settings</summary><form onSubmit={event=>updateCampaign(event,c)}><div className="field"><label htmlFor={"campaign-edit-name-"+c.id}>Campaign name</label><input id={"campaign-edit-name-"+c.id} name="name" required maxLength={200} defaultValue={c.name} /></div><div className="field"><label htmlFor={"campaign-edit-business-"+c.id}>Business / client</label><input id={"campaign-edit-business-"+c.id} name="client_business" required maxLength={240} defaultValue={c.client_business} /></div><div className="field"><label htmlFor={"campaign-edit-offer-"+c.id}>Offer</label><textarea id={"campaign-edit-offer-"+c.id} name="client_offer" required maxLength={2000} defaultValue={c.client_offer} /></div><div className="field"><label htmlFor={"campaign-edit-audience-"+c.id}>Target customer profile</label><textarea id={"campaign-edit-audience-"+c.id} name="target_customer_profile" required maxLength={2000} defaultValue={c.target_customer_profile} /></div><div className="field"><label htmlFor={"campaign-edit-status-"+c.id}>Status</label><select id={"campaign-edit-status-"+c.id} name="status" defaultValue={c.status || "draft"}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></div><button className="button secondary" type="submit" disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Save campaign</button></form></details></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div></section>
         <section className="section" aria-labelledby="website-audit-title"><h2 id="website-audit-title">Website growth audit</h2>
           <article className="card">
             <p className="fine">Read-only crawl for websites you own or are authorized to audit. Workspace admin verification is required before scanning a domain.</p>
