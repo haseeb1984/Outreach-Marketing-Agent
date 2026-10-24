@@ -9,12 +9,14 @@ class DeliveryStore:
     async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str,email_account_id: UUID|None=None)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
-                d=await c.fetchrow("""SELECT d.id,d.status,d.channel,p.contact_email,p.stage,cc.email_suppressed
-                  FROM outreach_drafts d JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
+                d=await c.fetchrow("""SELECT d.id,d.status,d.channel,p.contact_email,p.stage,cc.email_suppressed,c.status AS campaign_status
+                  FROM outreach_drafts d JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                  JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
                   LEFT JOIN outreach_contact_controls cc ON cc.workspace_id=d.workspace_id AND cc.prospect_id=d.prospect_id
                   WHERE d.id=$1 AND d.workspace_id=$2 AND p.archived_at IS NULL FOR UPDATE OF d""",draft_id,workspace_id)
                 if d is None: raise LookupError("draft_not_found")
                 if d["status"]!="approved": raise ValueError("draft_not_approved")
+                if d["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if d["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not d["contact_email"]: raise ValueError("prospect_email_required")
                 if d["email_suppressed"] or d["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
@@ -40,14 +42,16 @@ class DeliveryStore:
         async with self._pool.acquire() as c:
             async with c.transaction():
                 r=await c.fetchrow("""SELECT q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id,
-                  p.contact_email,p.stage,cc.email_suppressed FROM outreach_deliveries q
+                  p.contact_email,p.stage,cc.email_suppressed,c.status AS campaign_status FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                  JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
                   LEFT JOIN outreach_contact_controls cc ON cc.workspace_id=d.workspace_id AND cc.prospect_id=d.prospect_id
                   WHERE q.id=$1 AND q.workspace_id=$2 FOR UPDATE OF q,d""",delivery_id,workspace_id)
                 if r is None: raise LookupError("delivery_not_found")
                 if r["queue_status"]!="queued": raise ValueError("delivery_not_queued")
                 if r["draft_status"]!="approved": raise ValueError("draft_not_approved")
+                if r["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if r["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not r["contact_email"]: raise ValueError("prospect_email_required")
                 if r["email_suppressed"] or r["stage"] == "do_not_contact": raise ValueError("contact_suppressed")

@@ -36,6 +36,24 @@ class CampaignCreate(BaseModel):
     target_customer_profile: str = Field(min_length=1, max_length=2000)
 
 
+class CampaignUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    client_business: str = Field(min_length=1, max_length=240)
+    client_offer: str = Field(min_length=1, max_length=2000)
+    target_customer_profile: str = Field(min_length=1, max_length=2000)
+    status: str = "draft"
+
+    @field_validator("status")
+    @classmethod
+    def valid_status(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"draft", "active", "paused", "archived"}:
+            raise ValueError("invalid_campaign_status")
+        return value
+
+
 class DraftCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
@@ -81,6 +99,26 @@ async def create_campaign(payload: CampaignCreate, request: Request):
         )
     except Exception:
         raise HTTPException(status_code=503, detail="campaign_create_unavailable") from None
+
+
+@router.patch("/campaigns/{campaign_id}")
+async def update_campaign(campaign_id: UUID, payload: CampaignUpdate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    try:
+        result = await _store(request).update_campaign(
+            workspace_id=payload.workspace_id, campaign_id=campaign_id, name=payload.name,
+            client_business=payload.client_business, client_offer=payload.client_offer,
+            target_customer_profile=payload.target_customer_profile, status=payload.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="campaign_update_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=404, detail="campaign_not_found")
+    return result
 
 
 @router.get("/campaigns")

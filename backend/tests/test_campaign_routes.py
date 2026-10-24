@@ -5,7 +5,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from app.api.campaign_routes import CampaignCreate, DraftCreate, DraftEdit, DraftReview
+from app.api.campaign_routes import CampaignCreate, CampaignUpdate, DraftCreate, DraftEdit, DraftReview
 
 
 def test_campaign_schema_rejects_extra_fields_and_bounds_inputs():
@@ -67,3 +67,11 @@ def test_draft_edit_schema_requires_bounded_body_and_rejects_extra_fields():
         DraftEdit(workspace_id="workspace-a", body="   ")
     with pytest.raises(ValidationError):
         DraftEdit(**base, auto_send=True)
+
+
+def test_campaign_update_schema_accepts_lifecycle_states_and_rejects_unknown_status():
+    base = {"workspace_id": "workspace-a", "name": "Campaign", "client_business": "Business", "client_offer": "Offer", "target_customer_profile": "Audience"}
+    assert CampaignUpdate(**base, status="paused").status == "paused"
+    assert CampaignUpdate(**base, status="archived").status == "archived"
+    with pytest.raises(ValidationError):
+        CampaignUpdate(**base, status="send_now")

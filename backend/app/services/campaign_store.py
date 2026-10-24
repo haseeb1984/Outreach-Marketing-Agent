@@ -38,6 +38,24 @@ class CampaignStore:
             )
         return [self._serialize(dict(row)) for row in rows]
 
+    async def update_campaign(self, *, workspace_id: str, campaign_id: UUID, name: str, client_business: str, client_offer: str, target_customer_profile: str, status: str) -> dict[str, Any] | None:
+        if status not in {"draft", "active", "paused", "archived"}:
+            raise ValueError("invalid_campaign_status")
+        fields = ((name, 200), (client_business, 240), (client_offer, 2000), (target_customer_profile, 2000))
+        if any(not isinstance(value, str) or not value.strip() or len(value.strip()) > maximum for value, maximum in fields):
+            raise ValueError("invalid_campaign_fields")
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """UPDATE outreach_campaigns SET name=$3,client_business=$4,client_offer=$5,
+                   target_customer_profile=$6,status=$7,updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2
+                   RETURNING id,workspace_id,name,client_business,client_offer,target_customer_profile,
+                             status,created_by,created_at,updated_at""",
+                campaign_id, workspace_id, name.strip(), client_business.strip(),
+                client_offer.strip(), target_customer_profile.strip(), status,
+            )
+        return self._serialize(dict(row)) if row else None
+
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
                            ) -> dict[str, Any] | None:
