@@ -1,6 +1,6 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-23  
+Last assessed: 2026-10-24  
 Source: current `main` code/documentation, production HTTP smoke checks, and the successful backend CI/dependency audit for commit `013863f`. Frontend/browser/provider production acceptance remains unverified.
 
 ## How to read these numbers
@@ -20,6 +20,18 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 6 — Production verification | 40% | Production deployment, smoke checks, backend CI across Python 3.11/3.12/3.13, PostgreSQL auth integration and dependency audit verified; frontend/browser/provider acceptance remains unverified |
 
 Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(60×0.20)+(70×0.20)+(51×0.15)+(40×0.10)=61.15`, rounded to **61%**.
+
+
+
+## Implementation update — 2026-10-24
+
+New verified code and CI evidence since the prior score:
+- Account-scoped WhatsApp consent is now persisted and visible in CRM; backend and frontend CI passed on `8024c42`.
+- Workspace-admin-triggered inbound webhook processing now uses a tenant-scoped worker claim query and does not send messages; backend and frontend CI passed on `85f5790`.
+- Dashboard exposes stale email-delivery reconciliation that moves abandoned processing records to `uncertain` without automatic retry; backend and frontend CI passed on `b47a229`.
+- A new regression test explicitly verifies that workspace-triggered worker claims are constrained to active accounts for the requested workspace.
+
+These changes improve the implementation inventory but do **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
 
 ## Phase-by-phase checkpoints
 

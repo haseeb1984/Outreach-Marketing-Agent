@@ -5,6 +5,17 @@
 **Latest backend CI evidence:** [Run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619) passed on the deployed commit: Python 3.11/3.12/3.13 automated tests, Python 3.12 PostgreSQL auth integration tests, and dependency audit.  
 **Scope:** Repository/source review and automated CI. The dashboard route is deployed through the Vercel Git integration, but an authenticated production browser journey has not been verified. This is not a penetration test or proof that external provider credentials work.
 
+
+
+## Implementation update — 2026-10-24
+
+- Added account-scoped WhatsApp consent persistence: each documented opt-in records the selected WhatsApp account, and send policy fails closed when the consent belongs to a different account. CRM displays the account covered by the consent and allows workspace admins to record evidence only for active accounts. Backend and frontend CI passed on commit `8024c42` (runs [40056961512](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40056961512) and [40056961471](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40056961471)).
+- Added a dashboard control for bounded, workspace-scoped Meta webhook event processing. The worker can be triggered by a workspace admin and claims only events mapped to that workspace's active WhatsApp accounts; no outbound messages are sent by this worker.
+- Added a dashboard control for reconciling stale email sends to an operator-visible `uncertain` state without retrying them automatically.
+- Backend and frontend CI passed for the delivery-recovery dashboard commit `b47a229` (runs [40079787425](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079787425) and [40079787418](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079787418)).
+- Backend and frontend CI passed for the workspace-scoped webhook processor and admin dashboard trigger on commit `85f5790` (runs [40079930971](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079930971) and [40079930977](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079930977)).
+- Remaining gates: live Meta webhook/account acceptance, SMTP inbox delivery, Paddle sandbox/lifecycle acceptance, production DB migration verification, Hostinger upload, authenticated browser journey, and accessibility/performance/backup/incident checks. These must not be counted as completed merely because CI passes.
+
 ## Evidence-based phase matrix
 
 | Phase / capability | Evidence currently in repository | Status |

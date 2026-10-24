@@ -85,3 +85,34 @@ def test_event_processor_rejects_boolean_batch_size():
 
     with pytest.raises(ValueError, match="batch_size_out_of_range"):
         asyncio.run(process_pending_whatsapp_events(NoDatabase(), batch_size=True))
+
+
+def test_workspace_scoped_worker_only_claims_active_accounts_for_that_workspace():
+    import asyncio
+    from app.services.whatsapp_event_processor import process_pending_whatsapp_events
+
+    captured = {}
+
+    class Transaction:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): return False
+
+    class Connection:
+        def transaction(self): return Transaction()
+        async def fetchrow(self, query, *args):
+            captured["query"] = query
+            captured["args"] = args
+            return None
+
+    class Acquire:
+        async def __aenter__(self): return Connection()
+        async def __aexit__(self, *args): return False
+
+    class Pool:
+        def acquire(self): return Acquire()
+
+    result = asyncio.run(process_pending_whatsapp_events(Pool(), workspace_id="workspace-a", batch_size=1))
+    assert result == {"processed": 0, "messages_saved": 0, "statuses_saved": 0, "unmapped": 0, "failed": 0}
+    assert "EXISTS" in captured["query"]
+    assert "a.workspace_id=$1 AND a.status='active'" in captured["query"]
+    assert captured["args"] == ("workspace-a",)
