@@ -5,7 +5,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from app.api.campaign_routes import CampaignCreate, DraftCreate, DraftReview
+from app.api.campaign_routes import CampaignCreate, DraftCreate, DraftEdit, DraftReview
 
 
 def test_campaign_schema_rejects_extra_fields_and_bounds_inputs():
@@ -57,3 +57,13 @@ def test_draft_route_reserves_quota_before_generation_and_consumes_success():
     assert 'outcome="consumed"' in source
     assert 'outcome="released"' in source
     assert 'reason") == "idempotent_replay"' in source
+
+
+def test_draft_edit_schema_requires_bounded_body_and_rejects_extra_fields():
+    base = {"workspace_id": "workspace-a", "body": "Updated body"}
+    assert DraftEdit(**base, subject="Updated subject").body == "Updated body"
+    assert DraftEdit(**base, subject="  ").subject is None
+    with pytest.raises(ValidationError):
+        DraftEdit(workspace_id="workspace-a", body="   ")
+    with pytest.raises(ValidationError):
+        DraftEdit(**base, auto_send=True)

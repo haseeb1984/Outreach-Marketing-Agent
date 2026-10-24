@@ -92,6 +92,26 @@ async def list_campaigns(request: Request, workspace_id: str = Query(min_length=
             "limit": limit, "offset": offset}
 
 
+class DraftEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    subject: str | None = Field(default=None, max_length=300)
+    body: str = Field(min_length=1, max_length=10000)
+
+    @field_validator("body")
+    @classmethod
+    def valid_body(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("draft_body_invalid")
+        return value
+
+    @field_validator("subject")
+    @classmethod
+    def clean_subject(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 @router.post("/drafts", status_code=201)
 async def create_draft(payload: DraftCreate, request: Request):
     _, _, session = await _authenticated(request)
@@ -189,3 +209,24 @@ async def review_draft(draft_id: UUID, payload: DraftReview, request: Request):
     if draft is None:
         raise HTTPException(status_code=409, detail="draft_not_pending_or_not_found")
     return draft
+
+
+@router.patch("/drafts/{draft_id}")
+async def edit_draft(draft_id: UUID, payload: DraftEdit, request: Request):
+    """Allow workspace members to edit content before approval; never sends the draft."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    try:
+        result = await _store(request).update_draft(
+            workspace_id=payload.workspace_id, draft_id=draft_id,
+            actor_id=session["user_id"], subject=payload.subject, body=payload.body,
+        )
+    except ValueError as exc:
+        reason = str(exc)
+        raise HTTPException(status_code=409 if reason == "draft_not_pending" else 422, detail=reason) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="draft_edit_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=404, detail="draft_not_found")
+    return result

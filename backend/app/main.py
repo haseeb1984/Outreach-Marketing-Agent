@@ -298,8 +298,10 @@ async def readiness() -> Response:
                             '028_platform_admin_audit.sql',
                             '029_unique_platform_plan_price_ids.sql',
                             '030_subscription_plan_slug.sql',
-                            '031_whatsapp_outbound_queue.sql'
-                          )) = 26"""
+                            '031_whatsapp_outbound_queue.sql',
+                            '032_whatsapp_consent_account_scope.sql',
+                            '033_draft_edit_audit_event.sql'
+                          )) = 28"""
             )
             if not schema_ready:
                 return JSONResponse(

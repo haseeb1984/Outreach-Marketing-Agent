@@ -117,6 +117,45 @@ class CampaignStore:
             )
         return [self._serialize(dict(row)) for row in rows]
 
+    async def update_draft(
+        self, *, workspace_id: str, draft_id: UUID, actor_id: UUID | str,
+        subject: str | None, body: str,
+    ) -> dict[str, Any] | None:
+        """Edit content only while a draft is pending human approval."""
+        cleaned_body = body.strip() if isinstance(body, str) else ""
+        cleaned_subject = subject.strip() if isinstance(subject, str) else None
+        if not cleaned_body or len(cleaned_body) > 10000:
+            raise ValueError("draft_body_invalid")
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                current = await conn.fetchrow(
+                    """SELECT channel,status FROM outreach_drafts
+                       WHERE id=$1 AND workspace_id=$2 FOR UPDATE""",
+                    draft_id, workspace_id,
+                )
+                if current is None:
+                    return None
+                if current["status"] != "pending_approval":
+                    raise ValueError("draft_not_pending")
+                if current["channel"] == "email" and not cleaned_subject:
+                    raise ValueError("draft_subject_required")
+                if current["channel"] == "whatsapp":
+                    cleaned_subject = None
+                row = await conn.fetchrow(
+                    """UPDATE outreach_drafts SET subject=$3,body=$4,updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status='pending_approval'
+                       RETURNING *""",
+                    draft_id, workspace_id, cleaned_subject, cleaned_body,
+                )
+                if row is None:
+                    raise ValueError("draft_not_pending")
+                await conn.execute(
+                    """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type,note)
+                       VALUES($1,$2,$3,'edited','Draft content edited before approval')""",
+                    draft_id, workspace_id, UUID(str(actor_id)),
+                )
+        return self._serialize(dict(row))
+
     async def review_draft(self, *, workspace_id: str, draft_id: UUID, actor_id: UUID | str,
                            decision: str, note: str | None = None) -> dict[str, Any] | None:
         if decision not in {"approved", "rejected"}:
