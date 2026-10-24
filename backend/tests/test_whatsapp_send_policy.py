@@ -86,6 +86,7 @@ def test_do_not_contact_stage_blocks_whatsapp_even_with_opt_in():
         "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "whatsapp_opt_in_evidence_url": "https://example.test/consent",
         "whatsapp_account_id": account_id,
+        "whatsapp_account_id": account_id,
     }
     result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect])
     assert result == {"allowed": False, "reason": "contact_suppressed"}
@@ -100,6 +101,7 @@ def test_account_specific_opt_out_blocks_send():
         "stage": "new",
         "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": account_id,
     }
     preference = {
         "opted_out_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
@@ -119,6 +121,7 @@ def test_open_customer_service_window_does_not_require_template():
         "stage": "new",
         "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": account_id,
     }
     preference = {
         "opted_out_at": None,
@@ -142,6 +145,7 @@ def test_closed_customer_service_window_requires_approved_provider_template():
         "stage": "new",
         "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": account_id,
     }
     preference = {
         "opted_out_at": None,
@@ -173,6 +177,7 @@ def test_opt_in_for_different_whatsapp_account_fails_closed():
         "stage": "new",
         "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
         "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": account_id,
         "whatsapp_account_id": uuid4(),
     }
     result, conn = run_policy([{"id": account_id, "has_credentials": True}, prospect], account_id=account_id)
