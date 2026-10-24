@@ -18,6 +18,7 @@ type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type WhatsAppConversation = { id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; provider_timestamp?: string | null; received_at: string };
+type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; description: string; evidence_type: string; requires_human_review: boolean };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -74,6 +75,7 @@ export default function DashboardPage() {
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
   const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
   const [whatsappInboxBusy, setWhatsappInboxBusy] = useState(false);
   const [whatsappLabel, setWhatsappLabel] = useState("");
@@ -175,9 +177,13 @@ export default function DashboardPage() {
     setSelectedEmailAccountId(current => loadedEmailAccounts.some(account => account.id === current && account.status === "active") ? current : (loadedEmailAccounts.find(account => account.status === "active")?.id || ""));
     const whatsappAccountResult = await Promise.allSettled([api<ApiResult<WhatsAppAccount>>("/api/v1/integrations/whatsapp/accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
     setWhatsappAccounts(whatsappAccountResult[0].status === "fulfilled" ? (whatsappAccountResult[0].value.items || []) : []);
-    const inboxResult = await Promise.allSettled([api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token)]);
-    const loadedConversations = inboxResult[0].status === "fulfilled" ? (inboxResult[0].value.items || []) : [];
+    const [inboxResult, webhookDeadLetterResult] = await Promise.allSettled([
+      api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
+      api<{ items: WhatsAppWebhookEvent[] }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25", token),
+    ]);
+    const loadedConversations = inboxResult.status === "fulfilled" ? (inboxResult.value.items || []) : [];
     setWhatsappConversations(loadedConversations);
+    setWhatsappDeadLetterEvents(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.items || []) : []);
     setSelectedWhatsAppConversation(current => {
       if (loadedConversations.some(item => item.id === current)) return current;
       setWhatsappMessages([]);
@@ -749,6 +755,22 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function retryWhatsAppDeadLetter(event: WhatsAppWebhookEvent) {
+    if (!workspaceId || !csrf || !window.confirm("Requeue this exhausted inbound webhook event for processing? This does not send a WhatsApp message.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api<{ state: string }>(
+        "/api/v1/integrations/whatsapp/inbox/webhook-events/" + encodeURIComponent(event.id) + "/retry?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf,
+        { method: "POST" },
+      );
+      setNotice("Webhook event requeued. Select Process pending inbound events to attempt processing; no message was sent.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Webhook event could not be requeued.");
+    } finally { setBusy(false); }
+  }
+
   async function reconcileStaleDeliveries() {
     if (!workspaceId || !csrf || !window.confirm("Mark email sends stuck in processing for at least 15 minutes as uncertain? This will not retry or resend any email.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -984,6 +1006,16 @@ export default function DashboardPage() {
             <h3>WhatsApp inbox</h3>
             <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; replies and outbound sending remain disabled until opt-in, template and delivery safeguards are complete.</p>
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !whatsappAccounts.some(account=>account.status==="active")} onClick={processWhatsAppInboxEvents}>Process pending inbound events</button><p className="fine">Processes at most 25 pending events for active accounts in this workspace. Does not send messages.</p></div>}
+            {whatsappDeadLetterEvents.length > 0 && <article className="card">
+              <h4>Webhook events needing attention ({whatsappDeadLetterEvents.length})</h4>
+              <p className="fine">These inbound events exhausted automatic attempts. Requeue only after reviewing the configuration; requeueing does not send a message.</p>
+              <div className="cards">{whatsappDeadLetterEvents.map(event=><article className="card" key={event.id}>
+                <p className="eyebrow">{event.event_kind} · Dead letter</p>
+                <p className="fine">Received: {event.received_at} · Phone number ID: {event.phone_number_id || "unmapped"}</p>
+                {event.processing_error_code && <p className="fine">Last error: {event.processing_error_code}</p>}
+                <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>retryWhatsAppDeadLetter(event)}>Requeue event</button>
+              </article>)}</div>
+            </article>}
             <div className="cards">
               <article className="card">
                 <h4>Conversations ({whatsappConversations.length})</h4>
