@@ -14,12 +14,12 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Overall implementation progress | **61/100** | Weighted score across the six product phases below; deployment smoke checks verified, full suite still pending |
 | Phase 1 — Core platform | 80% | Identity, workspace, CRM and project foundations |
 | Phase 2 — Discovery and research | 50% | Public-web research and site-audit foundations; deeper competitor/influencer intelligence remains incomplete |
-| Phase 3 — Provider integrations | 60% | SMTP, WhatsApp intake, policy-gated queue foundations exist; provider dispatch remains disabled |
-| Phase 4 — Outreach and replies | 70% | Campaigns, approval queue, email delivery and reply ingestion foundations |
-| Phase 5 — Automation and analytics | 51% | Entitlements, activity analytics, and a quota-gated WhatsApp queue exist; dispatch/scheduling and outcome attribution remain incomplete |
-| Phase 6 — Production verification | 40% | Production deployment, smoke checks, backend CI across Python 3.11/3.12/3.13, PostgreSQL auth integration and dependency audit verified; frontend/browser/provider acceptance remains unverified |
+| Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
+| Phase 4 — Outreach and replies | 72% | Campaigns, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
+| Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
+| Phase 6 — Production verification | 42% | Backend CI and frontend production build/Hostinger packaging pass on recent commits; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(60×0.20)+(70×0.20)+(51×0.15)+(40×0.10)=61.15`, rounded to **61%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(80×0.20)+(50×0.15)+(64×0.20)+(72×0.20)+(53×0.15)+(42×0.10)=62.85`, rounded to **63%**.
 
 
 
@@ -31,7 +31,7 @@ New verified code and CI evidence since the prior score:
 - Dashboard exposes stale email-delivery reconciliation that moves abandoned processing records to `uncertain` without automatic retry; backend and frontend CI passed on `b47a229`.
 - A new regression test explicitly verifies that workspace-triggered worker claims are constrained to active accounts for the requested workspace.
 
-These changes improve the implementation inventory but do **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
+The weighted implementation estimate is now **63/100**. This is an evidence-based estimate, not a test-pass rate or release-readiness score; it does **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
 
 ## Phase-by-phase checkpoints
 
@@ -204,3 +204,6 @@ A feature marked implemented means repository code exists. It must not be descri
 - Dependency audit had identified seven advisories in cryptography 46.0.7. The allowed requirement is now `cryptography>=50.0.0,<51.0.0`; the subsequent audit passed.
 - Production Vercel deployment is READY on the same commit; `/`, `/health`, `/openapi.json`, and `/docs` returned HTTP 200.
 - Overall score updated to **61/100** (Phase 6 **40%**). Live provider, frontend browser, and production database migration acceptance remain incomplete.
+
+
+- Added workspace-admin UI to review/requeue dead-letter WhatsApp webhook events; requeueing does not send a message and remains separate from the workspace-scoped processing action. Backend CI passed on `2c446fb` (run [40080032774](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40080032774)); frontend build/type-check/Hostinger packaging passed on `30afae3` (run [40080119286](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40080119286)).
