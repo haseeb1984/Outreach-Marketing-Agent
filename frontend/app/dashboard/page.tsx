@@ -654,7 +654,8 @@ export default function DashboardPage() {
   async function recordWhatsAppConsent(event: FormEvent<HTMLFormElement>, prospect: Prospect) {
     event.preventDefault();
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const accountId = String(form.get("whatsapp_account_id") || "");
     const evidenceUrl = String(form.get("whatsapp_opt_in_evidence_url") || "").trim();
     if (!accountId || !evidenceUrl.startsWith("https://")) {
@@ -673,7 +674,7 @@ export default function DashboardPage() {
         }),
       });
       setNotice("WhatsApp opt-in evidence saved for the selected account. This records consent; it does not send a message.");
-      event.currentTarget.reset();
+      formElement.reset();
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "WhatsApp consent could not be saved.");
