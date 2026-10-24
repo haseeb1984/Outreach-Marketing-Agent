@@ -75,3 +75,16 @@ def test_campaign_update_schema_accepts_lifecycle_states_and_rejects_unknown_sta
     assert CampaignUpdate(**base, status="archived").status == "archived"
     with pytest.raises(ValidationError):
         CampaignUpdate(**base, status="send_now")
+
+
+def test_paused_and_archived_campaigns_are_blocked_in_draft_and_delivery_paths():
+    import inspect
+    from app.services.campaign_store import CampaignStore
+    from app.services.delivery_store import DeliveryStore
+
+    assert 'campaign["status"] == "paused"' in inspect.getsource(CampaignStore.create_draft)
+    enqueue_source = inspect.getsource(DeliveryStore.enqueue)
+    claim_source = inspect.getsource(DeliveryStore.claim)
+    for source in (enqueue_source, claim_source):
+        assert 'campaign_status"] == "paused"' in source
+        assert 'campaign_status"] == "archived"' in source

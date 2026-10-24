@@ -15,11 +15,11 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
 | Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
 | Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
-| Phase 4 — Outreach and replies | 75% | Editable campaigns and audited pending drafts, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
+| Phase 4 — Outreach and replies | 76% | Editable/pausable/archivable campaigns, audited pending drafts, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
 | Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 42% | Backend CI and frontend production build/Hostinger packaging pass on recent commits; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(75×0.20)+(53×0.15)+(42×0.10)=64.6`, rounded to **65%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(76×0.20)+(53×0.15)+(42×0.10)=64.8`, rounded to **65%**.
 
 
 
@@ -220,3 +220,5 @@ A feature marked implemented means repository code exists. It must not be descri
 - Human draft editing update: workspace members can edit pending email/WhatsApp draft content before approval; edits are recorded in the draft-event audit trail. Approved/rejected drafts cannot be edited through this endpoint. Migration `033_draft_edit_audit_event.sql` extends the event constraint, and readiness now checks migrations 032–033. Backend CI and frontend production build/Hostinger packaging passed on `cc78131` (runs [40081811654](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081811654) and [40081811655](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40081811655)).
 
 - Campaign lifecycle update: campaign settings can be edited and campaigns archived from the dashboard; archived campaigns are blocked at draft queue/claim time so approved historical drafts cannot be sent after archival. Backend CI and frontend build/Hostinger packaging passed on `94956c3` and `658409c` (runs [40082121512](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082121512), [40082233119](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082233119), [40082233161](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082233161)).
+
+- Campaign safety refinement: paused campaigns now block draft generation and are rechecked at both email enqueue and send claim; archived campaigns remain blocked as well. Added regression assertions for these policy guards. Backend CI and frontend build/packaging passed on `f418e54` (runs [40082440945](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082440945) and [40082440947](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082440947)).
