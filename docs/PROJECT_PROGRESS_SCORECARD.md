@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
 Last assessed: 2026-10-24  
-Source: current `main` code/documentation, production HTTP smoke checks, and the successful backend CI/dependency audit for commit `013863f`. Frontend/browser/provider production acceptance remains unverified.
+Source: current `main` code/documentation, production HTTP smoke checks, and the recent successful backend/frontend CI runs listed below. Frontend upload/browser/provider production acceptance remains unverified.
 
 ## How to read these numbers
 
@@ -11,7 +11,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **61/100** | Weighted score across the six product phases below; deployment smoke checks verified, full suite still pending |
+| Overall implementation progress | **63/100** | Weighted code-implementation estimate; recent backend CI and frontend production build/packaging pass, but external acceptance and launch gates remain open |
 | Phase 1 — Core platform | 80% | Identity, workspace, CRM and project foundations |
 | Phase 2 — Discovery and research | 50% | Public-web research and site-audit foundations; deeper competitor/influencer intelligence remains incomplete |
 | Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
@@ -207,3 +207,6 @@ A feature marked implemented means repository code exists. It must not be descri
 
 
 - Added workspace-admin UI to review/requeue dead-letter WhatsApp webhook events; requeueing does not send a message and remains separate from the workspace-scoped processing action. Backend CI passed on `2c446fb` (run [40080032774](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40080032774)); frontend build/type-check/Hostinger packaging passed on `30afae3` (run [40080119286](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40080119286)).
+
+
+- Public research workflow improvement: search results can now prefill the CRM review form with the evidence URL, title, and description. The user must still verify and enter the actual company and website before saving; search results are not silently imported. Backend CI and frontend type-check/build/Hostinger packaging passed on commit `20bf4be` (runs [40080378440](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40080378440) and [40080378432](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40080378432)).
