@@ -18,7 +18,7 @@ def test_draft_request_cannot_claim_consent():
 
 def test_contact_controls_reject_extra_fields():
     with pytest.raises(ValidationError):
-        ContactControlUpdate(workspace_id="w", send_now=True)
+        ContactControlsUpdate(workspace_id="w", send_now=True)
 
 
 
