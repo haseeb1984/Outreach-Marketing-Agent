@@ -128,3 +128,21 @@ def test_password_reset_email_uses_backend_landing_route(monkeypatch):
         expires_at=datetime.now(timezone.utc),
     ))
     assert "https://app.example/api/v1/auth/reset-password?token=" in captured["body"]
+
+def test_workspace_invitation_links_to_authenticated_dashboard(monkeypatch):
+    delivery = SMTPEmailDelivery(_config())
+    captured = {}
+
+    def capture(message):
+        captured["body"] = message.get_content()
+
+    monkeypatch.setattr(delivery, "_send_message", capture)
+    asyncio.run(delivery.send_workspace_invitation_email(
+        recipient="person@example.com",
+        token="opaque-invitation-token-123456789",
+        workspace_name="Example Workspace",
+        role="member",
+        expires_at=datetime.now(timezone.utc),
+    ))
+    assert "https://app.example/app?invite_token=opaque-invitation-token-123456789" in captured["body"]
+    assert "/invitations/accept" not in captured["body"]
