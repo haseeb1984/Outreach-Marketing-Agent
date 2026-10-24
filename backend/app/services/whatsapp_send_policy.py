@@ -49,7 +49,7 @@ class WhatsAppSendPolicy:
 
             prospect = await conn.fetchrow(
                 """SELECT p.id,p.contact_phone_e164,p.stage,
-                          cc.whatsapp_opt_in_at,cc.whatsapp_opt_in_evidence_url
+                          cc.whatsapp_opt_in_at,cc.whatsapp_opt_in_evidence_url,cc.whatsapp_account_id
                    FROM crm_prospects p
                    LEFT JOIN outreach_contact_controls cc
                      ON cc.workspace_id=p.workspace_id AND cc.prospect_id=p.id
@@ -67,6 +67,8 @@ class WhatsAppSendPolicy:
                 return {"allowed": False, "reason": "prospect_whatsapp_phone_required"}
             if prospect["whatsapp_opt_in_at"] is None or not prospect["whatsapp_opt_in_evidence_url"]:
                 return {"allowed": False, "reason": "documented_whatsapp_opt_in_required"}
+            if str(prospect["whatsapp_account_id"] or "") != str(account_id):
+                return {"allowed": False, "reason": "whatsapp_opt_in_for_account_required"}
 
             preference = await conn.fetchrow(
                 """SELECT opted_out_at,opted_in_at,last_inbound_at
