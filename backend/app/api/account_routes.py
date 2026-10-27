@@ -178,6 +178,7 @@ async def delete_account(request: Request) -> JSONResponse:
     user; ownership must be transferred first. Shared workspace data is not silently erased.
     """
     import secrets
+    from app.services.auth_security import hash_password
 
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
@@ -192,7 +193,8 @@ async def delete_account(request: Request) -> JSONResponse:
     # Unique, non-routable replacement identity prevents the original email from remaining
     # attached to a disabled account. The original address is not written to logs/audit.
     tombstone_email = f"deleted+{user_id.hex}@accounts.invalid"
-    tombstone_password = "deleted$" + secrets.token_urlsafe(48)
+    # Store a password hash even for the unreachable tombstone identity; never persist a raw secret.
+    tombstone_password = hash_password("deleted$" + secrets.token_urlsafe(48)).encoded
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
