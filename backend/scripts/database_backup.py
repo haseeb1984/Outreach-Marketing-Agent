@@ -118,8 +118,11 @@ def verify(path: Path) -> None:
     checksum_file = path.with_suffix(path.suffix + ".sha256")
     if not checksum_file.is_file():
         raise ValueError("backup_checksum_missing")
-    expected = checksum_file.read_text(encoding="utf-8").split()[0]
-    if not expected or _checksum(path) != expected:
+    parts = checksum_file.read_text(encoding="utf-8").split()
+    if not parts:
+        raise ValueError("backup_checksum_invalid")
+    expected = parts[0]
+    if _checksum(path) != expected:
         raise ValueError("backup_checksum_mismatch")
     _run(["pg_restore", "--list", str(path)], dict(os.environ))
 
