@@ -150,7 +150,7 @@ async def list_growth_schedules(
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
                 """SELECT id, workspace_id, interval_hours, status, next_run_at,
-                          last_enqueued_at, created_by, created_at, updated_at
+                          last_enqueued_at, last_attempted_at, last_error_code, created_by, created_at, updated_at
                    FROM workspace_growth_schedules
                    WHERE workspace_id=$1
                    ORDER BY created_at DESC, id DESC""",
