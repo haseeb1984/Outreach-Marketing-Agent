@@ -138,5 +138,18 @@ def test_account_export_includes_workspace_names_and_domain_verification_records
     assert payload["workspaces"][0]["workspace_name"] == "Example workspace"
     assert payload["domains"] == []
     assert any("FROM workspace_domains" in query for query in conn.fetch_queries)
+    whatsapp_account_query = next(
+        query for query in conn.fetch_queries if "FROM workspace_whatsapp_accounts" in query
+    )
+    assert "waba_id AS business_account_id" in whatsapp_account_query
+    assert "phone_number_id,business_account_id" not in whatsapp_account_query
+    preferences_query = next(
+        query for query in conn.fetch_queries if "FROM whatsapp_contact_preferences" in query
+    )
+    # Export only columns guaranteed by migrations 023/024; optional inbound fields
+    # must not make the entire privacy export fail on a fresh database.
+    assert "last_opt_out_message_id" in preferences_query
+    assert "last_inbound_at" not in preferences_query
+    assert "last_inbound_message_id" not in preferences_query
     assert response.headers["content-disposition"].startswith("attachment;")
     assert response.headers["cache-control"] == "no-store, private"
