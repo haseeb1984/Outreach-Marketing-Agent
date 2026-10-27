@@ -93,7 +93,7 @@ def backup() -> Path:
     environment = _connection_environment(url)
     directory = Path(os.environ.get("BACKUP_DIR", "backups")).expanduser()
     directory.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     destination = directory / f"outreach-db-{timestamp}.dump"
     descriptor, temporary_name = tempfile.mkstemp(prefix=".oma-backup-", suffix=".tmp", dir=directory)
     os.close(descriptor)
