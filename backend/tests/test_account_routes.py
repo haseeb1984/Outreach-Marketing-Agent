@@ -63,8 +63,8 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     assert password_update[2].startswith("scrypt$")
     assert "deleted$" not in password_update[2]
     set_cookie_headers = response.headers.get_list("set-cookie")
-    assert any("__Host-oma_session=;" in value for value in set_cookie_headers)
-    assert any("__Host-oma_csrf=;" in value for value in set_cookie_headers)
+    assert any(value.startswith("__Host-oma_session=") and "max-age=0" in value.lower() for value in set_cookie_headers)
+    assert any(value.startswith("__Host-oma_csrf=") and "max-age=0" in value.lower() for value in set_cookie_headers)
     assert "Cache-Control" in response.headers
 
 
