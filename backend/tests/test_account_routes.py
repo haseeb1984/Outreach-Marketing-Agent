@@ -42,7 +42,7 @@ class FakePool:
         yield self.conn
 
 
-def _authenticated(request):
+async def _authenticated(request):
     return ("user@example.test", None, {"user_id": "00000000-0000-0000-0000-000000000001"})
 
 
