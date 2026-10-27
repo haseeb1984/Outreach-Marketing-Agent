@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-27 (Phase 1 schema audit and PostgreSQL migration-chain test update)  
-Source: current `main` code and migration review. The latest backend CI run (40554561947, commit `712e619b9c419f279fc3f290d5c62d49ea91b70d`) failed across Python 3.11/3.12/3.13 before any runner was assigned (`runner_id=0`, empty steps, no retrievable logs); the cause is not yet established. Do not treat this as a test pass or as proof of a source-code failure. Frontend Hostinger upload and external provider acceptance remain unverified. The phase percentages below are estimates and must not be interpreted as current CI pass rates.
+Last assessed: 2026-10-27 (Phase 1 workspace-deletion cascade and CI blocker audit)  
+Source: current `main` code and migration review. Latest backend CI run 40556391786 failed across Python 3.11/3.12/3.13 with no job steps or retrievable logs; the cause remains unestablished. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
 
 ## How to read these numbers
 
@@ -11,7 +11,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **65/100** | Weighted code-implementation estimate; recent backend CI and frontend production build/packaging pass, but external acceptance and launch gates remain open |
+| Overall implementation progress | **65/100** | Weighted implementation estimate only; backend CI is currently failing without usable logs, and external acceptance and launch gates remain open |
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
 | Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
 | Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
@@ -34,6 +34,14 @@ New verified code and CI evidence since the prior score:
 - A new regression test explicitly verifies that workspace-triggered worker claims are constrained to active accounts for the requested workspace.
 
 The weighted implementation estimate at that checkpoint was **63/100**. This is an evidence-based estimate, not a test-pass rate or release-readiness score; it does **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
+
+## Latest Phase 1 implementation batch — 2026-10-27
+
+- Added migration `034_workspace_delivery_cascade_cleanup.sql` to make delivery rows cascade with workspace-owned drafts, WhatsApp accounts, prospects, and usage reservations rather than block workspace deletion through restrictive foreign keys.
+- Added PostgreSQL integration assertions that verify all five expected foreign keys have `ON DELETE CASCADE` after applying the complete migration chain.
+- Updated the PostgreSQL test migration list to include migration 034.
+- CI run [40556391786](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40556391786) failed on all Python versions with no retrievable job steps/logs. The cause is unknown; the migration assertions remain unverified at runtime.
+- Phase 1 remains **82% estimated implementation**, not complete. Exit gates still include a green CI run, successful PostgreSQL migration/integration execution, account deletion/export API acceptance, and end-to-end auth/recovery verification.
 
 ## Phase-by-phase checkpoints
 
