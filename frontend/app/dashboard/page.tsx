@@ -1005,6 +1005,59 @@ export default function DashboardPage() {
     } finally { setIntegrationBusy(false); }
   }
 
+  async function createGrowthSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspace-growth-schedules", csrf, {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          start_url: scheduleStartUrl.trim(),
+          business_type: scheduleBusinessType.trim(),
+          target_market: scheduleTargetMarket.trim(),
+          target_queries: scheduleQueries.split(/\\r?\\n/).map(query => query.trim()).filter(Boolean),
+          interval_hours: Number(scheduleIntervalHours),
+          max_pages: 10,
+          max_depth: 2,
+        }),
+      });
+      setNotice("Recurring website-growth scan scheduled. The scheduler and scan worker must both be running for scans to execute.");
+      setScheduleStartUrl(""); setScheduleBusinessType(""); setScheduleTargetMarket(""); setScheduleQueries("");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Growth schedule could not be created.");
+    } finally { setBusy(false); }
+  }
+
+  async function changeGrowthScheduleStatus(schedule: GrowthSchedule, status: "active" | "paused") {
+    if (!workspaceId || !csrf || schedule.status === status) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspace-growth-schedules/" + encodeURIComponent(schedule.id), csrf, {
+        method: "PATCH",
+        body: JSON.stringify({ workspace_id: workspaceId, status }),
+      });
+      setNotice(status === "paused" ? "Recurring scan paused. Already queued jobs are not cancelled." : "Recurring scan resumed.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Growth schedule could not be updated.");
+    } finally { setBusy(false); }
+  }
+
+  async function deleteGrowthSchedule(schedule: GrowthSchedule) {
+    if (!workspaceId || !csrf || !window.confirm("Delete this recurring scan schedule? Jobs already queued will remain in the queue.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspace-growth-schedules/" + encodeURIComponent(schedule.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("Recurring scan schedule deleted.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Growth schedule could not be deleted.");
+    } finally { setBusy(false); }
+  }
+
   async function logout() {
     setBusy(true);
     try { await api("/api/v1/auth/logout", csrf, { method: "POST", body: "{}" }); }
