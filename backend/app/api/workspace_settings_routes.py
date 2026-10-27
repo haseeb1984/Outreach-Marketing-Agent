@@ -1,6 +1,9 @@
 """Workspace display settings with owner/admin authorization."""
 from __future__ import annotations
 
+import json
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -68,15 +71,24 @@ async def get_workspace_settings(
 
 @router.patch("")
 async def update_workspace_settings(payload: WorkspaceSettingsUpdate, request: Request) -> dict:
-    await _authorized(request, payload.workspace_id, write=True)
+    session = await _authorized(request, payload.workspace_id, write=True)
+    actor_id = UUID(str(session["user_id"]))
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                "UPDATE workspaces SET name=$2 WHERE id=$1 RETURNING id,name,created_at",
-                payload.workspace_id, payload.name,
-            )
-        if row is None:
-            raise HTTPException(status_code=404, detail="workspace_not_found")
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "UPDATE workspaces SET name=$2 WHERE id=$1 RETURNING id,name,created_at",
+                    payload.workspace_id, payload.name,
+                )
+                if row is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                await conn.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       VALUES ($1,$2,'workspace.settings.updated','success',$3::jsonb,now())""",
+                    payload.workspace_id, actor_id,
+                    json.dumps({"changed_fields": ["name"], "name": payload.name}),
+                )
         return {"workspace_id": row["id"], "name": row["name"], "created_at": row["created_at"]}
     except HTTPException:
         raise
