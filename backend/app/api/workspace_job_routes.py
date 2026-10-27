@@ -139,9 +139,30 @@ async def enqueue_website_growth_scan(
             max_attempts=3,
         )
     except ValueError:
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=422, detail="invalid_website_growth_job") from None
     except Exception:
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=503, detail="website_growth_job_unavailable") from None
+    if reservation.get("status") == "reserved":
+        try:
+            finished = await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        except Exception:
+            finished = False
+        if not finished:
+            raise HTTPException(status_code=503, detail="growth_job_quota_persistence_failed")
     return {
         "id": job["id"],
         "workspace_id": job["workspace_id"],
