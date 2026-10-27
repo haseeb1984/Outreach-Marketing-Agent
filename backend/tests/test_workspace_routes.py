@@ -27,6 +27,10 @@ class _Connection:
         self.calls.append(("fetchrow", query))
         return {"id": args[0]} if "FOR UPDATE" in query else None
 
+    async def fetch(self, query, *args):
+        self.calls.append(("fetch", query))
+        return []
+
     async def fetchval(self, query, *args):
         self.calls.append(("fetchval", query))
         return self.active_workspaces
@@ -103,3 +107,26 @@ def test_workspace_creation_limit_rejects_without_inserting(monkeypatch):
     assert response.status_code == 429
     assert response.json()["detail"] == "workspace_limit_reached"
     assert not any(call[0] == "execute" and "INSERT INTO workspaces" in call[1] for call in connection.calls)
+
+
+
+def test_invitation_list_query_uses_real_sql_newlines(monkeypatch):
+    from app.api import workspace_invitation_routes
+
+    async def authenticate(request):
+        return None, None, {"user_id": "00000000-0000-0000-0000-000000000001", "email": "owner@example.test"}
+
+    async def authorize(request, workspace_id, session):
+        return None
+
+    monkeypatch.setattr(workspace_invitation_routes, "_authenticated", authenticate)
+    monkeypatch.setattr(workspace_invitation_routes, "_authorize_admin", authorize)
+    connection = _Connection(active_workspaces=0)
+    with TestClient(app) as client:
+        app.state.db_pool = _Pool(connection)
+        response = client.get("/api/v1/workspaces/invitations?workspace_id=workspace-test")
+
+    assert response.status_code == 200
+    query = next(call[1] for call in connection.calls if call[0] == "fetch")
+    assert "CASE WHEN status='pending'" in query
+    assert "\\\\n" not in query
