@@ -123,6 +123,7 @@ from app.api.website_audit_routes import router as website_audit_router
 from app.api.domain_routes import router as domain_router
 from app.api.project_routes import router as project_router
 from app.api.workspace_job_routes import router as workspace_job_router
+from app.api.workspace_growth_schedule_routes import router as workspace_growth_schedule_router
 from app.api.workspace_invitation_routes import router as invitation_router
 from app.api.account_routes import router as account_router
 from app.api.workspace_member_routes import router as workspace_member_router
@@ -150,6 +151,7 @@ app.include_router(website_audit_router)
 app.include_router(domain_router)
 app.include_router(project_router)
 app.include_router(workspace_job_router)
+app.include_router(workspace_growth_schedule_router)
 app.include_router(invitation_router)
 app.include_router(account_router)
 app.include_router(workspace_member_router)
@@ -252,6 +254,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.website_audit_reports') IS NOT NULL
                      AND to_regclass('public.domain_verification_challenges') IS NOT NULL
                      AND to_regclass('public.workspace_jobs') IS NOT NULL
+                     AND to_regclass('public.workspace_growth_schedules') IS NOT NULL
                      AND to_regclass('public.app_users') IS NOT NULL
                      AND to_regclass('public.workspace_memberships') IS NOT NULL
                      AND to_regclass('public.auth_sessions') IS NOT NULL
@@ -312,8 +315,9 @@ async def readiness() -> Response:
                             '031_whatsapp_outbound_queue.sql',
                             '032_whatsapp_consent_account_scope.sql',
                             '033_draft_edit_audit_event.sql',
-                            '034_workspace_delivery_cascade_cleanup.sql'
-                          )) = 34"""
+                            '034_workspace_delivery_cascade_cleanup.sql',
+                            '035_workspace_growth_schedules.sql'
+                          )) = 35"""
             )
             if not schema_ready:
                 return JSONResponse(
