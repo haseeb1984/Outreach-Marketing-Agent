@@ -167,3 +167,123 @@ async def export_account_data(request: Request) -> JSONResponse:
             "Referrer-Policy": "no-referrer",
         },
     )
+
+
+@router.delete("")
+async def delete_account(request: Request) -> JSONResponse:
+    """Deactivate and pseudonymize the authenticated account safely.
+
+    Sole-member workspaces owned by the account are deleted with their workspace data.
+    Deletion is refused when another active member depends on a workspace owned by this
+    user; ownership must be transferred first. Shared workspace data is not silently erased.
+    """
+    from app.api.auth_routes import _check_csrf
+    import secrets
+
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="account_deletion_not_configured")
+    try:
+        user_id = UUID(str(session["user_id"]))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="authentication_required") from None
+
+    # Unique, non-routable replacement identity prevents the original email from remaining
+    # attached to a disabled account. The original address is not written to logs/audit.
+    tombstone_email = f"deleted+{user_id.hex}@accounts.invalid"
+    tombstone_password = "deleted$" + secrets.token_urlsafe(48)
+    try:
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                user = await conn.fetchrow(
+                    "SELECT id,status FROM app_users WHERE id=$1 FOR UPDATE",
+                    user_id,
+                )
+                if user is None or user["status"] == "deleted":
+                    raise HTTPException(status_code=404, detail="account_not_found")
+
+                blocked = await conn.fetchval(
+                    """SELECT EXISTS(
+                         SELECT 1 FROM workspace_memberships own
+                         WHERE own.user_id=$1 AND own.role='owner' AND own.status='active'
+                           AND EXISTS(
+                             SELECT 1 FROM workspace_memberships other
+                             WHERE other.workspace_id=own.workspace_id
+                               AND other.user_id<>$1 AND other.status='active'
+                           )
+                       )""",
+                    user_id,
+                )
+                if blocked:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="transfer_workspace_ownership_before_account_deletion",
+                    )
+
+                # Delete only workspaces solely owned by this account. Workspace cascades
+                # are intentional here; shared workspaces are protected by the check above.
+                await conn.execute(
+                    """DELETE FROM workspaces w
+                       USING workspace_memberships own
+                       WHERE w.id=own.workspace_id AND own.user_id=$1
+                         AND own.role='owner' AND own.status='active'
+                         AND NOT EXISTS(
+                           SELECT 1 FROM workspace_memberships other
+                           WHERE other.workspace_id=w.id AND other.user_id<>$1
+                             AND other.status='active'
+                         )""",
+                    user_id,
+                )
+                await conn.execute(
+                    """UPDATE workspace_memberships SET status='revoked',updated_at=now()
+                       WHERE user_id=$1 AND status='active'""",
+                    user_id,
+                )
+                await conn.execute(
+                    """UPDATE auth_sessions SET revoked_at=now()
+                       WHERE user_id=$1 AND revoked_at IS NULL""",
+                    user_id,
+                )
+                await conn.execute(
+                    """UPDATE email_verification_tokens SET consumed_at=now()
+                       WHERE user_id=$1 AND consumed_at IS NULL""",
+                    user_id,
+                )
+                await conn.execute(
+                    """UPDATE password_reset_tokens SET consumed_at=now()
+                       WHERE user_id=$1 AND consumed_at IS NULL""",
+                    user_id,
+                )
+                await conn.execute(
+                    """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
+                       WHERE invited_by=$1 AND status='pending'""",
+                    user_id,
+                )
+                await conn.execute(
+                    """UPDATE app_users
+                       SET email=$2,password_hash=$3,status='deleted',
+                           email_verified_at=NULL,updated_at=now()
+                       WHERE id=$1""",
+                    user_id, tombstone_email, tombstone_password,
+                )
+                await conn.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       VALUES (NULL,$1,'account.deleted','success',
+                               '{"identity_pseudonymized":true}'::jsonb,now())""",
+                    user_id,
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="account_deletion_unavailable") from None
+
+    response = JSONResponse(
+        content={"status": "deleted", "detail": "Account access revoked and account identity pseudonymized."},
+        headers={"Cache-Control": "no-store, private", "Pragma": "no-cache", "X-Content-Type-Options": "nosniff"},
+    )
+    response.delete_cookie("__Host-oma_session", path="/", secure=True, httponly=True, samesite="lax")
+    response.delete_cookie("__Host-oma_csrf", path="/", secure=True, httponly=False, samesite="lax")
+    return response
