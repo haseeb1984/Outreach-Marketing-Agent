@@ -13,6 +13,7 @@ type Delivery = { id: string; subject?: string; channel?: string; status: string
 type Counts = Record<string, number>;
 type CampaignPerformance = { id: string; name: string; status: string; counts: Counts };
 type GrowthSchedule = { id: string; interval_hours: number; status: "active" | "paused"; next_run_at: string; last_enqueued_at?: string | null };
+type GrowthJob = { id: string; job_type: string; status: string; error_code?: string | null; attempt_count: number; max_attempts: number; created_at: string; finished_at?: string | null };
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
@@ -66,6 +67,8 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       website_domain_not_authorized: "Verify this website domain in the active workspace before scheduling scans.",
       growth_schedule_limit_reached: "This workspace already has 20 active recurring scans. Pause one before creating or resuming another.",
       growth_schedule_service_not_configured: "Recurring scan scheduling is not available until the database migration is applied.",
+      workspace_job_service_not_configured: "Website-growth jobs are not available until the database migration is applied.",
+      domain_authorization_not_configured: "Verify the website domain service configuration before scheduling a scan.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
@@ -141,6 +144,9 @@ export default function DashboardPage() {
   const [campaignPerformanceUnavailable, setCampaignPerformanceUnavailable] = useState(false);
   const [growthSchedules, setGrowthSchedules] = useState<GrowthSchedule[]>([]);
   const [growthSchedulesUnavailable, setGrowthSchedulesUnavailable] = useState(false);
+  const [growthJobs, setGrowthJobs] = useState<GrowthJob[]>([]);
+  const [growthJobsUnavailable, setGrowthJobsUnavailable] = useState(false);
+  const [growthJobReport, setGrowthJobReport] = useState<{ id: string; result: unknown } | null>(null);
   const [scheduleStartUrl, setScheduleStartUrl] = useState("");
   const [scheduleBusinessType, setScheduleBusinessType] = useState("");
   const [scheduleTargetMarket, setScheduleTargetMarket] = useState("");
@@ -171,6 +177,7 @@ export default function DashboardPage() {
 
   const loadWorkspaceData = useCallback(async (selectedId: string, token: string) => {
     if (!selectedId) return;
+    setGrowthJobReport(null);
     const [p, c, d, a, deliveryResult] = await Promise.all([
       api<ApiResult<Prospect>>("/api/v1/prospects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<ApiResult<Campaign>>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
@@ -193,6 +200,11 @@ export default function DashboardPage() {
     ]);
     setGrowthSchedules(scheduleResult[0].status === "fulfilled" ? (scheduleResult[0].value.items || []) : []);
     setGrowthSchedulesUnavailable(scheduleResult[0].status !== "fulfilled");
+    const jobResult = await Promise.allSettled([
+      api<{ items: GrowthJob[] }>("/api/v1/workspace-jobs?workspace_id=" + encodeURIComponent(selectedId) + "&limit=20&offset=0", token),
+    ]);
+    setGrowthJobs(jobResult[0].status === "fulfilled" ? (jobResult[0].value.items || []) : []);
+    setGrowthJobsUnavailable(jobResult[0].status !== "fulfilled");
     const projectResult = await Promise.allSettled([
       api<ApiResult<Project>>("/api/v1/projects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
@@ -1008,6 +1020,46 @@ export default function DashboardPage() {
     } finally { setIntegrationBusy(false); }
   }
 
+  async function enqueueGrowthScanNow() {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspace-jobs/website-growth-scan", csrf, {
+        method: "POST",
+        headers: { "Idempotency-Key": "dashboard-scan-" + window.crypto.randomUUID() },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          start_url: scheduleStartUrl.trim(),
+          business_type: scheduleBusinessType.trim(),
+          target_market: scheduleTargetMarket.trim(),
+          target_queries: scheduleQueries.split(/\r?\n/).map(query => query.trim()).filter(Boolean),
+          max_pages: 10,
+          max_depth: 2,
+        }),
+      });
+      setNotice("One-off website-growth scan queued. The scan worker must be running before a report can finish.");
+      setGrowthJobReport(null);
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Website-growth scan could not be queued.");
+    } finally { setBusy(false); }
+  }
+
+  async function openGrowthJobReport(job: GrowthJob) {
+    if (!workspaceId || !csrf || job.status !== "succeeded") return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const detail = await api<{ id: string; status: string; result: unknown }>(
+        "/api/v1/workspace-jobs/" + encodeURIComponent(job.id) + "?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf,
+      );
+      setGrowthJobReport({ id: detail.id, result: detail.result });
+      setNotice("Completed website-growth report loaded.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Growth scan report could not be loaded.");
+    } finally { setBusy(false); }
+  }
+
   async function createGrowthSchedule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
@@ -1169,7 +1221,7 @@ export default function DashboardPage() {
               <div className="field"><label htmlFor="schedule-target-market">Target market</label><input id="schedule-target-market" required maxLength={160} value={scheduleTargetMarket} onChange={e=>setScheduleTargetMarket(e.target.value)} placeholder="United States" /></div>
               <div className="field"><label htmlFor="schedule-target-queries">Research queries (one per line, optional)</label><textarea id="schedule-target-queries" rows={3} maxLength={4000} value={scheduleQueries} onChange={e=>setScheduleQueries(e.target.value)} placeholder={"workflow automation\nCRM integration"} /></div>
               <div className="field"><label htmlFor="schedule-interval">Repeat interval</label><select id="schedule-interval" value={scheduleIntervalHours} onChange={e=>setScheduleIntervalHours(e.target.value)}><option value="24">Daily</option><option value="72">Every 3 days</option><option value="168">Weekly</option><option value="336">Every 2 weeks</option><option value="720">Every 30 days</option></select></div>
-              <button className="button" type="submit" disabled={busy || !workspaceId || !csrf || !canWrite}>Create recurring scan</button>
+              <div className="actions"><button className="button" type="submit" disabled={busy || !workspaceId || !csrf || !canWrite}>Create recurring scan</button><button className="button secondary" type="button" onClick={enqueueGrowthScanNow} disabled={busy || !workspaceId || !csrf || !canWrite || !scheduleStartUrl.trim() || !scheduleBusinessType.trim() || !scheduleTargetMarket.trim()}>Run once now</button></div>
               <p className="fine">Maximum 20 active schedules per workspace. A separate scheduler and website-growth worker must be running for scans to execute.</p>
             </form>
           </article>
@@ -1182,6 +1234,18 @@ export default function DashboardPage() {
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={()=>deleteGrowthSchedule(schedule)}>Delete</button>}
             </div>
           </article>) : <article className="card"><p>No recurring scans are configured for this workspace.</p></article>}</div>
+        </section>
+        <section className="section" aria-labelledby="growth-jobs-title">
+          <div className="section-head"><h2 id="growth-jobs-title">Recent website-growth jobs</h2><p className="fine">Queued jobs are not complete until the separate scan worker finishes them.</p></div>
+          {growthJobsUnavailable && <p className="notice" role="status">Growth job history is unavailable. Refresh the workspace to try again.</p>}
+          <div className="cards">{growthJobsUnavailable ? null : growthJobs.length ? growthJobs.map(job=><article className="card" key={job.id}>
+            <p className="eyebrow">{job.status}</p><h3>Website growth scan</h3>
+            <p className="fine">Created: {new Date(job.created_at).toLocaleString()} · Attempts: {job.attempt_count}/{job.max_attempts}</p>
+            {job.finished_at && <p className="fine">Finished: {new Date(job.finished_at).toLocaleString()}</p>}
+            {job.error_code && <p className="fine">Failure code: {job.error_code}</p>}
+            {job.status === "succeeded" && <button className="button secondary" type="button" disabled={busy} onClick={()=>openGrowthJobReport(job)}>View report</button>}
+          </article>) : <article className="card"><p>No website-growth jobs have been queued yet.</p></article>}</div>
+          {growthJobReport && <article className="card"><h3>Growth report</h3><p className="fine">Job: {growthJobReport.id}</p><pre style={{overflowX:"auto",maxHeight:"32rem",whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(growthJobReport.result, null, 2)}</pre></article>}
         </section>
         <section className="section"><div className="cards">
           <article className="card"><h2>Create campaign</h2><p className="fine">Define the offer and intended audience before generating any draft.</p><form onSubmit={createCampaign}><div className="field"><label htmlFor="campaign-name">Campaign name</label><input id="campaign-name" required maxLength={200} value={campaignName} onChange={e=>setCampaignName(e.target.value)} /></div><div className="field"><label htmlFor="business-name">Business / client</label><input id="business-name" required maxLength={240} value={businessName} onChange={e=>setBusinessName(e.target.value)} /></div><div className="field"><label htmlFor="offer">Offer</label><textarea id="offer" required maxLength={2000} value={offer} onChange={e=>setOffer(e.target.value)} /></div><div className="field"><label htmlFor="target-profile">Target customer profile</label><textarea id="target-profile" required maxLength={2000} value={targetProfile} onChange={e=>setTargetProfile(e.target.value)} /></div><button className="button" disabled={busy || !canWrite || !workspaceId}>Create campaign</button></form></article>

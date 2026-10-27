@@ -342,3 +342,13 @@ Implementation is on branch `feat/dashboard-growth-schedules` and awaits fronten
 - Added schedule list, pause/resume and admin-only delete controls, with next-run/last-enqueued timestamps and explicit notice that the scheduler and scan worker must both be supervised.
 - Added human-readable messages for unverified domains, schedule limits and missing migration/service configuration.
 - Frontend TypeScript/build CI has not yet confirmed this batch; no phase score is increased.
+
+
+## Dashboard one-off growth scans and job history — 2026-10-28
+
+Implementation is on branch `feat/dashboard-growth-job-history` and awaits frontend CI/review.
+
+- Added a one-off scan action using the same verified-domain and workspace authorization as the API, with a unique idempotency key.
+- Added recent job status/attempt history and a report-view action for succeeded jobs. Report retrieval remains workspace-scoped.
+- Clears selected report data when workspace data reloads to avoid displaying a report from a previously selected workspace.
+- Frontend CI has not yet verified the change. A queued job is not considered a completed scan, and worker supervision remains a deployment requirement.
