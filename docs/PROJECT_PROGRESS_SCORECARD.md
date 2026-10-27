@@ -393,3 +393,10 @@ Implementation is in [PR #20](https://github.com/haseeb1984/Outreach-Marketing-A
 ## PostgreSQL recovery tooling — 2026-10-28
 
 A current-main branch carries the backup/restore implementation, unit tests, and operator runbook. This adds tooling only; it does **not** establish that tests pass or that a real recovery has been rehearsed. Required release evidence remains: CI green, backup from a non-production environment, checksum/archive verification, restore into a separately provisioned empty database, and application-level validation. See [the recovery runbook](POSTGRES_BACKUP_RESTORE.md).
+
+
+## Billing integration and CI recovery — 2026-10-28
+
+- Paddle webhook, checkout/customer-portal client, and dashboard billing contract are merged in PRs #22, #26 and #27. Server-side entitlements remain authoritative; checkout is sandbox-first and live checkout is explicitly gated.
+- The CI repair batch in PR #23 is merged after successful Python 3.11/3.12/3.13 test jobs; Python 3.12 PostgreSQL auth integration and dependency audit passed. The earlier 14-failure CI run is historical evidence, not the current result.
+- This is implementation progress, not launch certification. Actual Paddle sandbox credentials, subscription lifecycle acceptance, database migration verification, live email delivery, Meta account acceptance, production frontend upload and recovery rehearsal remain outstanding.

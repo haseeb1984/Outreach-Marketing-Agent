@@ -223,3 +223,13 @@
 - Campaign management now includes a workspace-member update endpoint and dashboard editor for campaign name, offer, target profile and lifecycle status. Archiving a campaign blocks new draft creation and is checked again at email enqueue/claim so existing approved drafts cannot be sent from an archived campaign. CI passed on `94956c3` and `658409c`; no production migration was required.
 
 - Campaign pause semantics are enforced at draft generation, email enqueue and send claim; archived and paused campaigns cannot create/dispatch new outreach. Regression checks and CI passed on `f418e54` (runs [40082440945](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082440945) and [40082440947](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082440947)).
+
+
+## Latest implementation update — 2026-10-28
+
+- Merged [PR #22](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/22): signed Paddle subscription webhook ingestion with raw-body HMAC verification, timestamp replay window, server-controlled price-to-entitlement mapping, event deduplication and stale-snapshot protection.
+- Merged [PR #26](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/26): hosted Paddle checkout and customer portal API client; workspace owner and CSRF checks; sandbox-first environment guard; validated provider URLs; sanitized provider errors.
+- Merged [PR #27](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/27): dashboard-compatible plan listing and `plan_id` checkout contract, plus checkout/manage-billing UI controls. Backend tests, PostgreSQL auth integration tests, dependency audit, frontend type-check, production build and Hostinger package job passed on the PR verification run.
+- Merged [PR #23](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/23): fixes for the observed CI test failures; the verified run completed successfully across Python 3.11/3.12/3.13, with PostgreSQL auth integration and dependency audit on Python 3.12.
+- Remaining billing gates: configure actual Paddle sandbox API/webhook secrets and price IDs; verify workspace metadata arrives on subscription events; run checkout, duplicate/stale webhook, cancellation and portal journeys; verify database migrations and entitlement behavior; do not enable live billing until merchant eligibility and policy checks are complete.
+- Remaining whole-product gates include live SMTP inbox acceptance, eligible Meta WhatsApp onboarding and signed webhook acceptance, production DB/migration checks, a full authenticated browser journey, Hostinger deployment, accessibility/performance review, and an actual backup restore drill. CI green is not production acceptance.
