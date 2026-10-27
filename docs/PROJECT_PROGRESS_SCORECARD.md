@@ -285,3 +285,19 @@ The phase percentages and 63/65 overall estimates elsewhere in this historical s
 - No live WhatsApp dispatch is enabled by this change.
 - Overall and phase estimates remain unchanged at 63/100 overall, with phases 1–6 at 82%, 55%, 64%, 76%, 53%, and 25%, respectively. PR #10 is open and not merged; the latest Actions jobs remain unavailable for reliable test-result confirmation. Do not increase scores based solely on the new patch.
 
+
+
+## Workspace growth-job API batch — 2026-10-28
+
+Implementation is on branch `feat/workspace-growth-job-api` and is awaiting review/CI; do not count it as merged or verified yet.
+
+- Added authenticated `POST /api/v1/workspace-jobs/website-growth-scan`, requiring a session, CSRF validation, workspace member authorization, and persisted domain authorization before queue insertion.
+- Added viewer-authorized `GET /api/v1/workspace-jobs` for tenant-scoped job metadata. It deliberately omits payloads and result bodies from the listing.
+- Request validation bounds scan depth/pages/query count, rejects non-HTTPS or credential-bearing URLs, strips query strings/fragments from persisted URLs, and supports workspace/job-scoped idempotency keys.
+- Registered the router and allowed the `Idempotency-Key` header through the existing exact-origin CORS policy.
+- Added route input tests and `docs/WORKSPACE_GROWTH_JOBS.md` covering API usage, migration prerequisites, separate worker supervision, and operational limitations.
+- The durable worker must still be deployed as a separately supervised process; the API only queues jobs. CI has not yet confirmed these changes and no phase percentage is increased.
+
+## WhatsApp queue hardening merge correction — 2026-10-28
+
+PRs [#8](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/8), [#9](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/9), and [#10](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/10) have since been merged to `main`. Their targeted CRM-phone persistence and WhatsApp consent/queue protections are now part of the mainline. This corrects the earlier snapshot above that described PR #10 as open; the CI status remains unresolved, so the merges are not evidence of passing tests or live outbound delivery.
