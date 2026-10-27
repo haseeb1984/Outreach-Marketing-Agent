@@ -26,3 +26,28 @@ def test_bounded_export_rows_rejects_invalid_limit():
 
     with pytest.raises(ValueError, match="limit_must_be_positive"):
         _bounded_export_rows([], limit=0)
+
+
+def test_bounded_export_rows_rejects_boolean_limit():
+    import pytest
+
+    with pytest.raises(ValueError, match="limit_must_be_positive"):
+        _bounded_export_rows([{"id": 1}], limit=True)
+
+
+def test_bounded_export_rows_keeps_source_rows_unchanged():
+    rows = [{"id": value} for value in range(5)]
+    original = list(rows)
+
+    exported, truncated = _bounded_export_rows(rows, limit=2)
+
+    assert exported == rows[:2]
+    assert truncated is True
+    assert rows == original
+
+
+def test_bounded_export_rows_supports_empty_collection():
+    exported, truncated = _bounded_export_rows([], limit=10)
+
+    assert exported == []
+    assert truncated is False
