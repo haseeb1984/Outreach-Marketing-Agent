@@ -81,3 +81,8 @@ It should run under a process supervisor. The dispatcher uses row locking and a 
 Authenticated workspace members with viewer access can request `GET /api/v1/analytics/campaigns?workspace_id=<workspace-id>&since_days=30&limit=50`. The response returns per-campaign draft review counts, email queue outcomes, WhatsApp outbound status counts, associated prospect replies and CRM converted-stage counts.
 
 The endpoint reports persisted workflow facts only. SMTP "sent" is not inbox delivery, WhatsApp status records are not revenue, and a reply from a prospect associated with a campaign is not proof that the campaign caused the reply. It deliberately does not estimate opens, clicks, signups, revenue or ROI without verified source integrations.
+
+
+## Usage metering
+
+One-off and recurring scans use the workspace `website_audits` entitlement. The one-off API requires an `Idempotency-Key`; a consumed key cannot create another job. If a recurring schedule is due while the workspace subscription or quota does not allow a scan, the dispatcher skips that time slot, advances to the next interval and records the reason in `last_error_code`. Review the schedule status and workspace billing state before expecting the next run.
