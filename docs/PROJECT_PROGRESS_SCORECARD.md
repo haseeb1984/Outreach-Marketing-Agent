@@ -363,3 +363,14 @@ Implementation is on branch `fix/growth-scan-quota-enforcement` and awaits CI/re
 - The recurring dispatcher checks entitlement per due slot. If the workspace is not entitled or has no quota, it skips the slot, advances the next-run time, and records `last_error_code` and `last_attempted_at` rather than retrying every poll.
 - Added migration 036, readiness checks, scheduler quota tests, and dashboard visibility for the last attempted run/error.
 - This correction is not merged yet; CI and PostgreSQL migration execution remain unverified. No phase score is increased.
+
+
+## PostgreSQL backup/restore tooling batch — 2026-10-28
+
+Implementation is on branch `feat/postgres-backup-restore-tooling` and awaits CI/review.
+
+- Added a PostgreSQL custom-format backup command with SHA-256 sidecar and owner-only POSIX file permissions.
+- Added archive/checksum verification and a restore command that requires explicit confirmation, checks source/target database identity, and avoids destructive `--clean` restore behavior.
+- Connection credentials are translated to libpq environment variables instead of being included in command arguments; command output is sanitized.
+- Added tests for connection URL parsing, checksum mismatch, same-database restore rejection and explicit restore confirmation, plus an operations runbook.
+- This does not constitute a real production backup/restore test; operator-run recovery evidence remains a release gate.
