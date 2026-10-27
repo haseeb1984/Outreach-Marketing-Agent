@@ -105,6 +105,24 @@ async def enqueue_website_growth_scan(
     except Exception:
         raise HTTPException(status_code=503, detail="domain_authorization_unavailable") from None
 
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+    try:
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="website_audits",
+            idempotency_key="workspace-growth-job:" + idempotency_key,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
+    if reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="growth_job_key_already_used")
+    reservation_id = reservation["reservation_id"]
+
     try:
         job = await WorkspaceJobQueue(_pool(request)).enqueue(
             workspace_id=payload.workspace_id,
