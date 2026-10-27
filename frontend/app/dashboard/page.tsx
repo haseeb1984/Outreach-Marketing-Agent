@@ -12,7 +12,7 @@ type Plan = { id: string; name: string; description: string; display_price: stri
 type Delivery = { id: string; subject?: string; channel?: string; status: string; error_code?: string | null; created_at?: string };
 type Counts = Record<string, number>;
 type CampaignPerformance = { id: string; name: string; status: string; counts: Counts };
-type GrowthSchedule = { id: string; interval_hours: number; status: "active" | "paused"; next_run_at: string; last_enqueued_at?: string | null };
+type GrowthSchedule = { id: string; interval_hours: number; status: "active" | "paused"; next_run_at: string; last_enqueued_at?: string | null; last_attempted_at?: string | null; last_error_code?: string | null };
 type GrowthJob = { id: string; job_type: string; status: string; error_code?: string | null; attempt_count: number; max_attempts: number; created_at: string; finished_at?: string | null };
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
@@ -1229,6 +1229,8 @@ export default function DashboardPage() {
             <p className="eyebrow">{schedule.status}</p><h3>Website growth scan</h3><p>Every {schedule.interval_hours} hours</p>
             <p className="fine">Next scheduled run: {new Date(schedule.next_run_at).toLocaleString()}</p>
             <p className="fine">Last enqueued: {schedule.last_enqueued_at ? new Date(schedule.last_enqueued_at).toLocaleString() : "Not run yet"}</p>
+            {schedule.last_attempted_at && <p className="fine">Last attempt: {new Date(schedule.last_attempted_at).toLocaleString()}</p>}
+            {schedule.last_error_code && <p className="notice" role="status">Last scheduled run skipped/failed: {schedule.last_error_code.replaceAll("_", " ")}</p>}
             <div className="actions">
               <button className="button secondary" type="button" disabled={busy || !canWrite} onClick={()=>changeGrowthScheduleStatus(schedule,schedule.status==="active" ? "paused" : "active")}>{schedule.status==="active" ? "Pause schedule" : "Resume schedule"}</button>
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={()=>deleteGrowthSchedule(schedule)}>Delete</button>}
