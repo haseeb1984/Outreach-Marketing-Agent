@@ -168,6 +168,18 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
                 if not expired_invitation:
                     if invitation["invited_email"] != normalize_email(session["email"]):
                         raise HTTPException(status_code=403, detail="invitation_email_mismatch")
+                    # Serialize invitation acceptance for this account with workspace creation.
+                    await conn.fetchrow(
+                        "SELECT id FROM app_users WHERE id=$1 FOR UPDATE",
+                        UUID(str(session["user_id"])),
+                    )
+                    active_memberships = await conn.fetchval(
+                        """SELECT count(*) FROM workspace_memberships
+                           WHERE user_id=$1 AND status='active'""",
+                        UUID(str(session["user_id"])),
+                    )
+                    if active_memberships >= 10:
+                        raise HTTPException(status_code=429, detail="workspace_limit_reached")
                     existing = await conn.fetchrow(
                         """SELECT status FROM workspace_memberships
                            WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
