@@ -305,7 +305,7 @@ PRs [#8](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/8), [#9](ht
 
 ## Recurring website-growth automation batch — 2026-10-28
 
-Implementation is on branch `feat/recurring-growth-schedules` and awaits CI/review; it is not yet merged.
+Merged through [PR #12](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/12). The code and migration are in `main`; CI and production migration/worker acceptance remain unverified.
 
 - Added migration `035_workspace_growth_schedules.sql` for tenant-scoped active/paused recurring schedules with bounded 6–720 hour intervals.
 - Added authenticated create/list/pause/resume/delete endpoints. Creation requires member access, CSRF validation and persisted domain authorization; listing requires viewer access and deletion requires admin access.
@@ -313,3 +313,13 @@ Implementation is on branch `feat/recurring-growth-schedules` and awaits CI/revi
 - Updated readiness to require all 35 migrations and the schedule table. Added schedule input and scheduler behavior tests, plus operational documentation.
 - The schedule dispatcher and website-growth worker are separate long-running processes; both need supervised deployment. This feature does not send outreach.
 - No phase score is increased until CI runs tests and the migration/worker is accepted in a configured environment.
+
+
+## Campaign performance analytics batch — 2026-10-28
+
+Implementation is on branch `feat/campaign-performance-analytics` and is awaiting review/CI.
+
+- Added `GET /api/v1/analytics/campaigns` with workspace viewer authorization and bounded period/pagination inputs.
+- Per-campaign metrics include draft review state, email delivery queue outcomes, WhatsApp outbound status, replies from associated campaign prospects, and CRM converted-stage snapshots.
+- Definitions explicitly distinguish recorded sends from inbox delivery and prospect association from causal attribution. Revenue, opens, clicks, signups and ROI remain unavailable without verified integrations.
+- Added route tests for workspace isolation and honest metric definitions. CI has not confirmed execution; implementation scores are not increased yet.
