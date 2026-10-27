@@ -74,3 +74,10 @@ python -m app.workers.workspace_growth_scheduler
 ```
 
 It should run under a process supervisor. The dispatcher uses row locking and a stable per-schedule/per-time-slot idempotency key, so a restart between queue insertion and schedule advancement will not create a duplicate job for the same slot. Missed intervals are skipped rather than producing an unbounded catch-up burst. Schedule dispatch only enqueues research; the separate `website_growth_worker` must also be running to execute scans. Pause/delete prevents future scheduling but does not cancel jobs already queued.
+
+
+## Campaign performance analytics
+
+Authenticated workspace members with viewer access can request `GET /api/v1/analytics/campaigns?workspace_id=<workspace-id>&since_days=30&limit=50`. The response returns per-campaign draft review counts, email queue outcomes, WhatsApp outbound status counts, associated prospect replies and CRM converted-stage counts.
+
+The endpoint reports persisted workflow facts only. SMTP "sent" is not inbox delivery, WhatsApp status records are not revenue, and a reply from a prospect associated with a campaign is not proof that the campaign caused the reply. It deliberately does not estimate opens, clicks, signups, revenue or ROI without verified source integrations.
