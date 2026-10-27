@@ -32,3 +32,8 @@ Keep the worker on a persistent process host. Do not run it as a serverless HTTP
 ## Current limitation
 
 This is the first executable worker for the website-growth queue, not a general-purpose worker for SMTP delivery or WhatsApp outbound delivery. Those provider workflows remain separately gated.
+
+
+## Production-like host deployment
+
+For a hardened systemd unit, secret-file permissions, migration prerequisites, restart behavior, and the release acceptance checklist, follow [Growth Worker Host Runbook](GROWTH_WORKER_HOST_RUNBOOK.md). The runbook is operational guidance only; it does not imply a host has been provisioned or a production scan has passed.
