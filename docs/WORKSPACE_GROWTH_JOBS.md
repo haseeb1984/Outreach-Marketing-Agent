@@ -55,3 +55,22 @@ Statuses are `queued`, `running`, `succeeded`, `failed`, and `cancelled`. A queu
 - Do not put secrets, credentials, session tokens or private data in job payloads.
 - The endpoint does not enable email or WhatsApp sending. Outreach remains a separate, human-approved workflow.
 - Before production launch, verify worker supervision, migration execution, tenant-isolation tests, backups and restore, and real-domain browser acceptance.
+
+
+## Recurring scans
+
+Workspace members can create a recurring scan after the domain is verified:
+
+- `POST /api/v1/workspace-growth-schedules` with `workspace_id`, `start_url`, `business_type`, `target_market`, optional `target_queries`, and `interval_hours`.
+- Supported intervals are 6 to 720 hours. Each schedule is workspace-scoped and stores a normalized URL plus bounded scan settings.
+- `GET /api/v1/workspace-growth-schedules?workspace_id=<workspace-id>` lists schedule metadata.
+- `PATCH /api/v1/workspace-growth-schedules/<schedule-id>` accepts `workspace_id` and `status` (`active` or `paused`) to pause/resume.
+- `DELETE /api/v1/workspace-growth-schedules/<schedule-id>?workspace_id=<workspace-id>` requires workspace-admin membership.
+
+The schedule dispatcher is a separate process:
+
+```sh
+python -m app.workers.workspace_growth_scheduler
+```
+
+It should run under a process supervisor. The dispatcher uses row locking and a stable per-schedule/per-time-slot idempotency key, so a restart between queue insertion and schedule advancement will not create a duplicate job for the same slot. Missed intervals are skipped rather than producing an unbounded catch-up burst. Schedule dispatch only enqueues research; the separate `website_growth_worker` must also be running to execute scans. Pause/delete prevents future scheduling but does not cancel jobs already queued.
