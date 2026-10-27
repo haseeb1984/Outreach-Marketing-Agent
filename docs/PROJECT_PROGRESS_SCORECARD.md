@@ -1,6 +1,6 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-27 (batched frontend release-packaging audit)  
+Last assessed: 2026-10-28 (workspace security and Phase 1 follow-up batch)  
 Source: current `main` code and migration review. Latest backend CI run 40558570310 and frontend CI run 40558570201 failed with zero reported runner steps and runner_id 0; logs are not retrievable through the connected GitHub interface. Jobs appear not to have reached a runner, but the exact Actions cause is not confirmed. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
 
 ## How to read these numbers
@@ -260,3 +260,19 @@ A feature marked implemented means repository code exists. It must not be descri
 - Readiness now verifies all 34 migrations and checks the missing Phase 1 tables.
 - Added regression coverage for the complete migration list and for failing closed when schema checks fail. These tests are committed but **not yet executed successfully** because current GitHub Actions runs have no retrievable job-step logs.
 - Phase 1 score remains an estimate and is not marked complete until CI and PostgreSQL integration tests execute successfully.
+
+
+
+## Latest implementation batch — 2026-10-28
+
+Merged to `main` after the prior scorecard snapshot:
+
+- **Workspace creation concurrency:** lock the account row before checking the active workspace count; add regression coverage for limit enforcement and lock ordering. [PR #2](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/2)
+- **Test lifecycle fixtures:** fake database pools used in readiness and workspace tests now implement async cleanup expected by the application lifespan. [PR #3](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/3)
+- **Invitation listing SQL:** replace a literal backslash-n in the SQL string with a real source newline; add an endpoint-level regression test. [PR #4](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/4)
+- **Workspace settings audit:** rename and `workspace.settings.updated` audit event are now written in the same database transaction; add a regression test. [PR #5](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/5)
+- **Invitation acceptance limit:** enforce the same 10-active-workspace membership cap during invitation acceptance and lock the account row so concurrent acceptance requests serialize with workspace creation. [PR #6](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/6)
+
+Latest verified `main` commit at this assessment: `78a2e8463218bd82b6ed6ef8eac4844f87597900`. Backend CI run [40565732117](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40565732117) failed. Recent runs report no usable runner-step details/logs; the connected commit status has also shown a Vercel build-rate-limit failure. It is therefore **not known** whether the Python tests ran, and no new test pass is claimed.
+
+The phase percentages and 63/65 overall estimates elsewhere in this historical scorecard are not being increased based on code merges alone. Phase 1 remains unverified until the full backend tests and PostgreSQL migration/integration checks complete successfully. Launch blockers remain unchanged: real Hostinger upload/domain acceptance, live email/provider acceptance, billing sandbox lifecycle, backup/restore, and production security/performance/accessibility checks.
