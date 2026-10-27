@@ -59,7 +59,9 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     assert any("UPDATE auth_sessions SET revoked_at=now()" in sql for sql, _ in conn.executed)
     assert any("UPDATE workspace_memberships SET status='revoked'" in sql for sql, _ in conn.executed)
     assert any("UPDATE app_users" in sql and "status='deleted'" in sql for sql, _ in conn.executed)
-    assert "__Host-oma_session=;" in response.headers.get("set-cookie", "")
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    assert any("__Host-oma_session=;" in value for value in set_cookie_headers)
+    assert any("__Host-oma_csrf=;" in value for value in set_cookie_headers)
     assert "Cache-Control" in response.headers
 
 
