@@ -179,6 +179,7 @@ export default function DashboardPage() {
 
   const loadWorkspaceData = useCallback(async (selectedId: string, token: string) => {
     if (!selectedId) return;
+    setGrowthJobReport(null);
     const [p, c, d, a, deliveryResult] = await Promise.all([
       api<ApiResult<Prospect>>("/api/v1/prospects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<ApiResult<Campaign>>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
@@ -1222,7 +1223,7 @@ export default function DashboardPage() {
               <div className="field"><label htmlFor="schedule-target-market">Target market</label><input id="schedule-target-market" required maxLength={160} value={scheduleTargetMarket} onChange={e=>setScheduleTargetMarket(e.target.value)} placeholder="United States" /></div>
               <div className="field"><label htmlFor="schedule-target-queries">Research queries (one per line, optional)</label><textarea id="schedule-target-queries" rows={3} maxLength={4000} value={scheduleQueries} onChange={e=>setScheduleQueries(e.target.value)} placeholder={"workflow automation\nCRM integration"} /></div>
               <div className="field"><label htmlFor="schedule-interval">Repeat interval</label><select id="schedule-interval" value={scheduleIntervalHours} onChange={e=>setScheduleIntervalHours(e.target.value)}><option value="24">Daily</option><option value="72">Every 3 days</option><option value="168">Weekly</option><option value="336">Every 2 weeks</option><option value="720">Every 30 days</option></select></div>
-              <button className="button" type="submit" disabled={busy || !workspaceId || !csrf || !canWrite}>Create recurring scan</button>
+              <div className="actions"><button className="button" type="submit" disabled={busy || !workspaceId || !csrf || !canWrite}>Create recurring scan</button><button className="button secondary" type="button" onClick={enqueueGrowthScanNow} disabled={busy || !workspaceId || !csrf || !canWrite || !scheduleStartUrl.trim() || !scheduleBusinessType.trim() || !scheduleTargetMarket.trim()}>Run once now</button></div>
               <p className="fine">Maximum 20 active schedules per workspace. A separate scheduler and website-growth worker must be running for scans to execute.</p>
             </form>
           </article>
@@ -1235,6 +1236,18 @@ export default function DashboardPage() {
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={()=>deleteGrowthSchedule(schedule)}>Delete</button>}
             </div>
           </article>) : <article className="card"><p>No recurring scans are configured for this workspace.</p></article>}</div>
+        </section>
+        <section className="section" aria-labelledby="growth-jobs-title">
+          <div className="section-head"><h2 id="growth-jobs-title">Recent website-growth jobs</h2><p className="fine">Queued jobs are not complete until the separate scan worker finishes them.</p></div>
+          {growthJobsUnavailable && <p className="notice" role="status">Growth job history is unavailable. Refresh the workspace to try again.</p>}
+          <div className="cards">{growthJobsUnavailable ? null : growthJobs.length ? growthJobs.map(job=><article className="card" key={job.id}>
+            <p className="eyebrow">{job.status}</p><h3>Website growth scan</h3>
+            <p className="fine">Created: {new Date(job.created_at).toLocaleString()} · Attempts: {job.attempt_count}/{job.max_attempts}</p>
+            {job.finished_at && <p className="fine">Finished: {new Date(job.finished_at).toLocaleString()}</p>}
+            {job.error_code && <p className="fine">Failure code: {job.error_code}</p>}
+            {job.status === "succeeded" && <button className="button secondary" type="button" disabled={busy} onClick={()=>openGrowthJobReport(job)}>View report</button>}
+          </article>) : <article className="card"><p>No website-growth jobs have been queued yet.</p></article>}</div>
+          {growthJobReport && <article className="card"><h3>Growth report</h3><p className="fine">Job: {growthJobReport.id}</p><pre style={{overflowX:"auto",maxHeight:"32rem",whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(growthJobReport.result, null, 2)}</pre></article>}
         </section>
         <section className="section"><div className="cards">
           <article className="card"><h2>Create campaign</h2><p className="fine">Define the offer and intended audience before generating any draft.</p><form onSubmit={createCampaign}><div className="field"><label htmlFor="campaign-name">Campaign name</label><input id="campaign-name" required maxLength={200} value={campaignName} onChange={e=>setCampaignName(e.target.value)} /></div><div className="field"><label htmlFor="business-name">Business / client</label><input id="business-name" required maxLength={240} value={businessName} onChange={e=>setBusinessName(e.target.value)} /></div><div className="field"><label htmlFor="offer">Offer</label><textarea id="offer" required maxLength={2000} value={offer} onChange={e=>setOffer(e.target.value)} /></div><div className="field"><label htmlFor="target-profile">Target customer profile</label><textarea id="target-profile" required maxLength={2000} value={targetProfile} onChange={e=>setTargetProfile(e.target.value)} /></div><button className="button" disabled={busy || !canWrite || !workspaceId}>Create campaign</button></form></article>
