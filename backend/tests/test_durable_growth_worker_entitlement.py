@@ -9,6 +9,7 @@ from scripts import run_workspace_growth_worker as worker
 class _Queue:
     job = None
     failed = None
+    last_failed = None
 
     def __init__(self, _pool):
         pass
@@ -18,6 +19,7 @@ class _Queue:
 
     async def fail(self, **kwargs):
         self.failed = kwargs
+        type(self).last_failed = kwargs
         return "failed"
 
 
@@ -47,6 +49,7 @@ def test_worker_does_not_crawl_when_consumed_reservation_is_no_longer_entitled(m
         },
     }
     _Queue.failed = None
+    _Queue.last_failed = None
     monkeypatch.setattr(worker, "WorkspaceJobQueue", _Queue)
     monkeypatch.setattr(worker, "SubscriptionStore", lambda _pool: _Subscriptions())
 
@@ -57,5 +60,5 @@ def test_worker_does_not_crawl_when_consumed_reservation_is_no_longer_entitled(m
     result = asyncio.run(worker.process_one_job(_Pool(), worker_id="worker-test"))
 
     assert result is True
-    assert _Queue.failed["error_code"] == "growth_scan_entitlement_denied"
-    assert _Queue.failed["retry"] is False
+    assert _Queue.last_failed["error_code"] == "growth_scan_entitlement_denied"
+    assert _Queue.last_failed["retry"] is False
