@@ -1,7 +1,7 @@
 """PostgreSQL-backed durable queue for bounded workspace jobs.
 
 Only trusted server code may call these methods with an authenticated workspace ID.
-No worker execution or public enqueue endpoint is enabled by this module.
+The public enqueue route separately enforces session/CSRF, workspace membership, verified-domain authorization, and subscription usage entitlements before accepting website-growth scans.
 """
 from __future__ import annotations
 
