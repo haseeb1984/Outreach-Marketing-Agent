@@ -67,6 +67,10 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       website_domain_not_authorized: "Verify this website domain in the active workspace before scheduling scans.",
       growth_schedule_limit_reached: "This workspace already has 20 active recurring scans. Pause one before creating or resuming another.",
       growth_schedule_service_not_configured: "Recurring scan scheduling is not available until the database migration is applied.",
+      workspace_job_service_not_configured: "Website-growth jobs are not available until the database migration is applied.",
+      domain_authorization_not_configured: "Verify the website domain service configuration before scheduling a scan.",
+      website_domain_not_authorized: "Verify this website domain in the active workspace before queueing a scan.",
+      growth_schedule_limit_reached: "This workspace already has 20 active recurring scans. Pause one before creating or resuming another.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
