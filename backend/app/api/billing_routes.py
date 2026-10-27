@@ -6,9 +6,11 @@ plan claims from clients, reserve quota, or make a paid operation billable.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.auth_routes import _authenticated
+from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
+from app.services.paddle_api import PaddleAPIError, create_checkout_transaction, create_customer_portal_session
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
@@ -99,15 +101,11 @@ async def paddle_subscription_webhook(request: Request):
 
 
 
-from pydantic import BaseModel, ConfigDict, Field
-from app.api.auth_routes import _check_csrf
-from app.services.paddle_api import PaddleAPIError, create_checkout_transaction, create_customer_portal_session
-
-
 class PaddleCheckoutInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
-    price_id: str = Field(min_length=5, max_length=100, pattern=r"^pri_[A-Za-z0-9_-]+$")
+    plan_id: str | None = Field(default=None, min_length=5, max_length=100, pattern=r"^pri_[A-Za-z0-9_-]+$")
+    price_id: str | None = Field(default=None, min_length=5, max_length=100, pattern=r"^pri_[A-Za-z0-9_-]+$")
 
 
 def _paddle_plan_config() -> dict:
@@ -121,6 +119,42 @@ def _paddle_plan_config() -> dict:
     if not isinstance(plans, dict):
         raise HTTPException(status_code=503, detail="paddle_plans_not_configured")
     return plans
+
+
+
+def _public_paddle_plans(plans: dict) -> list[dict]:
+    """Expose only display metadata and a price identifier, never provider secrets."""
+    from app.services.paddle_api import paddle_api_base
+
+    try:
+        paddle_api_base(settings.paddle_environment, settings.paddle_live_checkout_enabled)
+        environment_ready = True
+    except PaddleAPIError:
+        environment_ready = False
+    output = []
+    for price_id, plan in plans.items():
+        if not isinstance(price_id, str) or not price_id.startswith("pri_") or not isinstance(plan, dict):
+            continue
+        slug = plan.get("slug")
+        entitlements = plan.get("entitlements")
+        if not isinstance(slug, str) or not slug or not isinstance(entitlements, dict):
+            continue
+        output.append({
+            "id": price_id,
+            "name": str(plan.get("name") or slug.replace("-", " ").replace("_", " ").title())[:120],
+            "description": str(plan.get("description") or "Workspace subscription plan.")[:500],
+            "display_price": str(plan["display_price"])[:80] if plan.get("display_price") is not None else None,
+            "currency": str(plan["currency"])[:8] if plan.get("currency") is not None else None,
+            "billing_interval": str(plan["billing_interval"])[:40] if plan.get("billing_interval") is not None else None,
+            "checkout_available": bool(settings.paddle_api_key and environment_ready),
+        })
+    return output
+
+
+@router.get("/paddle/plans")
+async def list_paddle_plans():
+    """Return configured public plan metadata for the dashboard; never infer prices."""
+    return {"items": _public_paddle_plans(_paddle_plan_config())}
 
 
 def _require_paddle_api() -> tuple[str, str, bool]:
@@ -141,7 +175,10 @@ async def start_paddle_checkout(payload: PaddleCheckoutInput, request: Request):
         user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="owner"
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
-    plan = _paddle_plan_config().get(payload.price_id)
+    selected_price_id = payload.plan_id or payload.price_id
+    if not selected_price_id or (payload.plan_id and payload.price_id and payload.plan_id != payload.price_id):
+        raise HTTPException(status_code=422, detail="paddle_price_not_available")
+    plan = _paddle_plan_config().get(selected_price_id)
     if not isinstance(plan, dict) or not isinstance(plan.get("slug"), str) or not isinstance(plan.get("entitlements"), dict):
         raise HTTPException(status_code=422, detail="paddle_price_not_available")
     api_key, environment, live_enabled = _require_paddle_api()
@@ -150,7 +187,7 @@ async def start_paddle_checkout(payload: PaddleCheckoutInput, request: Request):
             api_key=api_key,
             environment=environment,
             live_enabled=live_enabled,
-            price_id=payload.price_id,
+            price_id=selected_price_id,
             workspace_id=payload.workspace_id,
             plan_slug=plan["slug"],
         )
