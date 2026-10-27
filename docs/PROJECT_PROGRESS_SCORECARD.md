@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-28 (workspace security and Phase 1 follow-up batch)  
-Source: current `main` code and migration review. Latest backend CI run 40558570310 and frontend CI run 40558570201 failed with zero reported runner steps and runner_id 0; logs are not retrievable through the connected GitHub interface. Jobs appear not to have reached a runner, but the exact Actions cause is not confirmed. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
+Last assessed: 2026-10-28 (durable growth worker, Paddle route consolidation, account deletion and verified CI recovery)  
+Source: current `main` implementation plus verified PR-head CI evidence. Backend CI passed for the durable worker batch [run 40581262124](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40581262124) and Paddle route consolidation [run 40581322245](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40581322245), across Python 3.11/3.12/3.13; Python 3.12 PostgreSQL auth integration and dependency audit passed. Frontend type-check, production build and Hostinger packaging passed for the billing and account-deletion UI batches [run 40580073174](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40580073174) and [run 40580502150](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40580502150). This is PR-head CI evidence, not proof that the current production deployment contains these changes. Migrations 035–036, worker supervision, live provider acceptance, Hostinger upload, Paddle sandbox lifecycle, backup restore rehearsal, accessibility and performance acceptance remain open. Percentages below are implementation estimates, not test-pass rates.
 
 ## How to read these numbers
 
@@ -11,15 +11,15 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **63/100** | Weighted implementation estimate only; backend and frontend CI are currently failing before reported runner steps, and external acceptance and launch gates remain open |
+| Overall implementation progress | **69/100** | Weighted implementation estimate; backend CI and frontend build/package pass on recent PR heads, while production and external acceptance gates remain open |
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
-| Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
-| Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
-| Phase 4 — Outreach and replies | 76% | Editable/pausable/archivable campaigns, audited pending drafts, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
-| Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
-| Phase 6 — Production verification | 25% | Current backend and frontend CI runs fail before reporting runner steps; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
+| Phase 2 — Discovery and research | 60% | Verified-domain crawl, durable one-off/recurring growth scans, saved report retrieval and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
+| Phase 3 — Provider integrations | 68% | SMTP foundations, account-scoped WhatsApp consent, signed Paddle subscription lifecycle, hosted checkout and customer portal; live provider acceptance remains pending |
+| Phase 4 — Outreach and replies | 78% | Editable/pausable campaigns, human approval, email queue/recovery, inbound WhatsApp processing, account export/deletion and campaign dashboards; live delivery and unified reply automation remain incomplete |
+| Phase 5 — Automation and analytics | 65% | Durable recurring growth schedules, quota-aware job dispatch, supervised worker entrypoint, job history, campaign metrics and activity analytics; verified revenue attribution remains incomplete |
+| Phase 6 — Production verification | 45% | Recent backend CI and frontend build/package pass; production Hostinger deployment, real worker supervision, migration acceptance, provider staging, backup restore, accessibility and performance checks remain unverified |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(76×0.20)+(53×0.15)+(25×0.10)=63.1`, rounded to **63%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(60×0.15)+(68×0.20)+(78×0.20)+(65×0.15)+(45×0.10)=68.9`, rounded to **69%**.
 
 
 
@@ -405,3 +405,11 @@ A current-main branch carries the backup/restore implementation, unit tests, and
 ## Paddle route consolidation — 2026-10-28
 
 Removed duplicate Paddle webhook/checkout route implementations so the existing slug-based `paddle_routes.py` remains authoritative; added customer portal support there and aligned the environment example/runbooks with the established `PADDLE_PLANS_JSON` schema. CI must confirm the consolidated route table and portal URL validation. No live payment readiness is claimed.
+
+
+## Current-main reconciliation — 2026-10-28
+
+- [PR #31](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/31) consolidates Paddle into the established `paddle_routes.py` router, restores the slug-keyed `PADDLE_PLANS_JSON` contract, and adds customer-portal session creation. Its backend CI passed before merge.
+- [PR #32](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/32) adds a separate supervised worker process for durable website-growth scans, bounded payload validation, verified-domain checks, audit persistence and safe retry/failure recording. Its backend CI passed before merge; actual persistent-process deployment remains unverified.
+- [PR #29](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/29) adds account deletion controls with explicit confirmation; backend and frontend CI passed on its PR head.
+- The score is an updated estimate, not a launch certificate. Production hosting, database migration execution, worker supervision, Paddle sandbox lifecycle, SMTP inbox delivery, Meta acceptance, and restore rehearsal still require evidence.
