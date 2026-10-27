@@ -125,7 +125,8 @@ async def create_prospect(payload: ProspectCreate, request: Request):
         prospect = await _store(request).create_prospect(
             workspace_id=payload.workspace_id, created_by=session["user_id"],
             name=payload.name, company=payload.company, role=payload.role,
-            contact_email=payload.contact_email, website_url=payload.website_url,
+            contact_email=payload.contact_email, contact_phone_e164=payload.contact_phone_e164,
+            website_url=payload.website_url,
             evidence_url=payload.evidence_url, fit_reason=payload.fit_reason,
             verified_facts=payload.verified_facts,
         )
