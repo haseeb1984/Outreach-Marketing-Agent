@@ -66,6 +66,12 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 
 - [PostgreSQL backup, archive verification, and restore runbook](docs/POSTGRES_BACKUP_RESTORE.md). Recovery readiness remains unverified until a separate-database restore drill is completed and recorded.
 
+## Billing integration
+
+- [Paddle signed webhook setup](docs/PADDLE_WEBHOOK_SETUP.md) covers signature verification and server-side subscription lifecycle updates.
+- [Paddle checkout and customer portal setup](docs/PADDLE_CHECKOUT_PORTAL.md) covers workspace-authorized hosted checkout, portal sessions, and sandbox-first release controls.
+- Live billing remains disabled by default; use real configured price IDs and complete sandbox lifecycle acceptance before enabling it.
+
 ## Quality and release gates
 
 - [WCAG, accessibility, SEO, responsive design, and performance standards](docs/QUALITY_STANDARDS.md) are required acceptance criteria, not claims of current compliance.
