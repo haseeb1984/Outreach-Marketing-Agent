@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-28 (workspace security and Phase 1 follow-up batch)  
-Source: current `main` code and migration review. Latest backend CI run 40558570310 and frontend CI run 40558570201 failed with zero reported runner steps and runner_id 0; logs are not retrievable through the connected GitHub interface. Jobs appear not to have reached a runner, but the exact Actions cause is not confirmed. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
+Last assessed: 2026-10-28 (durable growth scans, quota enforcement, backup recovery and signed billing webhook)  
+Source: current `main` at `647ba386de163bb6ed862ed4864e74d44d8f86a3`. Backend CI passed on the current main commit in [run 40578687502](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40578687502); Python 3.11, 3.12 and 3.13 all passed, including the Python 3.12 PostgreSQL authentication integration and dependency audit. The merged recovery batch passed backend CI in [run 40578082709](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40578082709). Frontend type-check, production build and Hostinger ZIP packaging passed on [run 40575055590](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40575055590); the frontend has not changed since that build, but the artifact has not been uploaded to the production Hostinger site. Paddle webhook unit tests and backend CI passed in [run 40578400689](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40578400689). Migrations 035–036 still need acceptance in the target environment; backup/restore has not yet been rehearsed against a real recovery database; Paddle sandbox delivery, live provider acceptance, production domain/browser acceptance, and accessibility/performance checks remain open. Percentages below are implementation estimates, not test-pass rates or production readiness certifications.
 
 ## How to read these numbers
 
@@ -11,15 +11,15 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **63/100** | Weighted implementation estimate only; backend and frontend CI are currently failing before reported runner steps, and external acceptance and launch gates remain open |
+| Overall implementation progress | **69/100** | Weighted implementation estimate; backend CI and the current frontend build pass, while external acceptance, production deployment and recovery evidence remain open |
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
-| Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
-| Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
-| Phase 4 — Outreach and replies | 76% | Editable/pausable/archivable campaigns, audited pending drafts, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
-| Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
-| Phase 6 — Production verification | 25% | Current backend and frontend CI runs fail before reporting runner steps; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
+| Phase 2 — Discovery and research | 60% | Verified-domain crawl, durable one-off/recurring growth scans, completed report retrieval and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
+| Phase 3 — Provider integrations | 68% | SMTP foundations, account-scoped WhatsApp consent, signed Paddle subscription webhook ingestion and recovery controls; checkout/portal and live provider acceptance remain pending |
+| Phase 4 — Outreach and replies | 78% | Editable/pausable campaigns, human approval, email queue/recovery, inbound WhatsApp processing, job history and campaign outcome dashboards; live provider delivery and unified reply automation remain incomplete |
+| Phase 5 — Automation and analytics | 65% | Durable recurring growth schedules, quota-aware job dispatch, job history, campaign performance metrics and activity analytics; verified revenue attribution remains incomplete |
+| Phase 6 — Production verification | 45% | Backend CI and frontend build/package pass, and backup/restore tooling exists; production Hostinger deployment, real recovery rehearsal, migration acceptance, provider staging and accessibility/performance checks remain open |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(76×0.20)+(53×0.15)+(25×0.10)=63.1`, rounded to **63%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(60×0.15)+(68×0.20)+(78×0.20)+(65×0.15)+(45×0.10)=68.9`, rounded to **69%**.
 
 
 
