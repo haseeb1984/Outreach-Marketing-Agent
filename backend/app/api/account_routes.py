@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from app.api.auth_routes import _authenticated
+from app.api.auth_routes import _authenticated, _check_csrf
 
 router = APIRouter(prefix="/api/v1/account", tags=["account privacy"])
 _MAX_EXPORT_ROWS = 10000
@@ -177,7 +177,6 @@ async def delete_account(request: Request) -> JSONResponse:
     Deletion is refused when another active member depends on a workspace owned by this
     user; ownership must be transferred first. Shared workspace data is not silently erased.
     """
-    from app.api.auth_routes import _check_csrf
     import secrets
 
     _, _, session = await _authenticated(request)
