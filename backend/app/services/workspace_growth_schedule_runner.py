@@ -27,7 +27,7 @@ class WorkspaceGrowthScheduleRunner:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 schedule = await conn.fetchrow(
-                    """SELECT id, workspace_id, payload, interval_hours, next_run_at
+                    """SELECT id, workspace_id, created_by, payload, interval_hours, next_run_at
                        FROM workspace_growth_schedules
                        WHERE status='active' AND next_run_at <= $1
                        ORDER BY next_run_at, created_at
@@ -76,6 +76,7 @@ class WorkspaceGrowthScheduleRunner:
                     payload = json.loads(payload)
                 if not isinstance(payload, dict):
                     raise ValueError("schedule_payload_invalid")
+                payload = {**payload, "requested_by": str(schedule["created_by"])}
                 job = await self._queue.enqueue(
                     workspace_id=str(schedule["workspace_id"]),
                     job_type="website_growth_scan",
