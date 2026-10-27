@@ -233,3 +233,8 @@
 - Merged [PR #23](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/23): fixes for the observed CI test failures; the verified run completed successfully across Python 3.11/3.12/3.13, with PostgreSQL auth integration and dependency audit on Python 3.12.
 - Remaining billing gates: configure actual Paddle sandbox API/webhook secrets and price IDs; verify workspace metadata arrives on subscription events; run checkout, duplicate/stale webhook, cancellation and portal journeys; verify database migrations and entitlement behavior; do not enable live billing until merchant eligibility and policy checks are complete.
 - Remaining whole-product gates include live SMTP inbox acceptance, eligible Meta WhatsApp onboarding and signed webhook acceptance, production DB/migration checks, a full authenticated browser journey, Hostinger deployment, accessibility/performance review, and an actual backup restore drill. CI green is not production acceptance.
+
+
+## Paddle route consolidation — 2026-10-28
+
+The existing `backend/app/api/paddle_routes.py` is the canonical implementation because it already provides the slug-keyed plan catalog, dashboard checkout contract, and signed webhook event-to-plan mapping. Duplicate route implementations were removed from `billing_routes.py`; the customer portal endpoint is consolidated into the canonical router. `PADDLE_PLANS_JSON` is keyed by internal plan slug and each plan contains a `price_id`. Sandbox checkout, webhook, and portal acceptance still requires real Paddle sandbox credentials and end-to-end testing.

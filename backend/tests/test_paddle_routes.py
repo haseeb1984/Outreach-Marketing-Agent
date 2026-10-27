@@ -67,3 +67,17 @@ def test_checkout_url_requires_production_host(monkeypatch):
     assert not paddle_routes._trusted_checkout_url("https://sandbox-checkout.paddle.com/checkout/abc")
     monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "invalid")
     assert not paddle_routes._trusted_checkout_url("https://checkout.paddle.com/checkout/abc")
+
+
+
+def test_customer_portal_url_requires_exact_paddle_host_for_environment(monkeypatch):
+    from app.api import paddle_routes
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "sandbox")
+    assert paddle_routes._trusted_portal_url("https://customer-portal.sandbox.paddle.com/session/abc")
+    assert not paddle_routes._trusted_portal_url("https://customer-portal.paddle.com/session/abc")
+    assert not paddle_routes._trusted_portal_url("https://customer-portal.sandbox.paddle.com.attacker.example/session")
+    assert not paddle_routes._trusted_portal_url("http://customer-portal.sandbox.paddle.com/session")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "production")
+    assert paddle_routes._trusted_portal_url("https://customer-portal.paddle.com/session/abc")
+    assert not paddle_routes._trusted_portal_url("https://customer-portal.sandbox.paddle.com/session/abc")

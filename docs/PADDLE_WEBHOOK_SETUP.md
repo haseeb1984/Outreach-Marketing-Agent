@@ -1,35 +1,35 @@
-# Paddle subscription webhook setup
+# Paddle webhook setup
 
-The API accepts signed Paddle subscription lifecycle events at `POST /api/v1/billing/paddle/webhook`. This is not a checkout implementation; checkout creation and portal management must be completed and tested separately.
+The existing Paddle router accepts signed subscription lifecycle events at `POST /api/v1/billing/paddle/webhook`. It verifies the raw-body `Paddle-Signature` HMAC with a five-minute timestamp window, maps the signed workspace and plan metadata, and persists the event through the idempotent billing lifecycle store.
 
 ## Required environment
 
-- `PADDLE_WEBHOOK_SECRET`: the secret for the exact Paddle webhook destination.
-- `PADDLE_PLANS_JSON`: server-controlled JSON mapping each Paddle price ID to an internal plan slug and entitlement snapshot. Example (replace with real IDs and limits):
+- `PADDLE_WEBHOOK_SECRET`: the secret for the exact Paddle notification destination.
+- `PADDLE_PLANS_JSON`: JSON object keyed by internal plan slug; each entry includes a Paddle `price_id`, display metadata, and server-controlled `entitlements`.
+
+Example shape (replace with real recurring price IDs and reviewed limits):
 
 ```json
 {
-  "pri_replace_with_real_price_id": {
-    "slug": "starter",
+  "starter_monthly": {
+    "price_id": "pri_replace_with_real_price_id",
+    "name": "Starter",
+    "description": "For small teams",
+    "display_price": "replace with approved price",
+    "currency": "USD",
+    "billing_interval": "month",
     "entitlements": {
       "website_audits": {"enabled": true, "monthly_limit": 10},
-      "email_outreach": {"enabled": true, "monthly_limit": 100}
+      "email_sends": {"enabled": true, "monthly_limit": 100}
     }
   }
 }
 ```
 
-Configure both values as encrypted deployment secrets. Do not place credentials or real price IDs in source control.
+## Security and acceptance
 
-## Security and event handling
-
-- Verify the `Paddle-Signature` header against the raw request body, including its timestamp and HMAC-SHA256 digest; reject stale/replayed timestamps.
-- Map the workspace only from signed `data.custom_data.workspace_id`.
-- Resolve entitlements from `PADDLE_PLANS_JSON`; ignore any entitlement or plan claims inside custom data.
-- Deduplicate events and reject stale subscription snapshots through the existing lifecycle store.
-- Only one configured price/plan per subscription is supported. Unknown/mixed prices fail closed.
-- Keep the webhook destination configured for subscription lifecycle events. Verify sandbox events and idempotent replay before enabling live billing.
-
-## Remaining release gates
-
-This webhook does not create checkout transactions, customer portal links, or handle refunds/chargebacks. Verify price IDs, workspace metadata propagation, webhook delivery, subscription lifecycle, migrations, and entitlement enforcement in Paddle sandbox before accepting real payments.
+- Use encrypted deployment secrets; never commit API keys, webhook secrets or real customer data.
+- Checkout metadata carries `workspace_id` and `plan_id`. The signed webhook must map the declared plan to the configured Paddle price ID before updating entitlements.
+- Duplicate events are idempotent; stale subscription snapshots must not overwrite newer state.
+- Verify valid signatures, invalid signatures, stale timestamps, duplicate deliveries, out-of-order events, cancellation, past-due state and unknown plan IDs in sandbox.
+- Do not enable live billing until merchant eligibility, policies, database migrations, operational alerts and a real sandbox lifecycle are accepted.
