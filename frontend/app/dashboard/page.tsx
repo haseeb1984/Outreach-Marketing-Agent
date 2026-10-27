@@ -134,6 +134,7 @@ export default function DashboardPage() {
   const [selectedPlan, setSelectedPlan] = useState("");
   const [counts, setCounts] = useState<Counts>({});
   const [campaignPerformance, setCampaignPerformance] = useState<CampaignPerformance[]>([]);
+  const [campaignPerformanceUnavailable, setCampaignPerformanceUnavailable] = useState(false);
   const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
   const [entitlementsUnavailable, setEntitlementsUnavailable] = useState(false);
   const [period, setPeriod] = useState("30");
@@ -175,6 +176,7 @@ export default function DashboardPage() {
       api<{ items: CampaignPerformance[] }>("/api/v1/analytics/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period + "&limit=50", token),
     ]);
     setCampaignPerformance(performanceResult[0].status === "fulfilled" ? (performanceResult[0].value.items || []) : []);
+    setCampaignPerformanceUnavailable(performanceResult[0].status !== "fulfilled");
     const projectResult = await Promise.allSettled([
       api<ApiResult<Project>>("/api/v1/projects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
@@ -1069,7 +1071,7 @@ export default function DashboardPage() {
         <section className="section" aria-labelledby="metrics-title"><div className="section-head"><h2 id="metrics-title">Recorded activity</h2><p className="fine">Counts from saved records; not estimates of revenue or ROI.</p></div><div className="dashboard-grid">{metricItems.map(([label,key])=><article className="metric" key={key}><strong>{counts[key] ?? "—"}</strong><span>{label}</span></article>)}</div><p className="fine">“Marked sent” means the configured email adapter returned successfully; it does not prove inbox delivery. Clicks, revenue and ROI are not inferred.</p></section>
         <section className="section" aria-labelledby="campaign-performance-title">
           <div className="section-head"><h2 id="campaign-performance-title">Campaign performance</h2><p className="fine">Recorded workflow outcomes for the selected period; these are not revenue attribution.</p></div>
-          <div className="cards">{campaignPerformance.length ? campaignPerformance.map(item => <article className="card" key={item.id}>
+          <div className="cards">{campaignPerformanceUnavailable ? <article className="card"><p>Campaign analytics is temporarily unavailable. Refresh the workspace to try again.</p></article> : campaignPerformance.length ? campaignPerformance.map(item => <article className="card" key={item.id}>
             <p className="eyebrow">{item.status}</p><h3>{item.name}</h3>
             <div className="dashboard-grid">
               {[
