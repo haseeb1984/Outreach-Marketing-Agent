@@ -14,6 +14,14 @@ router = APIRouter(prefix="/api/v1/account", tags=["account privacy"])
 _MAX_EXPORT_ROWS = 10000
 
 
+def _bounded_export_rows(rows: list, *, limit: int) -> tuple[list, bool]:
+    """Return at most limit rows and whether the source exceeded that limit."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit_must_be_positive")
+    truncated = len(rows) > limit
+    return rows[:limit], truncated
+
+
 @router.get("/export")
 async def export_account_data(request: Request) -> JSONResponse:
     """Download an export of the account and data in its active workspaces.
