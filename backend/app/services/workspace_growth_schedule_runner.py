@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -54,9 +54,7 @@ class WorkspaceGrowthScheduleRunner:
                 elapsed_intervals = max(
                     0, math.floor((current - slot).total_seconds() / interval_seconds)
                 )
-                next_run = slot.timestamp() + (elapsed_intervals + 1) * interval_seconds
-                from datetime import datetime as DateTime
-                next_run_at = DateTime.fromtimestamp(next_run, tz=timezone.utc)
+                next_run_at = slot + timedelta(seconds=(elapsed_intervals + 1) * interval_seconds)
                 await conn.execute(
                     """UPDATE workspace_growth_schedules
                        SET next_run_at=$2, last_enqueued_at=$3, updated_at=$3
