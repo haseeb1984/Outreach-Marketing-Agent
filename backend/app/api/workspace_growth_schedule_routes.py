@@ -111,15 +111,27 @@ async def create_growth_schedule(payload: GrowthScheduleCreate, request: Request
     }
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """INSERT INTO workspace_growth_schedules
-                   (workspace_id, payload, interval_hours, status, next_run_at, created_by)
-                   VALUES ($1, $2::jsonb, $3, 'active', now(), $4)
-                   RETURNING id, workspace_id, interval_hours, status, next_run_at,
-                             last_enqueued_at, created_by, created_at, updated_at""",
-                payload.workspace_id, json.dumps(job_payload), payload.interval_hours,
-                UUID(str(session["user_id"])),
-            )
+            async with conn.transaction():
+                # Serialize schedule creation per workspace before enforcing the cap.
+                await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    payload.workspace_id,
+                )
+                active_count = await conn.fetchval(
+                    "SELECT count(*) FROM workspace_growth_schedules WHERE workspace_id=$1 AND status='active'",
+                    payload.workspace_id,
+                )
+                if active_count >= 20:
+                    raise HTTPException(status_code=429, detail="growth_schedule_limit_reached")
+                row = await conn.fetchrow(
+                    """INSERT INTO workspace_growth_schedules
+                       (workspace_id, payload, interval_hours, status, next_run_at, created_by)
+                       VALUES ($1, $2::jsonb, $3, 'active', now(), $4)
+                       RETURNING id, workspace_id, interval_hours, status, next_run_at,
+                                 last_enqueued_at, created_by, created_at, updated_at""",
+                    payload.workspace_id, json.dumps(job_payload), payload.interval_hours,
+                    UUID(str(session["user_id"])),
+                )
         return _serialize(dict(row))
     except HTTPException:
         raise
@@ -162,14 +174,32 @@ async def update_growth_schedule(
     await _authorize(request, payload.workspace_id, "member", session)
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """UPDATE workspace_growth_schedules
-                   SET status=$3, updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2
-                   RETURNING id, workspace_id, interval_hours, status, next_run_at,
-                             last_enqueued_at, created_by, created_at, updated_at""",
-                schedule_id, payload.workspace_id, payload.status,
-            )
+            async with conn.transaction():
+                await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    payload.workspace_id,
+                )
+                current_status = await conn.fetchval(
+                    "SELECT status FROM workspace_growth_schedules WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+                    schedule_id, payload.workspace_id,
+                )
+                if current_status is None:
+                    raise HTTPException(status_code=404, detail="growth_schedule_not_found")
+                if current_status != "active" and payload.status == "active":
+                    active_count = await conn.fetchval(
+                        "SELECT count(*) FROM workspace_growth_schedules WHERE workspace_id=$1 AND status='active'",
+                        payload.workspace_id,
+                    )
+                    if active_count >= 20:
+                        raise HTTPException(status_code=429, detail="growth_schedule_limit_reached")
+                row = await conn.fetchrow(
+                    """UPDATE workspace_growth_schedules
+                       SET status=$3, updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2
+                       RETURNING id, workspace_id, interval_hours, status, next_run_at,
+                                 last_enqueued_at, created_by, created_at, updated_at""",
+                    schedule_id, payload.workspace_id, payload.status,
+                )
         if row is None:
             raise HTTPException(status_code=404, detail="growth_schedule_not_found")
         return _serialize(dict(row))
