@@ -276,3 +276,12 @@ Merged to `main` after the prior scorecard snapshot:
 Latest verified `main` commit at this assessment: `78a2e8463218bd82b6ed6ef8eac4844f87597900`. Backend CI run [40565732117](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40565732117) failed. Recent runs report no usable runner-step details/logs; the connected commit status has also shown a Vercel build-rate-limit failure. It is therefore **not known** whether the Python tests ran, and no new test pass is claimed.
 
 The phase percentages and 63/65 overall estimates elsewhere in this historical scorecard are not being increased based on code merges alone. Phase 1 remains unverified until the full backend tests and PostgreSQL migration/integration checks complete successfully. Launch blockers remain unchanged: real Hostinger upload/domain acceptance, live email/provider acceptance, billing sandbox lifecycle, backup/restore, and production security/performance/accessibility checks.
+
+## WhatsApp queue authorization hardening — 2026-10-28
+
+- Open PR [#10](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/10) rechecks account-scoped documented opt-in, phone presence, and current account-scoped opt-out state in the same transaction that creates a WhatsApp outbound queue row.
+- The queue transaction locks the workspace-scoped draft, campaign, prospect, consent-control row, and active WhatsApp account. Opt-out preference state is read under a row lock when present.
+- Added unit regressions for missing consent, current opt-out, and successful queue persistence. These are code changes only until CI can execute them.
+- No live WhatsApp dispatch is enabled by this change.
+- Overall and phase estimates remain unchanged at 63/100 overall, with phases 1–6 at 82%, 55%, 64%, 76%, 53%, and 25%, respectively. PR #10 is open and not merged; the latest Actions jobs remain unavailable for reliable test-result confirmation. Do not increase scores based solely on the new patch.
+
