@@ -21,7 +21,7 @@ class WorkspaceGrowthScheduleRunner:
     async def enqueue_one_due(self, *, now: datetime | None = None) -> dict[str, str] | None:
         current = now or datetime.now(timezone.utc)
         if current.tzinfo is None or current.utcoffset() is None:
-            raise ValueError("now_must_be_timezone_aware")
+            raise ValueError("now must be timezone-aware")
         current = current.astimezone(timezone.utc)
 
         async with self._pool.acquire() as conn:
