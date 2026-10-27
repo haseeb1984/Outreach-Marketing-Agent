@@ -255,6 +255,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.domain_verification_challenges') IS NOT NULL
                      AND to_regclass('public.workspace_jobs') IS NOT NULL
                      AND to_regclass('public.workspace_growth_schedules') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workspace_growth_schedules' AND column_name='last_error_code')
                      AND to_regclass('public.app_users') IS NOT NULL
                      AND to_regclass('public.workspace_memberships') IS NOT NULL
                      AND to_regclass('public.auth_sessions') IS NOT NULL
@@ -316,8 +317,9 @@ async def readiness() -> Response:
                             '032_whatsapp_consent_account_scope.sql',
                             '033_draft_edit_audit_event.sql',
                             '034_workspace_delivery_cascade_cleanup.sql',
-                            '035_workspace_growth_schedules.sql'
-                          )) = 35"""
+                            '035_workspace_growth_schedules.sql',
+                            '036_growth_schedule_quota_status.sql'
+                          )) = 36"""
             )
             if not schema_ready:
                 return JSONResponse(

@@ -71,6 +71,7 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "019_website_audit_reports.sql",
         "034_workspace_delivery_cascade_cleanup.sql",
         "035_workspace_growth_schedules.sql",
+        "036_growth_schedule_quota_status.sql",
     ):
         assert migration in connection.schema_query
     for table in (

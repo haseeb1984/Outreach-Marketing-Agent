@@ -87,7 +87,7 @@ class WebsiteGrowthScanRequest(BaseModel):
 async def enqueue_website_growth_scan(
     payload: WebsiteGrowthScanRequest,
     request: Request,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=160),
 ) -> dict:
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
@@ -105,6 +105,24 @@ async def enqueue_website_growth_scan(
     except Exception:
         raise HTTPException(status_code=503, detail="domain_authorization_unavailable") from None
 
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+    try:
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="website_audits",
+            idempotency_key="workspace-growth-job:" + idempotency_key,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
+    if reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="growth_job_key_already_used")
+    reservation_id = reservation["reservation_id"]
+
     try:
         job = await WorkspaceJobQueue(_pool(request)).enqueue(
             workspace_id=payload.workspace_id,
@@ -121,9 +139,30 @@ async def enqueue_website_growth_scan(
             max_attempts=3,
         )
     except ValueError:
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=422, detail="invalid_website_growth_job") from None
     except Exception:
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=503, detail="website_growth_job_unavailable") from None
+    if reservation.get("status") == "reserved":
+        try:
+            finished = await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        except Exception:
+            finished = False
+        if not finished:
+            raise HTTPException(status_code=503, detail="growth_job_quota_persistence_failed")
     return {
         "id": job["id"],
         "workspace_id": job["workspace_id"],
