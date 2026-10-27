@@ -62,7 +62,7 @@ Statuses are `queued`, `running`, `succeeded`, `failed`, and `cancelled`. A queu
 Workspace members can create a recurring scan after the domain is verified:
 
 - `POST /api/v1/workspace-growth-schedules` with `workspace_id`, `start_url`, `business_type`, `target_market`, optional `target_queries`, and `interval_hours`.
-- Supported intervals are 6 to 720 hours. Each schedule is workspace-scoped and stores a normalized URL plus bounded scan settings.
+- Supported intervals are 6 to 720 hours, with a maximum of 20 active schedules per workspace. Creation/resume operations serialize on the workspace row to enforce the cap. Each schedule is workspace-scoped and stores a normalized URL plus bounded scan settings.
 - `GET /api/v1/workspace-growth-schedules?workspace_id=<workspace-id>` lists schedule metadata.
 - `PATCH /api/v1/workspace-growth-schedules/<schedule-id>` accepts `workspace_id` and `status` (`active` or `paused`) to pause/resume.
 - `DELETE /api/v1/workspace-growth-schedules/<schedule-id>?workspace_id=<workspace-id>` requires workspace-admin membership.
