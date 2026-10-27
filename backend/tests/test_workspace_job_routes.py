@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from pydantic import ValidationError
 
@@ -103,8 +104,7 @@ def _request_with_state(**state_values):
     return Request({"type": "http", "app": app, "method": "POST", "path": "/", "headers": [], "query_string": b""})
 
 
-@pytest.mark.asyncio
-async def test_growth_job_rejects_when_workspace_has_no_quota(monkeypatch):
+def test_growth_job_rejects_when_workspace_has_no_quota(monkeypatch):
     subscriptions = _SubscriptionStore({"allowed": False, "reason": "quota_exhausted"})
     request = _request_with_state(
         domain_authorization_store=_DomainStore(),
@@ -129,17 +129,16 @@ async def test_growth_job_rejects_when_workspace_has_no_quota(monkeypatch):
         target_market="US",
     )
     with pytest.raises(HTTPException) as error:
-        await workspace_job_routes.enqueue_website_growth_scan(
+        asyncio.run(workspace_job_routes.enqueue_website_growth_scan(
             payload, request, idempotency_key="test-scan-key-001"
-        )
+        ))
 
     assert error.value.status_code == 429
     assert subscriptions.reserve_args["feature"] == "website_audits"
     assert subscriptions.finished == []
 
 
-@pytest.mark.asyncio
-async def test_growth_job_consumes_quota_after_queue_acceptance(monkeypatch):
+def test_growth_job_consumes_quota_after_queue_acceptance(monkeypatch):
     reservation_id = str(uuid4())
     subscriptions = _SubscriptionStore({
         "allowed": True,
@@ -186,9 +185,9 @@ async def test_growth_job_consumes_quota_after_queue_acceptance(monkeypatch):
         business_type="SaaS",
         target_market="US",
     )
-    result = await workspace_job_routes.enqueue_website_growth_scan(
+    result = asyncio.run(workspace_job_routes.enqueue_website_growth_scan(
         payload, request, idempotency_key="test-scan-key-002"
-    )
+    ))
 
     assert result["status"] == "queued"
     assert subscriptions.finished == [{
