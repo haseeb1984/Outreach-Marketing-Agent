@@ -153,3 +153,33 @@ def test_account_export_includes_workspace_names_and_domain_verification_records
     assert "last_inbound_message_id" not in preferences_query
     assert response.headers["content-disposition"].startswith("attachment;")
     assert response.headers["cache-control"] == "no-store, private"
+
+
+def test_account_export_marks_workspace_scoped_collections_when_memberships_are_bounded(monkeypatch):
+    conn = FakeExportConnection()
+
+    async def fetch_many(query, *args):
+        conn.fetch_queries.append(query)
+        if "FROM workspaces w JOIN workspace_memberships" in query:
+            return [
+                {
+                    "workspace_id": f"workspace-{index:03d}",
+                    "workspace_name": f"Workspace {index}",
+                    "workspace_created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    "role": "owner",
+                    "membership_created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                }
+                for index in range(101)
+            ]
+        return []
+
+    conn.fetch = fetch_many
+    monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
+    with TestClient(app) as client:
+        app.state.db_pool = FakePool(conn)
+        response = client.get("/api/v1/account/export")
+
+    assert response.status_code == 200
+    truncated = response.json()["limits"]["truncated_collections"]
+    assert "workspaces" in truncated
+    assert "workspace_scoped_collections" in truncated
