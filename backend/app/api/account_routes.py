@@ -64,6 +64,9 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "whatsapp_contact_preferences": [],
                     "whatsapp_outbound_deliveries": [],
                     "whatsapp_delivery_status_events": [],
+                    "subscriptions": [],
+                    "feature_usage_reservations": [],
+                    "billing_events": [],
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
                         "note": "Collections are capped to protect service availability; if any collection reaches the cap, request a larger operator-assisted export.",
@@ -117,6 +120,16 @@ async def export_account_data(request: Request) -> JSONResponse:
                             recipient_wa_id,status,provider_timestamp,received_at,errors
                             FROM whatsapp_delivery_status_events WHERE workspace_id=ANY($1::text[])
                             ORDER BY received_at,id LIMIT $2""",
+                        "subscriptions": """SELECT workspace_id,provider,provider_customer_id,provider_subscription_id,status,
+                            billing_period_starts_at,billing_period_ends_at,entitlements,provider_event_created_at,updated_at
+                            FROM workspace_subscriptions WHERE workspace_id=ANY($1::text[])
+                            ORDER BY workspace_id LIMIT $2""",
+                        "feature_usage_reservations": """SELECT id,workspace_id,feature,idempotency_key,billing_period_starts_at,
+                            billing_period_ends_at,status,created_at,updated_at FROM feature_usage_reservations
+                            WHERE workspace_id=ANY($1::text[]) ORDER BY created_at,id LIMIT $2""",
+                        "billing_events": """SELECT provider,provider_event_id,workspace_id,provider_subscription_id,
+                            event_created_at,received_at,outcome FROM billing_provider_events
+                            WHERE workspace_id=ANY($1::text[]) ORDER BY event_created_at,id LIMIT $2""",
                     }
                     for collection, query in queries.items():
                         rows = await conn.fetch(query, workspace_ids, _MAX_EXPORT_ROWS)
