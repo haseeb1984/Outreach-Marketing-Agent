@@ -86,6 +86,10 @@ async def export_account_data(request: Request) -> JSONResponse:
                 }
                 if export_memberships_truncated:
                     export["limits"]["truncated_collections"].append("workspaces")
+                    # workspace_ids comes from the bounded membership list. If there are
+                    # more than 100 workspaces, workspace-scoped collections can also
+                    # omit records belonging to the remaining workspaces.
+                    export["limits"]["truncated_collections"].append("workspace_scoped_collections")
                 if workspace_ids:
                     domain_rows = await conn.fetch(
                         """SELECT id,workspace_id,domain_ascii,status,verification_method,
