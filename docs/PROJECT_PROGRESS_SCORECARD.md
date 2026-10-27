@@ -363,3 +363,18 @@ Implementation is on branch `fix/growth-scan-quota-enforcement` and awaits CI/re
 - The recurring dispatcher checks entitlement per due slot. If the workspace is not entitled or has no quota, it skips the slot, advances the next-run time, and records `last_error_code` and `last_attempted_at` rather than retrying every poll.
 - Added migration 036, readiness checks, scheduler quota tests, and dashboard visibility for the last attempted run/error.
 - This correction is not merged yet; CI and PostgreSQL migration execution remain unverified. No phase score is increased.
+
+## Merged feature batch reconciliation — 2026-10-28
+
+Repository review confirms these feature batches have since merged to `main`:
+
+- [PR #12](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/12): durable recurring website-growth schedules, schedule API, idempotent dispatcher and migration 035.
+- [PR #13](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/13): workspace-scoped campaign performance analytics API.
+- [PR #14](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/14): dashboard campaign analytics UI.
+- [PR #15](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/15): recurring scan schedule management UI.
+- [PR #16](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/16): one-off scan queueing, job history and saved report viewing.
+- [PR #17](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/17): usage entitlement enforcement for one-off and recurring growth scans, migration 036, and visible schedule attempt/error status.
+
+These merges close the earlier “awaiting review” labels recorded in the sections above; those sections are retained as historical change notes. This code is merged, but current CI still has not provided a successful, verifiable test run. Migrations 035–036, scheduler and scan worker supervision, quota lifecycle under real database transactions, and browser acceptance remain release gates. Do not increase phase scores solely because PRs merged.
+
+The next open infrastructure batch is [PR #18](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/18), PostgreSQL backup/restore tooling. Its merge was rejected because the branch is out of date with `main`; it must be updated/reviewed before merge. A separate older draft, [PR #1](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/1), remains open and should not be merged wholesale without an architecture/migration conflict audit.
