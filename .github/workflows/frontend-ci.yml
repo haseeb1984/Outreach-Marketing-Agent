@@ -60,8 +60,10 @@ jobs:
                   archive.write(path, relative)
           with ZipFile(output) as archive:
               names = archive.namelist()
-              assert "frontend/package.json" in names
-              assert "frontend/.env.example" in names
+              assert "package.json" in names
+              assert ".env.example" in names
+              assert "next.config.ts" in names
+              assert "app/page.tsx" in names
               assert not any(Path(name).name.startswith(".env") and Path(name).name != ".env.example" for name in names)
           print(f"Packaged {len(names)} files into {output.name}; archive paths are at the frontend app root.")
           PY
