@@ -63,6 +63,9 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       campaign_archived: "This campaign is archived, so its drafts cannot be queued or sent.",
       campaign_paused: "This campaign is paused, so new drafts and sends are blocked until it is resumed.",
       domain_not_verified: "Verify this website domain in the workspace before running a growth review.",
+      website_domain_not_authorized: "Verify this website domain in the active workspace before scheduling scans.",
+      growth_schedule_limit_reached: "This workspace already has 20 active recurring scans. Pause one before creating or resuming another.",
+      growth_schedule_service_not_configured: "Recurring scan scheduling is not available until the database migration is applied.",
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
