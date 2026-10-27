@@ -70,6 +70,7 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "018_workspace_email_accounts.sql",
         "019_website_audit_reports.sql",
         "034_workspace_delivery_cascade_cleanup.sql",
+        "035_workspace_growth_schedules.sql",
     ):
         assert migration in connection.schema_query
     for table in (
@@ -77,6 +78,7 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "workspace_invitations",
         "workspace_email_accounts",
         "website_audit_reports",
+        "workspace_growth_schedules",
     ):
         assert f"public.{table}" in connection.schema_query
 
