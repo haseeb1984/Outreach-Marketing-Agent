@@ -174,3 +174,43 @@ async def list_workspace_jobs(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="workspace_job_list_unavailable") from None
+
+
+@router.get("/{job_id}")
+async def get_workspace_job(
+    job_id: str,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Return a job's outcome only after proving membership in its owning workspace."""
+    from uuid import UUID
+
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    try:
+        parsed_job_id = UUID(job_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="workspace_job_not_found") from None
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT id, workspace_id, job_type, status, result, error_code,
+                          attempt_count, max_attempts, run_after, created_at,
+                          started_at, finished_at, updated_at
+                   FROM workspace_jobs
+                   WHERE id=$1 AND workspace_id=$2""",
+                parsed_job_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="workspace_job_not_found")
+        item = dict(row)
+        item["id"] = str(item["id"])
+        # Research output is visible only for completed jobs; never expose internal
+        # payloads or lease/worker metadata through this customer-facing endpoint.
+        if item["status"] != "succeeded":
+            item["result"] = None
+        return item
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="workspace_job_unavailable") from None
