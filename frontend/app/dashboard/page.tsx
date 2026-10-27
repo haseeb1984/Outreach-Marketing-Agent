@@ -11,6 +11,7 @@ type Draft = { id: string; subject?: string; body?: string; channel?: string; st
 type Plan = { id: string; name: string; description: string; display_price: string | null; currency: string | null; billing_interval: string | null; checkout_available: boolean };
 type Delivery = { id: string; subject?: string; channel?: string; status: string; error_code?: string | null; created_at?: string };
 type Counts = Record<string, number>;
+type CampaignPerformance = { id: string; name: string; status: string; counts: Counts };
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
@@ -132,6 +133,7 @@ export default function DashboardPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
   const [counts, setCounts] = useState<Counts>({});
+  const [campaignPerformance, setCampaignPerformance] = useState<CampaignPerformance[]>([]);
   const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
   const [entitlementsUnavailable, setEntitlementsUnavailable] = useState(false);
   const [period, setPeriod] = useState("30");
@@ -169,6 +171,10 @@ export default function DashboardPage() {
     setDrafts(d.items || []);
     setDeliveries(deliveryResult.items || []);
     setCounts(a.counts || {});
+    const performanceResult = await Promise.allSettled([
+      api<{ items: CampaignPerformance[] }>("/api/v1/analytics/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period + "&limit=50", token),
+    ]);
+    setCampaignPerformance(performanceResult[0].status === "fulfilled" ? (performanceResult[0].value.items || []) : []);
     const projectResult = await Promise.allSettled([
       api<ApiResult<Project>>("/api/v1/projects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
@@ -1061,6 +1067,27 @@ export default function DashboardPage() {
           })}</div>
         </section>
         <section className="section" aria-labelledby="metrics-title"><div className="section-head"><h2 id="metrics-title">Recorded activity</h2><p className="fine">Counts from saved records; not estimates of revenue or ROI.</p></div><div className="dashboard-grid">{metricItems.map(([label,key])=><article className="metric" key={key}><strong>{counts[key] ?? "—"}</strong><span>{label}</span></article>)}</div><p className="fine">“Marked sent” means the configured email adapter returned successfully; it does not prove inbox delivery. Clicks, revenue and ROI are not inferred.</p></section>
+        <section className="section" aria-labelledby="campaign-performance-title">
+          <div className="section-head"><h2 id="campaign-performance-title">Campaign performance</h2><p className="fine">Recorded workflow outcomes for the selected period; these are not revenue attribution.</p></div>
+          <div className="cards">{campaignPerformance.length ? campaignPerformance.map(item => <article className="card" key={item.id}>
+            <p className="eyebrow">{item.status}</p><h3>{item.name}</h3>
+            <div className="dashboard-grid">
+              {[
+                ["Prospects", "prospects_in_campaign"],
+                ["Pending review", "drafts_pending_approval"],
+                ["Approved", "drafts_approved"],
+                ["Email sent", "email_sent_marked"],
+                ["Email failed", "email_failed"],
+                ["Email uncertain", "email_uncertain"],
+                ["WhatsApp delivered", "whatsapp_delivered"],
+                ["WhatsApp read", "whatsapp_read"],
+                ["Prospect replies", "replies_from_campaign_prospects"],
+                ["Converted stage", "converted_stage_prospects"],
+              ].map(([label, key]) => <div className="metric" key={key}><strong>{item.counts[key] ?? 0}</strong><span>{label}</span></div>)}
+            </div>
+            <p className="fine">Replies are associated with prospects that have drafts in this campaign; this does not prove the campaign caused a reply. Converted stage is a CRM label, not verified sales revenue.</p>
+          </article>) : <article className="card"><p>No campaign performance records are available. Refresh after creating campaigns and recording draft or delivery activity.</p></article>}</div>
+        </section>
         <section className="section"><div className="cards">
           <article className="card"><h2>Create campaign</h2><p className="fine">Define the offer and intended audience before generating any draft.</p><form onSubmit={createCampaign}><div className="field"><label htmlFor="campaign-name">Campaign name</label><input id="campaign-name" required maxLength={200} value={campaignName} onChange={e=>setCampaignName(e.target.value)} /></div><div className="field"><label htmlFor="business-name">Business / client</label><input id="business-name" required maxLength={240} value={businessName} onChange={e=>setBusinessName(e.target.value)} /></div><div className="field"><label htmlFor="offer">Offer</label><textarea id="offer" required maxLength={2000} value={offer} onChange={e=>setOffer(e.target.value)} /></div><div className="field"><label htmlFor="target-profile">Target customer profile</label><textarea id="target-profile" required maxLength={2000} value={targetProfile} onChange={e=>setTargetProfile(e.target.value)} /></div><button className="button" disabled={busy || !canWrite || !workspaceId}>Create campaign</button></form></article>
           <article className="card"><h2>Add a prospect</h2><p className="fine">Save public evidence and a clear reason for fit. Website and evidence URLs must use HTTPS.</p><form onSubmit={createProspect}><div className="field"><label htmlFor="prospect-name">Contact / prospect name</label><input id="prospect-name" required maxLength={200} value={prospectName} onChange={e=>setProspectName(e.target.value)} /></div><div className="field"><label htmlFor="prospect-company">Company</label><input id="prospect-company" required maxLength={240} value={prospectCompany} onChange={e=>setProspectCompany(e.target.value)} /></div><div className="field"><label htmlFor="prospect-email">Business email (optional)</label><input id="prospect-email" type="email" maxLength={320} value={prospectEmail} onChange={e=>setProspectEmail(e.target.value)} /></div><div className="field"><label htmlFor="prospect-phone">WhatsApp phone in international E.164 format (optional)</label><input id="prospect-phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+14155552671" pattern="[+][1-9][0-9]{7,14}" maxLength={16} value={prospectPhone} onChange={e=>setProspectPhone(e.target.value)} /><p className="fine">Store a phone number only when you have a legitimate business reason. A phone number alone is not WhatsApp opt-in.</p></div><div className="field"><label htmlFor="prospect-website">Website URL</label><input id="prospect-website" type="url" required placeholder="https://example.com" value={prospectWebsite} onChange={e=>setProspectWebsite(e.target.value)} /></div><div className="field"><label htmlFor="evidence-url">Evidence URL</label><input id="evidence-url" type="url" required placeholder="https://example.com/about" value={evidenceUrl} onChange={e=>setEvidenceUrl(e.target.value)} /></div><div className="field"><label htmlFor="fit-reason">Why this prospect fits</label><textarea id="fit-reason" required maxLength={2000} value={fitReason} onChange={e=>setFitReason(e.target.value)} /></div><button className="button" disabled={busy || !canWrite || !workspaceId}>Save prospect</button></form></article>
