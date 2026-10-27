@@ -57,4 +57,5 @@ def test_whatsapp_draft_requires_the_consent_account_to_remain_active():
     assert 'controls.get("whatsapp_account_id")' in whatsapp_checks
     assert "FROM workspace_whatsapp_accounts" in whatsapp_checks
     assert "status='active'" in whatsapp_checks
+    assert "FOR SHARE" in whatsapp_checks
     assert 'raise ValueError("WhatsApp consent account is not active")' in whatsapp_checks
