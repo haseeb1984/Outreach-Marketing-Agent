@@ -1,6 +1,6 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-27 (Phase 1 workspace-deletion cascade and CI blocker audit)  
+Last assessed: 2026-10-27 (account recovery UX and CI/release blocker audit)  
 Source: current `main` code and migration review. Latest backend CI run 40556391786 failed across Python 3.11/3.12/3.13 with no job steps or retrievable logs; the cause remains unestablished. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
 
 ## How to read these numbers
@@ -19,7 +19,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 | Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
 | Phase 6 — Production verification | 42% | Backend CI and frontend production build/Hostinger packaging pass on recent commits; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
 
-Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(76×0.20)+(53×0.15)+(42×0.10)=64.8`, rounded to **65%**.
+Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(76×0.20)+(53×0.15)+(25×0.10)=63.1`, rounded to **63%**.
 
 
 
@@ -34,6 +34,12 @@ New verified code and CI evidence since the prior score:
 - A new regression test explicitly verifies that workspace-triggered worker claims are constrained to active accounts for the requested workspace.
 
 The weighted implementation estimate at that checkpoint was **63/100**. This is an evidence-based estimate, not a test-pass rate or release-readiness score; it does **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
+
+## Latest account recovery and release-audit batch — 2026-10-27
+
+- Added `/forgot-password` and `/resend-verification` pages using the backend’s existing privacy-preserving endpoints; sign-in now links to both recovery paths.
+- Updated `robots.ts` to keep these account-recovery pages out of crawler indexing, and corrected Phase 6/overall scorecard values to reflect current failing CI instead of stale pass claims.
+- Frontend and backend runs [40558237526](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558237526) and [40558237780](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558237780) report failure. Job steps/logs are not returned by the connected GitHub interface, so no root cause or passing build/test is claimed.
 
 ## Latest Phase 1 implementation batch — 2026-10-27
 
@@ -93,14 +99,15 @@ The weighted implementation estimate at that checkpoint was **63/100**. This is 
 - [x] Added database-backed package create/edit/deactivate controls and connected the catalog to Paddle checkout/public plans/webhook mapping. Deactivation preserves historical plan mapping for existing subscription events.
 - [~] Admin plan catalog and audit migrations are in code but have not been applied to a live database; frontend/API acceptance has not been run. Configure `PLATFORM_ADMIN_EMAILS` with exact verified operator email(s) before using the admin surface.
 
-### Phase 6 — Production verification: 40%
+### Phase 6 — Production verification: 25%
 
 - [x] Secret-safe logging and environment-based provider configuration foundations.
 - [~] Database readiness and migration checks are present; the latest migrations have not been applied/verified against a live database in this work.
-- [x] Historical backend CI passed on commit `013863f` across Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL authentication integration tests and dependency audit passed. See [run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619).
-- [ ] Current backend CI is not green: [run 40554561947](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40554561947) failed across all three Python jobs before runner allocation, with empty steps and no retrievable logs. Root cause remains unconfirmed.
+- [x] Historical backend CI passed on commit `013863f` across Python 3.11, 3.12 and 3.13; this is historical evidence only and does not establish current main health. See [run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619).
+- [ ] Current backend CI is not green: [latest run](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558237780) reports failures across all three Python jobs, while GitHub job metadata returns no steps or logs through the available connection. Root cause remains unconfirmed.
 - [ ] Live SMTP, Meta WhatsApp and Paddle sandbox/production acceptance is not established.
-- [ ] Final Hostinger frontend ZIP, accessibility/performance/SEO release checks and production smoke-test evidence remain pending.
+- [ ] Hostinger frontend ZIP artifact is not yet verified: [latest frontend CI run](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558237526) reports failure and exposes no steps/logs through the available connection. Accessibility/performance/SEO release checks and production smoke-test evidence remain pending.
+- [x] Added customer-facing password-reset request and verification-email resend pages and linked them from sign-in; frontend CI has not yet verified these changes.
 
 ## Changes in this update
 
