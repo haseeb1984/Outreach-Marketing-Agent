@@ -13,6 +13,7 @@ type Delivery = { id: string; subject?: string; channel?: string; status: string
 type Counts = Record<string, number>;
 type CampaignPerformance = { id: string; name: string; status: string; counts: Counts };
 type GrowthSchedule = { id: string; interval_hours: number; status: "active" | "paused"; next_run_at: string; last_enqueued_at?: string | null };
+type GrowthJob = { id: string; job_type: string; status: string; error_code?: string | null; attempt_count: number; max_attempts: number; created_at: string; finished_at?: string | null };
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
@@ -141,6 +142,9 @@ export default function DashboardPage() {
   const [campaignPerformanceUnavailable, setCampaignPerformanceUnavailable] = useState(false);
   const [growthSchedules, setGrowthSchedules] = useState<GrowthSchedule[]>([]);
   const [growthSchedulesUnavailable, setGrowthSchedulesUnavailable] = useState(false);
+  const [growthJobs, setGrowthJobs] = useState<GrowthJob[]>([]);
+  const [growthJobsUnavailable, setGrowthJobsUnavailable] = useState(false);
+  const [growthJobReport, setGrowthJobReport] = useState<{ id: string; result: unknown } | null>(null);
   const [scheduleStartUrl, setScheduleStartUrl] = useState("");
   const [scheduleBusinessType, setScheduleBusinessType] = useState("");
   const [scheduleTargetMarket, setScheduleTargetMarket] = useState("");
@@ -193,6 +197,11 @@ export default function DashboardPage() {
     ]);
     setGrowthSchedules(scheduleResult[0].status === "fulfilled" ? (scheduleResult[0].value.items || []) : []);
     setGrowthSchedulesUnavailable(scheduleResult[0].status !== "fulfilled");
+    const jobResult = await Promise.allSettled([
+      api<{ items: GrowthJob[] }>("/api/v1/workspace-jobs?workspace_id=" + encodeURIComponent(selectedId) + "&limit=20&offset=0", token),
+    ]);
+    setGrowthJobs(jobResult[0].status === "fulfilled" ? (jobResult[0].value.items || []) : []);
+    setGrowthJobsUnavailable(jobResult[0].status !== "fulfilled");
     const projectResult = await Promise.allSettled([
       api<ApiResult<Project>>("/api/v1/projects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
