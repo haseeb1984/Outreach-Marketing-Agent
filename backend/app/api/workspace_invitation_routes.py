@@ -61,7 +61,8 @@ async def list_invitations(
     try:
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
-                """SELECT id,workspace_id,invited_email,role,\n                          CASE WHEN status='pending' AND expires_at <= now() THEN 'expired' ELSE status END AS status,invited_by,
+                """SELECT id,workspace_id,invited_email,role,
+                          CASE WHEN status='pending' AND expires_at <= now() THEN 'expired' ELSE status END AS status,invited_by,
                           created_at,expires_at,accepted_at,revoked_at
                    FROM workspace_invitations WHERE workspace_id=$1
                    ORDER BY created_at DESC LIMIT 100""",
