@@ -85,6 +85,20 @@ class CampaignStore:
                 if channel == "whatsapp":
                     if not controls or controls["whatsapp_opt_in_at"] is None or not controls["whatsapp_opt_in_evidence_url"]:
                         raise ValueError("WhatsApp documented opt-in evidence is required")
+                    # Consent is tied to a specific workspace account. Do not create
+                    # drafts against consent whose account has since been disabled.
+                    consent_account_id = controls.get("whatsapp_account_id")
+                    account_active = False
+                    if consent_account_id is not None:
+                        active_account = await conn.fetchrow(
+                            """SELECT id FROM workspace_whatsapp_accounts
+                               WHERE id=$1 AND workspace_id=$2 AND status='active'
+                               FOR SHARE""",
+                            consent_account_id, workspace_id,
+                        )
+                        account_active = active_account is not None
+                    if not account_active:
+                        raise ValueError("WhatsApp consent account is not active")
                     phone_digits = "".join(ch for ch in str(p.get("contact_phone_e164") or "") if ch.isdigit())
                     if not phone_digits:
                         raise ValueError("prospect_whatsapp_phone_required")
