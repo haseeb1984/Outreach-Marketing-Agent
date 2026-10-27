@@ -103,4 +103,6 @@ def test_preflight_flags_missing_required_operational_artifacts(tmp_path: Path):
 def test_preflight_uses_safe_json_statuses_for_remote_gates(tmp_path: Path):
     result = evaluate_config(_env(), tmp_path)
     assert all(item["status"] in {"pass", "fail", "warning"} for item in result["checks"])
-    assert all("secret" not in item["detail"].lower() for item in result["checks"])
+    assert "tiny-secret" not in str(result)
+    assert "postgresql://app:secret@localhost/app" not in str(result)
+    assert "PROVIDER_CREDENTIAL_ENCRYPTION_KEY" in str(result)
