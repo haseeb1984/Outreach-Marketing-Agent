@@ -1132,6 +1132,24 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function deleteAccount() {
+    if (!csrf || busy) return;
+    if (!window.confirm("Permanently delete this account? Your sign-in will stop and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
+    const confirmation = window.prompt("Type DELETE MY ACCOUNT to confirm this irreversible action.");
+    if (confirmation !== "DELETE MY ACCOUNT") {
+      setNotice("Account deletion was not confirmed; no changes were made.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api<{ status: string }>("/api/v1/account", csrf, { method: "DELETE", body: "{}" });
+      router.replace("/login?account_deleted=1");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Account deletion could not be completed.");
+    } finally { setBusy(false); }
+  }
+
   async function logout() {
     setBusy(true);
     try { await api("/api/v1/auth/logout", csrf, { method: "POST", body: "{}" }); }
@@ -1405,6 +1423,15 @@ export default function DashboardPage() {
           </article>
         </section>
         <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && deliveries.some(delivery=>delivery.status==="processing") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={reconcileStaleDeliveries}>Reconcile sends stuck for 15+ minutes</button><p className="fine">This only marks stale sends as uncertain. It never automatically retries messages.</p></div>}<div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
+        <section className="section" aria-labelledby="account-danger-title">
+          <h2 id="account-danger-title">Account privacy and deletion</h2>
+          <article className="card">
+            <h3>Export or permanently delete your account</h3>
+            <p>Your account export is available from the footer. Account deletion revokes sessions, pseudonymizes your login identity, and removes sole-member workspaces. If another active member depends on a workspace you own, transfer ownership before retrying.</p>
+            <button className="button secondary" type="button" disabled={busy || !csrf} onClick={deleteAccount}>Delete my account</button>
+            <p className="fine">This action is irreversible and requires two explicit confirmations. It does not claim to erase records retained by external providers or legally required operational records.</p>
+          </article>
+        </section>
       </>}
     </main>
     <footer className="wrap"><p>Private workspace · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/contact">Contact</Link> · <a href="/api/v1/account/export">Download account data (JSON)</a> · <Link href="/">Public site</Link></p></footer>
