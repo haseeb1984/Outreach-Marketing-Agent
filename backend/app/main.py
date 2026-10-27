@@ -105,7 +105,7 @@ app.add_middleware(
     allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "Idempotency-Key"],
 )
 
 from app.api.auth_routes import router as auth_router
@@ -122,6 +122,7 @@ from app.api.research_routes import router as research_router
 from app.api.website_audit_routes import router as website_audit_router
 from app.api.domain_routes import router as domain_router
 from app.api.project_routes import router as project_router
+from app.api.workspace_job_routes import router as workspace_job_router
 from app.api.workspace_invitation_routes import router as invitation_router
 from app.api.account_routes import router as account_router
 from app.api.workspace_member_routes import router as workspace_member_router
@@ -148,6 +149,7 @@ app.include_router(research_router)
 app.include_router(website_audit_router)
 app.include_router(domain_router)
 app.include_router(project_router)
+app.include_router(workspace_job_router)
 app.include_router(invitation_router)
 app.include_router(account_router)
 app.include_router(workspace_member_router)
