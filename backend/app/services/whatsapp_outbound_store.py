@@ -21,17 +21,21 @@ class WhatsAppOutboundStore:
             async with conn.transaction():
                 draft = await conn.fetchrow(
                     """SELECT d.id,d.prospect_id,d.status,d.channel,c.status AS campaign_status,
-                              p.stage,p.archived_at,a.id AS active_account_id
+                              p.stage,p.archived_at,p.contact_phone_e164,
+                              cc.whatsapp_opt_in_at,cc.whatsapp_opt_in_evidence_url,
+                              cc.whatsapp_account_id,a.id AS active_account_id
                        FROM outreach_drafts d
                        JOIN outreach_campaigns c
                          ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
                        JOIN crm_prospects p
                          ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
+                       JOIN outreach_contact_controls cc
+                         ON cc.prospect_id=p.id AND cc.workspace_id=d.workspace_id
                        JOIN workspace_whatsapp_accounts a
                          ON a.id=$3 AND a.workspace_id=d.workspace_id
                         AND a.status='active' AND a.encrypted_access_token IS NOT NULL
                        WHERE d.id=$2 AND d.workspace_id=$1
-                       FOR UPDATE OF d,c,p,a""",
+                       FOR UPDATE OF d,c,p,cc,a""",
                     workspace_id, draft_id, account_id,
                 )
                 if draft is None:
@@ -44,6 +48,28 @@ class WhatsAppOutboundStore:
                     raise ValueError("prospect_archived")
                 if draft["stage"] == "do_not_contact":
                     raise ValueError("contact_suppressed")
+                if (
+                    draft["whatsapp_opt_in_at"] is None
+                    or not draft["whatsapp_opt_in_evidence_url"]
+                    or draft["whatsapp_account_id"] != account_id
+                ):
+                    raise ValueError("documented_whatsapp_opt_in_for_account_required")
+                phone = "".join(
+                    ch for ch in str(draft["contact_phone_e164"] or "") if ch.isdigit()
+                )
+                if not phone:
+                    raise ValueError("prospect_whatsapp_phone_required")
+                preference = await conn.fetchrow(
+                    """SELECT opted_out_at,opted_in_at
+                       FROM whatsapp_contact_preferences
+                       WHERE workspace_id=$1 AND account_id=$2 AND wa_id=$3
+                       FOR UPDATE""",
+                    workspace_id, account_id, phone,
+                )
+                if preference is not None and preference["opted_out_at"] is not None:
+                    opted_in_at = preference["opted_in_at"]
+                    if opted_in_at is None or preference["opted_out_at"] >= opted_in_at:
+                        raise ValueError("whatsapp_contact_opted_out")
                 existing = await conn.fetchrow(
                     """SELECT id,account_id,draft_id,status,idempotency_key,usage_reservation_id
                        FROM whatsapp_outbound_deliveries
