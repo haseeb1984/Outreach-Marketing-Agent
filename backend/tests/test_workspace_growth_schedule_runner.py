@@ -144,5 +144,5 @@ def test_scheduler_does_not_enqueue_when_no_schedule_is_due():
 def test_scheduler_requires_timezone_aware_clock():
     runner = WorkspaceGrowthScheduleRunner(_Pool(_Connection(None)), _Subscriptions())
 
-    with pytest.raises(ValueError, match="timezone-aware"):
+    with pytest.raises(ValueError, match="timezone_aware"):
         asyncio.run(runner.enqueue_one_due(now=datetime(2026, 10, 28)))
