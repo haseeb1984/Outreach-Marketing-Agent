@@ -58,7 +58,7 @@ async def test_consumed_reservation_is_revalidated_without_charging_it_twice():
         now=NOW,
     )
 
-    assert result == {"allowed": True, "reason": "entitled"}
+    assert result == {"allowed": True, "reason": "entitled", "reservation_status": "consumed"}
 
 
 @pytest.mark.asyncio
@@ -91,7 +91,7 @@ async def test_worker_reservation_must_be_consumed_and_match_feature():
         now=NOW,
     )
 
-    assert result == {"allowed": False, "reason": "reservation_not_consumed"}
+    assert result == {"allowed": False, "reason": "reservation_not_active"}
 
 
 @pytest.mark.asyncio
