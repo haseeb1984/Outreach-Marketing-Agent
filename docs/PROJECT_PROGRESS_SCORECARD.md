@@ -323,3 +323,12 @@ Implementation is on branch `feat/campaign-performance-analytics` and is awaitin
 - Per-campaign metrics include draft review state, email delivery queue outcomes, WhatsApp outbound status, replies from associated campaign prospects, and CRM converted-stage snapshots.
 - Definitions explicitly distinguish recorded sends from inbox delivery and prospect association from causal attribution. Revenue, opens, clicks, signups and ROI remain unavailable without verified integrations.
 - Added route tests for workspace isolation and honest metric definitions. CI has not confirmed execution; implementation scores are not increased yet.
+
+
+## Dashboard campaign analytics UI batch — 2026-10-28
+
+Implementation is on branch `feat/dashboard-campaign-analytics` and awaits CI/review.
+
+- The workspace dashboard now requests the per-campaign analytics endpoint for the selected period and displays campaign prospects, draft review, email outcomes, WhatsApp delivery/read states, associated replies, and CRM converted-stage counts.
+- Analytics API failure is shown separately from an empty campaign list. Copy explicitly avoids claiming revenue or causal attribution.
+- Frontend TypeScript/build CI has not yet verified this change; no completion score is increased.
