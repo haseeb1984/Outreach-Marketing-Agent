@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import socket
+from uuid import UUID
 from typing import Any
 
 import asyncpg
