@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-27 (repository and CI evidence refresh; phase estimates below remain the 2026-10-24 estimate)  
-Source: current `main` code/documentation, production HTTP smoke checks, and the recent successful backend/frontend CI runs listed below. Frontend upload/browser/provider production acceptance remains unverified.
+Last assessed: 2026-10-27 (Phase 1 account privacy implementation update)  
+Source: current `main` code and migration review. The latest backend CI runs (40552581415 and 40553185707) failed before exposing any job steps or logs; the cause is not yet established. Frontend Hostinger upload and external provider acceptance remain unverified. The phase percentages below are estimates and must not be interpreted as current CI pass rates.
 
 ## How to read these numbers
 
@@ -41,7 +41,9 @@ The weighted implementation estimate at that checkpoint was **63/100**. This is 
 - [x] Workspace roles, memberships and invitations exist in code.
 - [x] Multi-project and domain-verification foundations exist in code.
 - [x] CRM prospect records and workspace-scoped dashboard foundations exist.
-- [ ] Account export/deletion and full onboarding/recovery acceptance are not yet demonstrated end to end.
+- [x] Account export and account deactivation/pseudonymization code exists, including bounded exports, truncation markers, session/token revocation, shared-workspace ownership protection, and cookie clearing. Export now includes workspace names and verified-domain records.
+- [~] Regression tests cover export bounds and account deletion safety; latest CI is failing before job steps/logs are available, and PostgreSQL/API end-to-end acceptance is still pending.
+- [ ] Full onboarding/recovery acceptance and a production database verification are not yet demonstrated end to end.
 
 ### Phase 2 — Discovery and research: 50%
 
@@ -85,7 +87,8 @@ The weighted implementation estimate at that checkpoint was **63/100**. This is 
 
 - [x] Secret-safe logging and environment-based provider configuration foundations.
 - [~] Database readiness and migration checks are present; the latest migrations have not been applied/verified against a live database in this work.
-- [x] Backend CI passed on commit `013863f` across Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL authentication integration tests and dependency audit passed. See [run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619).
+- [x] Historical backend CI passed on commit `013863f` across Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL authentication integration tests and dependency audit passed. See [run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619).
+- [ ] Current backend CI is not green: [run 40553185707](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40553185707) failed across all three Python jobs without job steps or retrievable logs. Root cause remains unconfirmed.
 - [ ] Live SMTP, Meta WhatsApp and Paddle sandbox/production acceptance is not established.
 - [ ] Final Hostinger frontend ZIP, accessibility/performance/SEO release checks and production smoke-test evidence remain pending.
 
