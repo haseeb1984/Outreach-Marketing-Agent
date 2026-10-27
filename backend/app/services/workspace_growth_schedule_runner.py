@@ -1,6 +1,7 @@
 """Lease-safe dispatcher for recurring workspace website-growth schedules."""
 from __future__ import annotations
 
+import json
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -41,10 +42,15 @@ class WorkspaceGrowthScheduleRunner:
                 idempotency_key = (
                     f"growth-schedule:{schedule_id}:{slot.strftime('%Y%m%dT%H%M%SZ')}"
                 )
+                payload = schedule["payload"]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                if not isinstance(payload, dict):
+                    raise ValueError("schedule_payload_invalid")
                 job = await self._queue.enqueue(
                     workspace_id=str(schedule["workspace_id"]),
                     job_type="website_growth_scan",
-                    payload=dict(schedule["payload"]),
+                    payload=payload,
                     idempotency_key=idempotency_key,
                     max_attempts=3,
                     run_after=current,
