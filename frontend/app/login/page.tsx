@@ -50,6 +50,8 @@ export default function LoginPage() {
       <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="current-password" maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></div>
       <button className="button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button></form>
       {message && <p className="notice" role="alert">{message}</p>}
+      <p className="fine"><Link href="/forgot-password">Forgot your password?</Link></p>
+      <p className="fine">Need another verification email? <Link href="/resend-verification">Resend verification</Link></p>
       <p className="fine">New here? <Link href="/register">Create an account</Link></p></section></main>
     <footer className="wrap"><Link href="/">Home</Link> · <Link href="/faq">FAQ</Link></footer>
   </>;
