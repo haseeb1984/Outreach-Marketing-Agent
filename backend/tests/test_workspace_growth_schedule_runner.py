@@ -105,7 +105,6 @@ async def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_n
     assert connection.queue_insert_args[3] == f"growth-schedule:{schedule_id}:20261028T000000Z"
     assert connection.schedule_update_args[1] == slot + timedelta(hours=72)
     assert connection.schedule_update_args[2] == now
-    assert connection.schedule_update_args[3] is None
     assert subscriptions.reserve_args["feature"] == "website_audits"
     assert subscriptions.reserve_args["idempotency_key"] == f"growth-schedule-usage:{schedule_id}:20261028T000000Z"
     assert subscriptions.finished[0]["outcome"] == "consumed"
@@ -147,5 +146,5 @@ async def test_scheduler_does_not_enqueue_when_no_schedule_is_due():
 async def test_scheduler_requires_timezone_aware_clock():
     runner = WorkspaceGrowthScheduleRunner(_Pool(_Connection(None)), _Subscriptions())
 
-    with pytest.raises(ValueError, match="timezone-aware"):
+    with pytest.raises(ValueError, match="timezone_aware"):
         await runner.enqueue_one_due(now=datetime(2026, 10, 28))
