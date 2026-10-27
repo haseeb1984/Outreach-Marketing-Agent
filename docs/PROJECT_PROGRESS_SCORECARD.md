@@ -23,6 +23,8 @@ Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase
 
 
 
+- Added an explicit `workspace_scoped_collections` truncation marker when an account has more than 100 active workspaces; without it, the export could omit records from later workspaces without clearly declaring those collections incomplete. Added a regression test for the 101-workspace case. The latest CI run for this change is [40555354268](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40555354268), which failed before any runner steps/logs were available; test execution remains unverified.
+
 ## Implementation update — 2026-10-24
 
 New verified code and CI evidence since the prior score:
