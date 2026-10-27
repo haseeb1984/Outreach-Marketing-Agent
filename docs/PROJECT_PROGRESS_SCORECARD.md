@@ -378,3 +378,13 @@ Repository review confirms these feature batches have since merged to `main`:
 These merges close the earlier “awaiting review” labels recorded in the sections above; those sections are retained as historical change notes. This code is merged, but current CI still has not provided a successful, verifiable test run. Migrations 035–036, scheduler and scan worker supervision, quota lifecycle under real database transactions, and browser acceptance remain release gates. Do not increase phase scores solely because PRs merged.
 
 The next open infrastructure batch is [PR #18](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/18), PostgreSQL backup/restore tooling. Its merge was rejected because the branch is out of date with `main`; it must be updated/reviewed before merge. A separate older draft, [PR #1](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/1), remains open and should not be merged wholesale without an architecture/migration conflict audit.
+
+
+## PostgreSQL recovery tooling and CI correction — 2026-10-28
+
+Implementation is in [PR #20](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/20) and awaits verification.
+
+- Added custom-format PostgreSQL backups, SHA-256 verification, explicit restore confirmation, source/target database identity checks, and a non-destructive restore mode for empty recovery databases.
+- Fixed application lifespan cleanup so it closes only the pool it creates, updated the readiness response assertion, and made new async unit tests compatible with the project's installed pytest setup.
+- The preceding CI run had 14 failures with concrete causes in fake-pool cleanup, readiness response expectations, and missing async pytest support. This branch addresses those causes; the current CI run must confirm the fixes.
+- Actual backup/restore acceptance still requires an operator-run recovery exercise in a separate environment.
