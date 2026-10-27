@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import socket
+from uuid import UUID
 from typing import Any
 
 import asyncpg
@@ -34,6 +35,7 @@ def _bounded_payload(value: Any) -> dict[str, Any]:
     queries = value.get("target_queries", [])
     max_pages = value.get("max_pages", 10)
     max_depth = value.get("max_depth", 2)
+    usage_reservation_id = value.get("usage_reservation_id")
     if not all(isinstance(v, str) and v.strip() for v in (start_url, business_type, target_market, requested_by)):
         raise ValueError("job_payload_invalid")
     if not isinstance(queries, list) or len(queries) > 20 or any(not isinstance(q, str) or not q.strip() or len(q) > 200 for q in queries):
@@ -42,6 +44,11 @@ def _bounded_payload(value: Any) -> dict[str, Any]:
         raise ValueError("job_payload_invalid")
     if type(max_depth) is not int or not 0 <= max_depth <= 2:
         raise ValueError("job_payload_invalid")
+    if usage_reservation_id is not None:
+        try:
+            usage_reservation_id = str(UUID(str(usage_reservation_id)))
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError("job_payload_invalid") from None
     return {
         "start_url": start_url.strip(),
         "business_type": business_type.strip()[:160],
@@ -50,7 +57,12 @@ def _bounded_payload(value: Any) -> dict[str, Any]:
         "max_pages": max_pages,
         "max_depth": max_depth,
         "requested_by": requested_by,
+        **({"usage_reservation_id": usage_reservation_id} if usage_reservation_id else {}),
     }
+
+
+class GrowthJobEntitlementDenied(RuntimeError):
+    pass
 
 
 async def process_one_job(pool: Any, *, worker_id: str) -> bool:
@@ -61,6 +73,31 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
     try:
         payload = _bounded_payload(job.get("payload"))
         workspace_id = str(job["workspace_id"])
+        subscriptions = SubscriptionStore(pool)
+        reservation_id = payload.get("usage_reservation_id")
+        if reservation_id:
+            entitlement = await subscriptions.validate_job_reservation(
+                workspace_id=workspace_id,
+                reservation_id=reservation_id,
+                feature="website_audits",
+            )
+            if entitlement.get("allowed") and entitlement.get("reservation_status") == "reserved":
+                finished = await subscriptions.finish_reservation(
+                    workspace_id=workspace_id, reservation_id=reservation_id, outcome="consumed"
+                )
+                if not finished:
+                    # The enqueue request may have consumed it concurrently; re-read the state.
+                    entitlement = await subscriptions.validate_job_reservation(
+                        workspace_id=workspace_id,
+                        reservation_id=reservation_id,
+                        feature="website_audits",
+                    )
+        else:
+            entitlement = await subscriptions.check_feature_enabled(
+                workspace_id=workspace_id, feature="website_audits"
+            )
+        if not entitlement.get("allowed"):
+            raise GrowthJobEntitlementDenied()
         domain_store = DomainAuthorizationStore(pool)
         async with asyncio.timeout(240):
             report = await discover_persisted_workspace_site(
@@ -95,6 +132,10 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
             # A lease lost after persistence is safe: the unique job/report link is not
             # assumed; a retry may create another report but cannot send messages.
             raise RuntimeError("job_lease_lost_after_persist")
+        return True
+    except GrowthJobEntitlementDenied:
+        await queue.fail(job_id=job["id"], worker_id=worker_id,
+                         error_code="growth_scan_entitlement_denied", retry_delay_seconds=0, retry=False)
         return True
     except TimeoutError:
         await queue.fail(job_id=job["id"], worker_id=worker_id,

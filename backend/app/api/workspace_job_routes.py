@@ -133,6 +133,7 @@ async def enqueue_website_growth_scan(
                 "target_market": payload.target_market,
                 "target_queries": payload.target_queries,
                 "requested_by": str(session["user_id"]),
+                "usage_reservation_id": str(reservation_id),
                 "max_pages": payload.max_pages,
                 "max_depth": payload.max_depth,
             },
