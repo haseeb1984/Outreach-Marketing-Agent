@@ -1021,6 +1021,46 @@ export default function DashboardPage() {
     } finally { setIntegrationBusy(false); }
   }
 
+  async function enqueueGrowthScanNow() {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspace-jobs/website-growth-scan", csrf, {
+        method: "POST",
+        headers: { "Idempotency-Key": "dashboard-scan-" + window.crypto.randomUUID() },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          start_url: scheduleStartUrl.trim(),
+          business_type: scheduleBusinessType.trim(),
+          target_market: scheduleTargetMarket.trim(),
+          target_queries: scheduleQueries.split(/\r?\n/).map(query => query.trim()).filter(Boolean),
+          max_pages: 10,
+          max_depth: 2,
+        }),
+      });
+      setNotice("One-off website-growth scan queued. The scan worker must be running before a report can finish.");
+      setGrowthJobReport(null);
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Website-growth scan could not be queued.");
+    } finally { setBusy(false); }
+  }
+
+  async function openGrowthJobReport(job: GrowthJob) {
+    if (!workspaceId || !csrf || job.status !== "succeeded") return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const detail = await api<{ id: string; status: string; result: unknown }>(
+        "/api/v1/workspace-jobs/" + encodeURIComponent(job.id) + "?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf,
+      );
+      setGrowthJobReport({ id: detail.id, result: detail.result });
+      setNotice("Completed website-growth report loaded.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Growth scan report could not be loaded.");
+    } finally { setBusy(false); }
+  }
+
   async function createGrowthSchedule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
