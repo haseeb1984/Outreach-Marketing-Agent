@@ -69,3 +69,13 @@ def test_restore_requires_explicit_confirmation_and_uses_dbname_flag(tmp_path, m
     assert "--dbname" in restore_command
     assert "secret" not in " ".join(restore_command)
     assert restore_env["PGPASSWORD"] == "secret"
+
+
+def test_verify_rejects_empty_checksum_sidecar(tmp_path, monkeypatch):
+    backup = tmp_path / "sample.dump"
+    backup.write_bytes(b"backup bytes")
+    backup.with_suffix(".dump.sha256").write_text("  \n")
+    monkeypatch.setattr(database_backup, "_run", lambda *_args, **_kwargs: pytest.fail("tool must not run"))
+
+    with pytest.raises(ValueError, match="checksum_invalid"):
+        database_backup.verify(backup)
