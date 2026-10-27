@@ -44,7 +44,7 @@ The server requires membership in the requested workspace and verifies the URL a
 
 ## Read job status
 
-Use `GET /api/v1/workspace-jobs?workspace_id=<workspace-id>&limit=25&offset=0`. This requires at least viewer membership and returns only job metadata for that workspace; it does not expose stored payloads or research results through this listing endpoint.
+Use `GET /api/v1/workspace-jobs?workspace_id=<workspace-id>&limit=25&offset=0`. This requires at least viewer membership and returns only job metadata for that workspace; it does not expose stored payloads or research results through this listing endpoint. To retrieve a specific job, call `GET /api/v1/workspace-jobs/<job-id>?workspace_id=<workspace-id>`. This is also workspace-scoped; the endpoint returns a report only after the job reaches `succeeded`, and does not return payloads or lease/worker metadata.
 
 Statuses are `queued`, `running`, `succeeded`, `failed`, and `cancelled`. A queue record being created means only that the work was accepted. A worker must claim and finish it before the scan is complete. A scan may fail if the site cannot be safely reached or the worker/database is unavailable.
 
