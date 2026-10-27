@@ -87,7 +87,7 @@ class WebsiteGrowthScanRequest(BaseModel):
 async def enqueue_website_growth_scan(
     payload: WebsiteGrowthScanRequest,
     request: Request,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=160),
 ) -> dict:
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
