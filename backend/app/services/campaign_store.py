@@ -90,13 +90,13 @@ class CampaignStore:
                     consent_account_id = controls.get("whatsapp_account_id")
                     account_active = False
                     if consent_account_id is not None:
-                        account_active = await conn.fetchval(
-                            """SELECT EXISTS(
-                                 SELECT 1 FROM workspace_whatsapp_accounts
-                                 WHERE id=$1 AND workspace_id=$2 AND status='active'
-                               )""",
+                        active_account = await conn.fetchrow(
+                            """SELECT id FROM workspace_whatsapp_accounts
+                               WHERE id=$1 AND workspace_id=$2 AND status='active'
+                               FOR SHARE""",
                             consent_account_id, workspace_id,
                         )
+                        account_active = active_account is not None
                     if not account_active:
                         raise ValueError("WhatsApp consent account is not active")
                     phone_digits = "".join(ch for ch in str(p.get("contact_phone_e164") or "") if ch.isdigit())
