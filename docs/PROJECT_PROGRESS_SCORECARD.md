@@ -378,3 +378,8 @@ Repository review confirms these feature batches have since merged to `main`:
 These merges close the earlier “awaiting review” labels recorded in the sections above; those sections are retained as historical change notes. This code is merged, but current CI still has not provided a successful, verifiable test run. Migrations 035–036, scheduler and scan worker supervision, quota lifecycle under real database transactions, and browser acceptance remain release gates. Do not increase phase scores solely because PRs merged.
 
 The next open infrastructure batch is [PR #18](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/18), PostgreSQL backup/restore tooling. Its merge was rejected because the branch is out of date with `main`; it must be updated/reviewed before merge. A separate older draft, [PR #1](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/1), remains open and should not be merged wholesale without an architecture/migration conflict audit.
+
+
+## PostgreSQL recovery tooling — 2026-10-28
+
+A fresh branch based on current `main` now carries the backup/restore implementation, unit tests, and operator runbook so the stale PR #18 branch does not need to be force-merged. This adds tooling only; it does **not** establish that tests pass or that a real recovery has been rehearsed. Required release evidence remains: CI green, backup from a non-production environment, checksum/archive verification, restore into a separately provisioned empty database, and application-level validation. See [the recovery runbook](POSTGRES_BACKUP_RESTORE.md).
