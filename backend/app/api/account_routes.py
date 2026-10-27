@@ -124,7 +124,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                             provider_message_id,in_reply_to_provider_message_id,channel,direction,body,occurred_at,received_at
                             FROM outreach_conversation_messages WHERE workspace_id=ANY($1::text[])
                             ORDER BY occurred_at,id LIMIT $2""",
-                        "whatsapp_accounts": """SELECT id,workspace_id,label,phone_number_id,business_account_id,
+                        "whatsapp_accounts": """SELECT id,workspace_id,label,phone_number_id,waba_id AS business_account_id,
                             status,created_at,updated_at FROM workspace_whatsapp_accounts
                             WHERE workspace_id=ANY($1::text[]) ORDER BY created_at,id LIMIT $2""",
                         "whatsapp_conversations": """SELECT id,workspace_id,account_id,prospect_id,wa_id,created_at,updated_at
@@ -134,7 +134,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                             message_type,text_body,provider_timestamp,received_at FROM whatsapp_inbound_messages
                             WHERE workspace_id=ANY($1::text[]) ORDER BY received_at,id LIMIT $2""",
                         "whatsapp_contact_preferences": """SELECT workspace_id,account_id,wa_id,opted_in_at,opted_out_at,
-                            last_inbound_at,last_inbound_message_id,last_opt_out_message_id,updated_at
+                            last_opt_out_message_id,updated_at
                             FROM whatsapp_contact_preferences WHERE workspace_id=ANY($1::text[])
                             ORDER BY updated_at,account_id,wa_id LIMIT $2""",
                         "whatsapp_outbound_deliveries": """SELECT id,workspace_id,account_id,draft_id,prospect_id,
