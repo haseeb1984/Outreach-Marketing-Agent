@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.auth_routes import _authenticated
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
@@ -44,3 +45,54 @@ async def get_workspace_entitlement(
         "reason": decision.reason,
         "remaining": decision.remaining,
     }
+
+
+
+@router.post("/paddle/webhook")
+async def paddle_subscription_webhook(request: Request):
+    """Verify a Paddle signature, then apply a server-mapped subscription snapshot."""
+    import json
+
+    from app.services.paddle_webhook import (
+        PaddleWebhookError,
+        parse_paddle_subscription_event,
+        verify_paddle_signature,
+    )
+
+    secret = settings.paddle_webhook_secret
+    plans_json = settings.paddle_plans_json
+    if not secret or not plans_json:
+        raise HTTPException(status_code=503, detail="paddle_webhook_not_configured")
+    content_length = request.headers.get("content-length")
+    if content_length and (not content_length.isdigit() or int(content_length) > 1_000_000):
+        raise HTTPException(status_code=413, detail="webhook_payload_too_large")
+    raw_body = await request.body()
+    if len(raw_body) > 1_000_000:
+        raise HTTPException(status_code=413, detail="webhook_payload_too_large")
+    try:
+        verify_paddle_signature(raw_body, request.headers.get("paddle-signature"), secret)
+    except PaddleWebhookError:
+        raise HTTPException(status_code=401, detail="invalid_paddle_signature") from None
+    try:
+        payload = json.loads(raw_body)
+        if not isinstance(payload, dict):
+            raise ValueError("invalid_payload")
+        event_type = payload.get("event_type")
+        if not isinstance(event_type, str) or not event_type.startswith("subscription."):
+            return {"outcome": "ignored"}
+        plans = json.loads(plans_json)
+        if not isinstance(plans, dict):
+            raise ValueError("invalid_plan_configuration")
+        event = parse_paddle_subscription_event(payload, plans)
+    except (PaddleWebhookError, ValueError, TypeError, json.JSONDecodeError):
+        raise HTTPException(status_code=400, detail="invalid_paddle_subscription_event") from None
+
+    store = getattr(request.app.state, "billing_lifecycle_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+    try:
+        return await store.apply_verified_event(event)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="billing_event_conflict") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_event_processing_unavailable") from None
