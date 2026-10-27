@@ -50,11 +50,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                        ORDER BY w.created_at,w.id LIMIT 101""",
                     user_id,
                 )
-                if len(memberships) > 100:
-                    export_memberships_truncated = True
-                    memberships = memberships[:100]
-                else:
-                    export_memberships_truncated = False
+                memberships, export_memberships_truncated = _bounded_export_rows(memberships, limit=100)
                 workspace_ids = [row["workspace_id"] for row in memberships]
                 export = {
                     "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -149,9 +145,9 @@ async def export_account_data(request: Request) -> JSONResponse:
                     }
                     for collection, query in queries.items():
                         rows = await conn.fetch(query, workspace_ids, _MAX_EXPORT_ROWS + 1)
-                        if len(rows) > _MAX_EXPORT_ROWS:
+                        rows, truncated = _bounded_export_rows(rows, limit=_MAX_EXPORT_ROWS)
+                        if truncated:
                             export["limits"]["truncated_collections"].append(collection)
-                            rows = rows[:_MAX_EXPORT_ROWS]
                         export[collection] = [dict(row) for row in rows]
                     invitation_rows = await conn.fetch(
                         """SELECT workspace_id,invited_email,role,status,created_at,expires_at,accepted_at,revoked_at
@@ -159,9 +155,9 @@ async def export_account_data(request: Request) -> JSONResponse:
                            ORDER BY created_at DESC LIMIT $2""",
                         workspace_ids, _MAX_EXPORT_ROWS + 1,
                     )
-                    if len(invitation_rows) > _MAX_EXPORT_ROWS:
+                    invitation_rows, truncated = _bounded_export_rows(invitation_rows, limit=_MAX_EXPORT_ROWS)
+                    if truncated:
                         export["limits"]["truncated_collections"].append("invitations")
-                        invitation_rows = invitation_rows[:_MAX_EXPORT_ROWS]
                     export["invitations"] = [dict(row) for row in invitation_rows]
                     email_account_rows = await conn.fetch(
                         """SELECT id,workspace_id,label,smtp_host,smtp_port,smtp_username,from_email,
@@ -170,9 +166,9 @@ async def export_account_data(request: Request) -> JSONResponse:
                            ORDER BY created_at DESC LIMIT $2""",
                         workspace_ids, _MAX_EXPORT_ROWS + 1,
                     )
-                    if len(email_account_rows) > _MAX_EXPORT_ROWS:
+                    email_account_rows, truncated = _bounded_export_rows(email_account_rows, limit=_MAX_EXPORT_ROWS)
+                    if truncated:
                         export["limits"]["truncated_collections"].append("email_accounts")
-                        email_account_rows = email_account_rows[:_MAX_EXPORT_ROWS]
                     export["email_accounts"] = [dict(row) for row in email_account_rows]
                     audit_report_rows = await conn.fetch(
                         """SELECT id,workspace_id,start_url,status,created_at
@@ -180,9 +176,9 @@ async def export_account_data(request: Request) -> JSONResponse:
                            ORDER BY created_at DESC LIMIT 1001""",
                         workspace_ids,
                     )
-                    if len(audit_report_rows) > 1000:
+                    audit_report_rows, truncated = _bounded_export_rows(audit_report_rows, limit=1000)
+                    if truncated:
                         export["limits"]["truncated_collections"].append("website_audits")
-                        audit_report_rows = audit_report_rows[:1000]
                     export["website_audits"] = [dict(row) for row in audit_report_rows]
                     audit_rows = await conn.fetch(
                         """SELECT workspace_id,event_type,outcome,created_at
@@ -191,9 +187,9 @@ async def export_account_data(request: Request) -> JSONResponse:
                            ORDER BY created_at LIMIT $3""",
                         user_id, workspace_ids, _MAX_EXPORT_ROWS + 1,
                     )
-                    if len(audit_rows) > _MAX_EXPORT_ROWS:
+                    audit_rows, truncated = _bounded_export_rows(audit_rows, limit=_MAX_EXPORT_ROWS)
+                    if truncated:
                         export["limits"]["truncated_collections"].append("account_audit_events")
-                        audit_rows = audit_rows[:_MAX_EXPORT_ROWS]
                     export["account_audit_events"] = [dict(row) for row in audit_rows]
     except HTTPException:
         raise
