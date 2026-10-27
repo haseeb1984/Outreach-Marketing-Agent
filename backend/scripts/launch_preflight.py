@@ -108,7 +108,7 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
         else "Meta global integration settings are partial; configure all six values or none")
 
     graph_version = env.get("META_GRAPH_API_VERSION", "").strip()
-    graph_ok = not graph_version or bool(re.fullmatch(r"v[0-9]{2,3}\\.0", graph_version))
+    graph_ok = not graph_version or bool(re.fullmatch(r"v[0-9]{2,3}\.0", graph_version))
     add("meta_graph_version", graph_ok,
         "Meta Graph API version format is valid" if graph_ok
         else "META_GRAPH_API_VERSION must look like vXX.0")
