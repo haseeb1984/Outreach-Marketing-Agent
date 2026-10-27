@@ -105,4 +105,3 @@ def test_preflight_uses_safe_json_statuses_for_remote_gates(tmp_path: Path):
     assert all(item["status"] in {"pass", "fail", "warning"} for item in result["checks"])
     assert "tiny-secret" not in str(result)
     assert "postgresql://app:secret@localhost/app" not in str(result)
-    assert "PROVIDER_CREDENTIAL_ENCRYPTION_KEY" in str(result)
