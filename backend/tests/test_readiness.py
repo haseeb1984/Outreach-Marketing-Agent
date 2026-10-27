@@ -62,7 +62,7 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         response = client.get("/ready")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
+    assert response.json() == {"status": "ready", "database": "ok"}
     for migration in (
         "015_workspace_projects.sql",
         "016_workspace_invitations.sql",
