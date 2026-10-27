@@ -332,3 +332,13 @@ Implementation is on branch `feat/dashboard-campaign-analytics` and awaits CI/re
 - The workspace dashboard now requests the per-campaign analytics endpoint for the selected period and displays campaign prospects, draft review, email outcomes, WhatsApp delivery/read states, associated replies, and CRM converted-stage counts.
 - Analytics API failure is shown separately from an empty campaign list. Copy explicitly avoids claiming revenue or causal attribution.
 - Frontend TypeScript/build CI has not yet verified this change; no completion score is increased.
+
+
+## Dashboard recurring-scan management UI — 2026-10-28
+
+Implementation is on branch `feat/dashboard-growth-schedules` and awaits frontend CI/review.
+
+- Added a dashboard form to create recurring scans with a verified website URL, business type, target market, optional research queries and bounded interval options.
+- Added schedule list, pause/resume and admin-only delete controls, with next-run/last-enqueued timestamps and explicit notice that the scheduler and scan worker must both be supervised.
+- Added human-readable messages for unverified domains, schedule limits and missing migration/service configuration.
+- Frontend TypeScript/build CI has not yet confirmed this batch; no phase score is increased.
