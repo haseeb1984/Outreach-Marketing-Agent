@@ -1,6 +1,6 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-24  
+Last assessed: 2026-10-27 (repository and CI evidence refresh; phase estimates below remain the 2026-10-24 estimate)  
 Source: current `main` code/documentation, production HTTP smoke checks, and the recent successful backend/frontend CI runs listed below. Frontend upload/browser/provider production acceptance remains unverified.
 
 ## How to read these numbers
@@ -11,7 +11,7 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **64/100** | Weighted code-implementation estimate; recent backend CI and frontend production build/packaging pass, but external acceptance and launch gates remain open |
+| Overall implementation progress | **65/100** | Weighted code-implementation estimate; recent backend CI and frontend production build/packaging pass, but external acceptance and launch gates remain open |
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
 | Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
 | Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
@@ -31,7 +31,7 @@ New verified code and CI evidence since the prior score:
 - Dashboard exposes stale email-delivery reconciliation that moves abandoned processing records to `uncertain` without automatic retry; backend and frontend CI passed on `b47a229`.
 - A new regression test explicitly verifies that workspace-triggered worker claims are constrained to active accounts for the requested workspace.
 
-The weighted implementation estimate is now **63/100**. This is an evidence-based estimate, not a test-pass rate or release-readiness score; it does **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
+The weighted implementation estimate at that checkpoint was **63/100**. This is an evidence-based estimate, not a test-pass rate or release-readiness score; it does **not** justify a 95% completion claim. The project still has material missing work in live research/competitor intelligence, reply-provider integration, durable scheduled automation, verified payment lifecycle, provider staging acceptance, and production operations. Reassess the numeric phase scores only after the current commit's CI is green and the remaining code inventory is reconciled.
 
 ## Phase-by-phase checkpoints
 
@@ -222,3 +222,13 @@ A feature marked implemented means repository code exists. It must not be descri
 - Campaign lifecycle update: campaign settings can be edited and campaigns archived from the dashboard; archived campaigns are blocked at draft queue/claim time so approved historical drafts cannot be sent after archival. Backend CI and frontend build/Hostinger packaging passed on `94956c3` and `658409c` (runs [40082121512](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082121512), [40082233119](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082233119), [40082233161](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082233161)).
 
 - Campaign safety refinement: paused campaigns now block draft generation and are rechecked at both email enqueue and send claim; archived campaigns remain blocked as well. Added regression assertions for these policy guards. Backend CI and frontend build/packaging passed on `f418e54` (runs [40082440945](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082440945) and [40082440947](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082440947)).
+
+
+## Repository audit refresh — 2026-10-27
+
+- Audited the current `main` branch at commit `8403029dc061db7cca3e98cc2bf055608325c4e3` (latest commit timestamp: 2026-10-24 09:35:10 UTC).
+- Latest backend CI run for that commit: [40082545241](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40082545241), completed successfully. The separately inspected prospect-discovery CI run [39992895212](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39992895212) also passed on its commit across Python 3.11/3.12/3.13; PostgreSQL integration and dependency audit passed on Python 3.12.
+- The phase scores in this document are still estimates last reconciled on 2026-10-24; this refresh does not claim that every requirement was re-implemented or re-accepted since then. Use **65/100 implementation estimate** as the corrected weighted score because the listed phase weights calculate to 64.8%.
+- The scorecard itself contains 36 checklist entries: 20 marked implemented, 11 partial, and 5 unchecked. This is a count of the scorecard's checklist only, **not** a count of every requirement across all specification documents. The roadmap, SaaS, client growth, AI discoverability, safety and quality documents are prose specifications rather than consistently checkbox-tracked acceptance matrices, so a defensible total-complete/total-remaining requirement count cannot be derived from checkbox parsing alone.
+- Release blockers remain: Hostinger production upload and real-domain browser acceptance; live SMTP delivery; eligible Meta/WhatsApp staging acceptance and a fully wired outbound sender; verified Paddle sandbox/subscription lifecycle; production database migration and backup/restore evidence; comprehensive tenant isolation/security review; accessibility, performance and crawl acceptance; and operational monitoring/incident readiness.
+- No claim is made that the current production deployment is at the latest repository commit. Deployment acceptance is separate from source/CI evidence.
