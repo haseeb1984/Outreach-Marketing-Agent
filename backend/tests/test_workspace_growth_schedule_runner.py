@@ -83,6 +83,7 @@ def _schedule(schedule_id, slot):
     return {
         "id": schedule_id,
         "workspace_id": "workspace-a",
+        "created_by": uuid4(),
         "payload": '{"start_url":"https://example.com/","business_type":"SaaS","target_market":"US","target_queries":[],"max_pages":10,"max_depth":2}',
         "interval_hours": 24,
         "next_run_at": slot,

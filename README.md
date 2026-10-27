@@ -62,6 +62,10 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 - AI: provider-agnostic LLM interface, structured outputs, validation, evidence checks, and safe fallbacks.
 - Deployment: frontend on Hostinger Business; FastAPI backend remains on Vercel at `https://outreach-marketing-agent.vercel.app` until a verified backend migration is explicitly approved. Frontend talks to the backend over HTTPS only; it never connects directly to the database. Document Hostinger/Vercel quotas and never commit credentials.
 
+## Background worker operations
+
+- [Durable website-growth worker runbook](docs/WORKER_OPERATIONS.md). One-off and recurring growth scans require a continuously supervised worker process; merging code alone does not run queued jobs.
+
 ## Database recovery
 
 - [PostgreSQL backup, archive verification, and restore runbook](docs/POSTGRES_BACKUP_RESTORE.md). Recovery readiness remains unverified until a separate-database restore drill is completed and recorded.
