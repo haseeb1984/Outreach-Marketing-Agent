@@ -1,0 +1,131 @@
+"""Strict, no-retry Meta WhatsApp Cloud API sender adapter.
+
+The adapter deliberately does not claim queue rows or decide eligibility. Callers must
+re-evaluate WhatsAppSendPolicy immediately before use and must treat MetaSendUncertain
+as terminal until provider evidence is reconciled. Production dispatch remains disabled
+unless a separately reviewed worker is deployed.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import httpx
+
+
+class MetaSendRejected(Exception):
+    """Provider definitively rejected the request before accepting the message."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+class MetaSendUncertain(Exception):
+    """The provider may have accepted the message; automatic retries are unsafe."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+_VERSION = re.compile(r"^v[0-9]{2,3}\.0$")
+_ASSET_ID = re.compile(r"^[0-9]{5,128}$")
+
+
+def _validate_common(version: str, phone_number_id: str, access_token: str, recipient: str) -> str:
+    if not isinstance(version, str) or not _VERSION.fullmatch(version):
+        raise ValueError("meta_graph_api_version_invalid")
+    if not isinstance(phone_number_id, str) or not _ASSET_ID.fullmatch(phone_number_id):
+        raise ValueError("meta_phone_number_id_invalid")
+    if not isinstance(access_token, str) or not access_token.strip() or any(c.isspace() for c in access_token):
+        raise ValueError("meta_access_token_invalid")
+    if not isinstance(recipient, str):
+        raise ValueError("whatsapp_recipient_invalid")
+    normalized = "".join(c for c in recipient if c.isdigit())
+    if not 7 <= len(normalized) <= 15:
+        raise ValueError("whatsapp_recipient_invalid")
+    return normalized
+
+
+def build_text_payload(*, recipient: str, body: str) -> dict[str, Any]:
+    if not isinstance(body, str) or not body.strip() or len(body) > 4096:
+        raise ValueError("whatsapp_text_body_invalid")
+    return {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": recipient,
+        "type": "text",
+        "text": {"preview_url": False, "body": body},
+    }
+
+
+def build_template_payload(
+    *, recipient: str, template_name: str, language_code: str,
+) -> dict[str, Any]:
+    if not isinstance(template_name, str) or not template_name.strip() or len(template_name) > 512:
+        raise ValueError("whatsapp_template_name_invalid")
+    if not isinstance(language_code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{2,32}", language_code):
+        raise ValueError("whatsapp_template_language_invalid")
+    return {
+        "messaging_product": "whatsapp",
+        "to": recipient,
+        "type": "template",
+        "template": {"name": template_name, "language": {"code": language_code}},
+    }
+
+
+class MetaWhatsAppSender:
+    """Single-attempt adapter. Inject an AsyncClient in tests; never logs tokens/payloads."""
+
+    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+        self._client = client
+
+    async def send(
+        self, *, version: str, phone_number_id: str, access_token: str,
+        recipient: str, body: str | None = None, template_name: str | None = None,
+        language_code: str | None = None,
+    ) -> dict[str, str]:
+        normalized = _validate_common(version, phone_number_id, access_token, recipient)
+        if (body is None) == (template_name is None):
+            raise ValueError("exactly_one_whatsapp_message_type_required")
+        if body is not None:
+            payload = build_text_payload(recipient=normalized, body=body)
+        else:
+            if language_code is None:
+                raise ValueError("whatsapp_template_language_required")
+            payload = build_template_payload(
+                recipient=normalized, template_name=template_name or "", language_code=language_code,
+            )
+
+        url = f"https://graph.facebook.com/{version}/{phone_number_id}/messages"
+        headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+        try:
+            if self._client is not None:
+                response = await self._client.post(url, json=payload, headers=headers)
+            else:
+                timeout = httpx.Timeout(8.0, connect=4.0)
+                async with httpx.AsyncClient(
+                    timeout=timeout, follow_redirects=False, trust_env=False,
+                ) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+        except (httpx.TimeoutException, httpx.TransportError):
+            raise MetaSendUncertain("meta_transport_outcome_uncertain") from None
+        except Exception:
+            # A transport wrapper may fail after bytes were handed off. Never blind-retry.
+            raise MetaSendUncertain("meta_transport_outcome_uncertain") from None
+
+        if response.status_code in {408, 425, 429} or response.status_code >= 500:
+            raise MetaSendUncertain("meta_provider_outcome_uncertain")
+        if not 200 <= response.status_code < 300:
+            raise MetaSendRejected("meta_provider_rejected_request")
+        try:
+            data = response.json()
+        except (ValueError, TypeError):
+            raise MetaSendUncertain("meta_success_response_unparseable") from None
+        messages = data.get("messages") if isinstance(data, dict) else None
+        first = messages[0] if isinstance(messages, list) and messages else None
+        provider_id = first.get("id") if isinstance(first, dict) else None
+        if not isinstance(provider_id, str) or not provider_id.strip():
+            raise MetaSendUncertain("meta_success_response_missing_message_id")
+        return {"status": "sent", "provider_message_id": provider_id}
