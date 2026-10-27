@@ -129,4 +129,4 @@ def test_invitation_list_query_uses_real_sql_newlines(monkeypatch):
     assert response.status_code == 200
     query = next(call[1] for call in connection.calls if call[0] == "fetch")
     assert "CASE WHEN status='pending'" in query
-    assert "\\\\n" not in query
+    assert "\\n" not in query
