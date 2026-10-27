@@ -43,7 +43,8 @@ async def export_account_data(request: Request) -> JSONResponse:
                     user_id,
                 )
                 memberships = await conn.fetch(
-                    """SELECT w.id AS workspace_id,w.created_at AS workspace_created_at,
+                    """SELECT w.id AS workspace_id,w.name AS workspace_name,
+                              w.created_at AS workspace_created_at,
                               m.role,m.created_at AS membership_created_at
                        FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id
                        WHERE m.user_id=$1 AND m.status='active'
@@ -56,6 +57,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "exported_at": datetime.now(timezone.utc).isoformat(),
                     "account": dict(user) if user is not None else None,
                     "workspaces": [dict(row) for row in memberships],
+                    "domains": [],
                     "projects": [],
                     "prospects": [],
                     "campaigns": [],
@@ -85,6 +87,17 @@ async def export_account_data(request: Request) -> JSONResponse:
                 if export_memberships_truncated:
                     export["limits"]["truncated_collections"].append("workspaces")
                 if workspace_ids:
+                    domain_rows = await conn.fetch(
+                        """SELECT id,workspace_id,domain_ascii,status,verification_method,
+                                  verified_at,revoked_at,created_at,updated_at
+                           FROM workspace_domains WHERE workspace_id=ANY($1::text[])
+                           ORDER BY created_at,id LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
+                    )
+                    domain_rows, truncated = _bounded_export_rows(domain_rows, limit=_MAX_EXPORT_ROWS)
+                    if truncated:
+                        export["limits"]["truncated_collections"].append("domains")
+                    export["domains"] = [dict(row) for row in domain_rows]
                     queries = {
                         "projects": """SELECT id,workspace_id,name,website_url,business_model,target_market,
                             language,audience,offer,conversion_goal,brand_voice,competitors,status,created_at,updated_at
