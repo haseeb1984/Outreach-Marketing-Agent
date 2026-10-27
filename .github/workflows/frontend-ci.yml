@@ -57,13 +57,13 @@ jobs:
                       continue
                   if path.name.startswith(".env") and path.name != ".env.example":
                       continue
-                  archive.write(path, Path("frontend") / relative)
+                  archive.write(path, relative)
           with ZipFile(output) as archive:
               names = archive.namelist()
               assert "frontend/package.json" in names
               assert "frontend/.env.example" in names
               assert not any(Path(name).name.startswith(".env") and Path(name).name != ".env.example" for name in names)
-          print(f"Packaged {len(names)} files into {output.name}")
+          print(f"Packaged {len(names)} files into {output.name}; archive paths are at the frontend app root.")
           PY
       - name: Upload Hostinger ZIP
         uses: actions/upload-artifact@v4

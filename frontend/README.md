@@ -45,7 +45,9 @@ From the repository root, run the packaging script (it does not deploy or run te
 .\frontend\scripts\package-hostinger.ps1 -OutputPath .\outreach-marketing-agent-hostinger.zip
 ```
 
-The script stages the Next.js source and required runtime configuration, excludes dependency/build/Git directories and refuses to package real `.env` files. The resulting ZIP is source-only: Hostinger must still install dependencies and build the app, and the production origin/cookie/API flows must be verified before launch. The script has been added to source but has not been executed in this code-only pass.
+The script stages the Next.js source and required runtime configuration, excludes dependency/build/Git directories and refuses to package real `.env` files. The resulting ZIP is source-only: Hostinger must still install dependencies and build the app, and the production origin/cookie/API flows must be verified before launch. The script has not been executed in this code-only pass.
+
+The GitHub Actions artifact uses the same archive-root layout as the PowerShell script: extract it so package.json, .env.example, next.config.ts, and app/ sit at the frontend application root (no extra frontend/ directory inside the ZIP). The artifact is only available after frontend CI succeeds.
 
 
 ## Public support page

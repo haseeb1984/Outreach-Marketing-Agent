@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-27 (account recovery UX and CI/release blocker audit)  
-Source: current `main` code and migration review. Latest backend CI run 40556391786 failed across Python 3.11/3.12/3.13 with no job steps or retrievable logs; the cause remains unestablished. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
+Last assessed: 2026-10-27 (batched frontend release-packaging audit)  
+Source: current `main` code and migration review. Latest backend CI run 40558570310 and frontend CI run 40558570201 failed with zero reported runner steps and runner_id 0; logs are not retrievable through the connected GitHub interface. Jobs appear not to have reached a runner, but the exact Actions cause is not confirmed. Repeated failures mean CI is not green and tests are not verified; do not interpret these as either passing tests or proven source-code failures. A workspace-delivery cascade migration (034) and PostgreSQL assertions for its five foreign keys were added, but have not yet been executed successfully in CI. Frontend Hostinger upload and external provider acceptance remain unverified. Percentages below are implementation estimates, not test-pass rates.
 
 ## How to read these numbers
 
@@ -11,13 +11,13 @@ These are **implementation estimates based on repository evidence**, not test-pa
 
 | Measure | Score | Meaning |
 |---|---:|---|
-| Overall implementation progress | **65/100** | Weighted implementation estimate only; backend CI is currently failing without usable logs, and external acceptance and launch gates remain open |
+| Overall implementation progress | **63/100** | Weighted implementation estimate only; backend and frontend CI are currently failing before reported runner steps, and external acceptance and launch gates remain open |
 | Phase 1 — Core platform | 82% | Identity, workspace, CRM stage/notes/archive and project foundations |
 | Phase 2 — Discovery and research | 55% | Public-web prospect search, verified-domain crawl, persisted SEO growth review and evidence-backed prioritization; live competitor search/analytics integrations remain incomplete |
 | Phase 3 — Provider integrations | 64% | SMTP, account-scoped WhatsApp consent, signed webhook intake/processing and recovery controls; provider acceptance still pending |
 | Phase 4 — Outreach and replies | 76% | Editable/pausable/archivable campaigns, audited pending drafts, approval queue, email queue/recovery, inbound WhatsApp conversation processing; live provider delivery and unified reply automation remain incomplete |
 | Phase 5 — Automation and analytics | 53% | Entitlements, activity analytics, scoped event processing and safe delivery reconciliation; durable recurring scheduling and outcome attribution remain incomplete |
-| Phase 6 — Production verification | 42% | Backend CI and frontend production build/Hostinger packaging pass on recent commits; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
+| Phase 6 — Production verification | 25% | Current backend and frontend CI runs fail before reporting runner steps; live provider acceptance, Hostinger upload, migration/backup/accessibility/performance checks remain unverified |
 
 Weighted overall score uses these phase weights: Phase 1 20%, Phase 2 15%, Phase 3 20%, Phase 4 20%, Phase 5 15%, Phase 6 10%. Calculation: `(82×0.20)+(55×0.15)+(64×0.20)+(76×0.20)+(53×0.15)+(25×0.10)=63.1`, rounded to **63%**.
 
@@ -39,7 +39,7 @@ The weighted implementation estimate at that checkpoint was **63/100**. This is 
 
 - Added `/forgot-password` and `/resend-verification` pages using the backend’s existing privacy-preserving endpoints; sign-in now links to both recovery paths.
 - Updated `robots.ts` to keep these account-recovery pages out of crawler indexing, and corrected Phase 6/overall scorecard values to reflect current failing CI instead of stale pass claims.
-- Frontend and backend runs [40558237526](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558237526) and [40558237780](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558237780) report failure. Job steps/logs are not returned by the connected GitHub interface, so no root cause or passing build/test is claimed.
+- Frontend and backend runs [40558570201](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558570201) and [40558570310](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40558570310) report failure before runner steps. Logs are not returned by the connected GitHub interface, so the cause and code/test results remain unverified.
 
 ## Latest Phase 1 implementation batch — 2026-10-27
 
