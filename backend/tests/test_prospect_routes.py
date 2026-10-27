@@ -133,6 +133,7 @@ def test_create_prospect_uses_authenticated_user_and_requires_csrf_gate(monkeypa
         "workspace_id": "workspace-a",
         "name": "Jane Example",
         "company": "Example Co",
+        "contact_phone_e164": "+14155552671",
         "website_url": "https://example.com",
         "evidence_url": "https://example.com/about",
         "fit_reason": "Public page explicitly lists a matching service.",
@@ -144,6 +145,7 @@ def test_create_prospect_uses_authenticated_user_and_requires_csrf_gate(monkeypa
         response = client.post("/api/v1/prospects", json=payload)
     assert response.status_code == 201
     assert saved["created_by"] == user_id
+    assert saved["contact_phone_e164"] == "+14155552671"
     assert saved["verified_facts"] == ["The company provides service X."]
     assert response.json()["created_by"] == user_id
 
