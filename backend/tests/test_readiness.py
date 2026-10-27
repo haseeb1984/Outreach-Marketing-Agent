@@ -51,6 +51,9 @@ class _FakePool:
     def acquire(self):
         return _AcquireContext(self.connection)
 
+    async def close(self):
+        return None
+
 
 def test_readiness_checks_all_migrations_and_phase_one_tables():
     connection = _FakeConnection(schema_ready=True)

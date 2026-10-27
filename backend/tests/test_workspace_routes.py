@@ -44,6 +44,9 @@ class _Pool:
     async def acquire(self):
         yield self.connection
 
+    async def close(self):
+        return None
+
 
 class _AuthStore:
     async def authorize_workspace(self, **kwargs):
