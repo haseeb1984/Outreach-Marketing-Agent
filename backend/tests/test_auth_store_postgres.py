@@ -77,6 +77,27 @@ async def _exercise_password_reset() -> None:
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
+        # Verify workspace-owned delivery references cascade instead of blocking tenant deletion.
+        cascade_constraints = await connection.fetch(
+            """SELECT conname FROM pg_constraint
+               WHERE contype='f' AND confdeltype='c'
+                 AND conname = ANY($1::text[])""",
+            [
+                "outreach_deliveries_draft_id_fkey",
+                "whatsapp_outbound_deliveries_account_id_fkey",
+                "whatsapp_outbound_deliveries_draft_id_fkey",
+                "whatsapp_outbound_deliveries_prospect_id_fkey",
+                "whatsapp_outbound_deliveries_usage_reservation_id_fkey",
+            ],
+        )
+        assert {row["conname"] for row in cascade_constraints} == {
+            "outreach_deliveries_draft_id_fkey",
+            "whatsapp_outbound_deliveries_account_id_fkey",
+            "whatsapp_outbound_deliveries_draft_id_fkey",
+            "whatsapp_outbound_deliveries_prospect_id_fkey",
+            "whatsapp_outbound_deliveries_usage_reservation_id_fkey",
+        }
+
         # This test must only ever run against the dedicated CI/test database.
         await connection.execute(
             """TRUNCATE TABLE outreach_conversation_messages, outreach_deliveries, outreach_contact_controls, outreach_draft_events, outreach_drafts, outreach_campaigns, crm_prospects, auth_rate_limit_buckets, security_audit_events,
