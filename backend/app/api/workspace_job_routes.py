@@ -55,8 +55,8 @@ class WebsiteGrowthScanRequest(BaseModel):
     business_type: str = Field(min_length=1, max_length=160)
     target_market: str = Field(min_length=1, max_length=160)
     target_queries: list[str] = Field(default_factory=list, max_length=20)
-    max_pages: int = Field(default=10, ge=1, le=10)
-    max_depth: int = Field(default=2, ge=0, le=2)
+    max_pages: int = Field(default=10, ge=1, le=10, strict=True)
+    max_depth: int = Field(default=2, ge=0, le=2, strict=True)
 
     @field_validator("start_url")
     @classmethod
