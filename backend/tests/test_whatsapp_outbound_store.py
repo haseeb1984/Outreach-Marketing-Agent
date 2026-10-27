@@ -41,6 +41,10 @@ def test_queue_requires_approved_whatsapp_draft_and_active_campaign():
         "id": uuid4(), "prospect_id": uuid4(), "status": "pending_approval",
         "channel": "whatsapp", "campaign_status": "active", "stage": "new",
         "archived_at": None, "active_account_id": uuid4(),
+        "contact_phone_e164": "+14155550123",
+        "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": uuid4(),
     }])
     with pytest.raises(ValueError, match="approved_draft_and_active_campaign_required"):
         asyncio.run(WhatsAppOutboundStore(pool).enqueue(
@@ -79,7 +83,12 @@ def test_queue_persists_only_after_database_gate_checks():
             "id": draft_id, "prospect_id": prospect_id, "status": "approved",
             "channel": "whatsapp", "campaign_status": "active", "stage": "new",
             "archived_at": None, "active_account_id": account_id,
+            "contact_phone_e164": "+14155550123",
+            "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+            "whatsapp_account_id": account_id,
         },
+        None,
         None,
         {
             "id": queue_id, "status": "queued",
@@ -96,3 +105,47 @@ def test_queue_persists_only_after_database_gate_checks():
     assert result["status"] == "queued"
     assert result["replayed"] is False
     assert len(pool.connection.queries) == 3
+
+def test_queue_rechecks_account_scoped_consent_before_creating_delivery():
+    account_id = uuid4()
+    pool = FakePool([{
+        "id": uuid4(), "prospect_id": uuid4(), "status": "approved",
+        "channel": "whatsapp", "campaign_status": "active", "stage": "new",
+        "archived_at": None, "active_account_id": account_id,
+        "contact_phone_e164": "+14155550123",
+        "whatsapp_opt_in_at": None,
+        "whatsapp_opt_in_evidence_url": None,
+        "whatsapp_account_id": account_id,
+    }])
+    with pytest.raises(ValueError, match="documented_whatsapp_opt_in_for_account_required"):
+        asyncio.run(WhatsAppOutboundStore(pool).enqueue(
+            workspace_id="workspace-test", account_id=account_id, draft_id=uuid4(),
+            actor_id=uuid4(), idempotency_key="queue-key-456", usage_reservation_id=uuid4(),
+        ))
+    assert len(pool.connection.queries) == 1
+
+
+def test_queue_rechecks_opt_out_before_creating_delivery():
+    account_id = uuid4()
+    pool = FakePool([
+        {
+            "id": uuid4(), "prospect_id": uuid4(), "status": "approved",
+            "channel": "whatsapp", "campaign_status": "active", "stage": "new",
+            "archived_at": None, "active_account_id": account_id,
+            "contact_phone_e164": "+14155550123",
+            "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+            "whatsapp_account_id": account_id,
+        },
+        {
+            "opted_out_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
+            "opted_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        },
+    ])
+    with pytest.raises(ValueError, match="whatsapp_contact_opted_out"):
+        asyncio.run(WhatsAppOutboundStore(pool).enqueue(
+            workspace_id="workspace-test", account_id=account_id, draft_id=uuid4(),
+            actor_id=uuid4(), idempotency_key="queue-key-789", usage_reservation_id=uuid4(),
+        ))
+    assert len(pool.connection.queries) == 2
+
