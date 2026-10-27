@@ -155,41 +155,48 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
                 if invitation is None or invitation["status"] != "pending":
                     raise HTTPException(status_code=400, detail="invitation_invalid_or_expired")
                 if invitation["expires_at"] <= now:
+                    # Do not raise inside the transaction: that would roll back the
+                    # status change and leave the expired bearer token pending forever.
                     await conn.execute(
                         "UPDATE workspace_invitations SET status='expired' WHERE id=$1",
                         invitation["id"],
                     )
-                    raise HTTPException(status_code=410, detail="invitation_expired")
-                if invitation["invited_email"] != normalize_email(session["email"]):
-                    raise HTTPException(status_code=403, detail="invitation_email_mismatch")
-                existing = await conn.fetchrow(
-                    """SELECT status FROM workspace_memberships
-                       WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
-                    invitation["workspace_id"], UUID(str(session["user_id"])),
-                )
-                if existing is not None and existing["status"] == "active":
-                    raise HTTPException(status_code=409, detail="already_workspace_member")
-                await conn.execute(
-                    """INSERT INTO workspace_memberships (workspace_id,user_id,role,status,created_at,updated_at)
-                       VALUES ($1,$2,$3,'active',$4,$4)
-                       ON CONFLICT (workspace_id,user_id) DO UPDATE SET
-                         role=EXCLUDED.role,status='active',updated_at=EXCLUDED.updated_at""",
-                    invitation["workspace_id"], UUID(str(session["user_id"])),
-                    invitation["role"], now,
-                )
-                await conn.execute(
-                    """UPDATE workspace_invitations SET status='accepted',accepted_at=$2
-                       WHERE id=$1 AND status='pending'""",
-                    invitation["id"], now,
-                )
-                await conn.execute(
-                    """INSERT INTO security_audit_events
-                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
-                       VALUES ($1,$2,'workspace.invitation.accepted','success',$3::jsonb,$4)""",
-                    invitation["workspace_id"], UUID(str(session["user_id"])),
-                    '{"role":"' + invitation["role"] + '"}', now,
-                )
-                return {"workspace_id": invitation["workspace_id"], "role": invitation["role"], "message": "Workspace invitation accepted."}
+                    expired_invitation = True
+                else:
+                    expired_invitation = False
+                if not expired_invitation:
+                    if invitation["invited_email"] != normalize_email(session["email"]):
+                        raise HTTPException(status_code=403, detail="invitation_email_mismatch")
+                    existing = await conn.fetchrow(
+                        """SELECT status FROM workspace_memberships
+                           WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
+                        invitation["workspace_id"], UUID(str(session["user_id"])),
+                    )
+                    if existing is not None and existing["status"] == "active":
+                        raise HTTPException(status_code=409, detail="already_workspace_member")
+                    await conn.execute(
+                        """INSERT INTO workspace_memberships (workspace_id,user_id,role,status,created_at,updated_at)
+                           VALUES ($1,$2,$3,'active',$4,$4)
+                           ON CONFLICT (workspace_id,user_id) DO UPDATE SET
+                             role=EXCLUDED.role,status='active',updated_at=EXCLUDED.updated_at""",
+                        invitation["workspace_id"], UUID(str(session["user_id"])),
+                        invitation["role"], now,
+                    )
+                    await conn.execute(
+                        """UPDATE workspace_invitations SET status='accepted',accepted_at=$2
+                           WHERE id=$1 AND status='pending'""",
+                        invitation["id"], now,
+                    )
+                    await conn.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                           VALUES ($1,$2,'workspace.invitation.accepted','success',$3::jsonb,$4)""",
+                        invitation["workspace_id"], UUID(str(session["user_id"])),
+                        '{"role":"' + invitation["role"] + '"}', now,
+                    )
+        if expired_invitation:
+            raise HTTPException(status_code=410, detail="invitation_expired")
+        return {"workspace_id": invitation["workspace_id"], "role": invitation["role"], "message": "Workspace invitation accepted."}
     except HTTPException:
         raise
     except Exception:
