@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 import json
 
 from app.services.entitlements import EntitlementDecision, evaluate_entitlement
@@ -51,6 +52,82 @@ class SubscriptionStore:
             usage=int(row["usage"]),
             now=current,
         )
+
+
+    async def validate_job_reservation(
+        self, *, workspace_id: str, reservation_id: str, feature: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Revalidate a consumed quota reservation and current subscription before worker execution."""
+        current = now or datetime.now(timezone.utc)
+        try:
+            reservation_uuid = UUID(str(reservation_id))
+        except (ValueError, TypeError, AttributeError):
+            return {"allowed": False, "reason": "reservation_invalid"}
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT s.status, s.billing_period_starts_at, s.billing_period_ends_at,
+                          s.entitlements, r.id AS reservation_id, r.feature AS reservation_feature,
+                          r.status AS reservation_status,
+                          r.billing_period_starts_at AS reservation_starts_at,
+                          r.billing_period_ends_at AS reservation_ends_at,
+                          (SELECT count(*) FROM feature_usage_reservations u
+                           WHERE u.workspace_id=s.workspace_id AND u.feature=$3
+                             AND u.billing_period_starts_at=s.billing_period_starts_at
+                             AND u.billing_period_ends_at=s.billing_period_ends_at
+                             AND u.status IN ('reserved','consumed')) AS usage
+                   FROM workspace_subscriptions s
+                   LEFT JOIN feature_usage_reservations r
+                     ON r.workspace_id=s.workspace_id AND r.id=$2
+                   WHERE s.workspace_id=$1""",
+                workspace_id, reservation_uuid, feature,
+            )
+        if row is None:
+            return {"allowed": False, "reason": "subscription_missing"}
+        if row["reservation_id"] is None or row["reservation_status"] != "consumed":
+            return {"allowed": False, "reason": "reservation_not_consumed"}
+        if row["reservation_feature"] != feature:
+            return {"allowed": False, "reason": "reservation_feature_mismatch"}
+        if (
+            row["reservation_starts_at"] != row["billing_period_starts_at"]
+            or row["reservation_ends_at"] != row["billing_period_ends_at"]
+        ):
+            return {"allowed": False, "reason": "reservation_period_expired"}
+        usage_before_this_job = max(0, int(row["usage"]) - 1)
+        decision = evaluate_entitlement(
+            subscription_status=row["status"],
+            period_starts_at=row["billing_period_starts_at"],
+            period_ends_at=row["billing_period_ends_at"],
+            feature=feature,
+            entitlements=self._mapping(row["entitlements"]),
+            usage=usage_before_this_job,
+            now=current,
+        )
+        return {"allowed": decision.allowed, "reason": decision.reason}
+
+    async def check_feature_enabled(
+        self, *, workspace_id: str, feature: str, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Re-check subscription status/period for legacy jobs whose quota was already consumed."""
+        current = now or datetime.now(timezone.utc)
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT status,billing_period_starts_at,billing_period_ends_at,entitlements
+                   FROM workspace_subscriptions WHERE workspace_id=$1""",
+                workspace_id,
+            )
+        if row is None:
+            return {"allowed": False, "reason": "subscription_missing"}
+        decision = evaluate_entitlement(
+            subscription_status=row["status"],
+            period_starts_at=row["billing_period_starts_at"],
+            period_ends_at=row["billing_period_ends_at"],
+            feature=feature,
+            entitlements=self._mapping(row["entitlements"]),
+            usage=0,
+            now=current,
+        )
+        return {"allowed": decision.allowed, "reason": decision.reason}
 
     async def reserve_usage(
         self, *, workspace_id: str, feature: str, idempotency_key: str,
