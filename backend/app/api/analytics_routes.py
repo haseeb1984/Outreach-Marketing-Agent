@@ -142,17 +142,17 @@ async def campaign_performance_analytics(
                     (SELECT count(*) FROM outreach_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.channel='email' AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.channel='email' AND q.sent_at >= now() - ($2::int * interval '1 day')
                        AND q.status='sent') AS email_sent_marked,
                     (SELECT count(*) FROM outreach_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.channel='email' AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.channel='email' AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status='failed') AS email_failed,
                     (SELECT count(*) FROM outreach_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.channel='email' AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.channel='email' AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status='uncertain') AS email_uncertain,
                     (SELECT count(*) FROM outreach_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
@@ -162,27 +162,27 @@ async def campaign_performance_analytics(
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status IN ('sent','delivered','read')) AS whatsapp_sent_or_confirmed,
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status='delivered') AS whatsapp_delivered,
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status='read') AS whatsapp_read,
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status='failed') AS whatsapp_failed,
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.queued_at >= now() - ($2::int * interval '1 day')
+                       AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status='uncertain') AS whatsapp_uncertain,
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
