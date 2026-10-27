@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -88,8 +89,7 @@ def _schedule(schedule_id, slot):
     }
 
 
-@pytest.mark.asyncio
-async def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_next_run():
+def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_next_run():
     schedule_id = uuid4()
     slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
     now = slot + timedelta(hours=53)
@@ -97,7 +97,7 @@ async def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_n
     subscriptions = _Subscriptions()
     runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
 
-    result = await runner.enqueue_one_due(now=now)
+    result = asyncio.run(runner.enqueue_one_due(now=now))
 
     assert result["schedule_id"] == str(schedule_id)
     assert result["workspace_id"] == "workspace-a"
@@ -111,8 +111,7 @@ async def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_n
     assert subscriptions.finished[0]["outcome"] == "consumed"
 
 
-@pytest.mark.asyncio
-async def test_schedule_skips_due_slot_when_entitlement_is_denied():
+def test_schedule_skips_due_slot_when_entitlement_is_denied():
     schedule_id = uuid4()
     slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
     now = slot + timedelta(hours=2)
@@ -120,7 +119,7 @@ async def test_schedule_skips_due_slot_when_entitlement_is_denied():
     subscriptions = _Subscriptions({"allowed": False, "reason": "quota_exhausted"})
     runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
 
-    result = await runner.enqueue_one_due(now=now)
+    result = asyncio.run(runner.enqueue_one_due(now=now))
 
     assert result["outcome"] == "skipped_quota"
     assert result["job_id"] == ""
@@ -130,22 +129,20 @@ async def test_schedule_skips_due_slot_when_entitlement_is_denied():
     assert subscriptions.finished == []
 
 
-@pytest.mark.asyncio
-async def test_scheduler_does_not_enqueue_when_no_schedule_is_due():
+def test_scheduler_does_not_enqueue_when_no_schedule_is_due():
     connection = _Connection(None)
     subscriptions = _Subscriptions()
     runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
 
-    result = await runner.enqueue_one_due(now=datetime.now(timezone.utc))
+    result = asyncio.run(runner.enqueue_one_due(now=datetime.now(timezone.utc)))
 
     assert result is None
     assert connection.queue_insert_args is None
     assert subscriptions.reserve_args is None
 
 
-@pytest.mark.asyncio
-async def test_scheduler_requires_timezone_aware_clock():
+def test_scheduler_requires_timezone_aware_clock():
     runner = WorkspaceGrowthScheduleRunner(_Pool(_Connection(None)), _Subscriptions())
 
     with pytest.raises(ValueError, match="timezone-aware"):
-        await runner.enqueue_one_due(now=datetime(2026, 10, 28))
+        asyncio.run(runner.enqueue_one_due(now=datetime(2026, 10, 28)))
