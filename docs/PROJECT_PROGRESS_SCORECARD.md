@@ -388,3 +388,8 @@ Implementation is in [PR #20](https://github.com/haseeb1984/Outreach-Marketing-A
 - Fixed application lifespan cleanup so it closes only the pool it creates, updated the readiness response assertion, and made new async unit tests compatible with the project's installed pytest setup.
 - The preceding CI run had 14 failures with concrete causes in fake-pool cleanup, readiness response expectations, and missing async pytest support. This branch addresses those causes; the current CI run must confirm the fixes.
 - Actual backup/restore acceptance still requires an operator-run recovery exercise in a separate environment.
+
+
+## PostgreSQL recovery tooling — 2026-10-28
+
+A current-main branch carries the backup/restore implementation, unit tests, and operator runbook. This adds tooling only; it does **not** establish that tests pass or that a real recovery has been rehearsed. Required release evidence remains: CI green, backup from a non-production environment, checksum/archive verification, restore into a separately provisioned empty database, and application-level validation. See [the recovery runbook](POSTGRES_BACKUP_RESTORE.md).
