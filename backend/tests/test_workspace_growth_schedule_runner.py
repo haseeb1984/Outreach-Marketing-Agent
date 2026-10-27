@@ -105,7 +105,7 @@ def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_next_ru
     assert connection.queue_insert_args[3] == f"growth-schedule:{schedule_id}:20261028T000000Z"
     assert connection.schedule_update_args[1] == slot + timedelta(hours=72)
     assert connection.schedule_update_args[2] == now
-    assert connection.schedule_update_args[3] is None
+    assert len(connection.schedule_update_args) == 3
     assert subscriptions.reserve_args["feature"] == "website_audits"
     assert subscriptions.reserve_args["idempotency_key"] == f"growth-schedule-usage:{schedule_id}:20261028T000000Z"
     assert subscriptions.finished[0]["outcome"] == "consumed"
