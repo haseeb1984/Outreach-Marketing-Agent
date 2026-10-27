@@ -1,7 +1,7 @@
 # Project Progress Scorecard
 
-Last assessed: 2026-10-27 (Phase 1 account privacy implementation update)  
-Source: current `main` code and migration review. The latest backend CI runs (40552581415 and 40553185707) failed before exposing any job steps or logs; the cause is not yet established. Frontend Hostinger upload and external provider acceptance remain unverified. The phase percentages below are estimates and must not be interpreted as current CI pass rates.
+Last assessed: 2026-10-27 (Phase 1 schema audit and PostgreSQL migration-chain test update)  
+Source: current `main` code and migration review. The latest backend CI run (40554561947, commit `712e619b9c419f279fc3f290d5c62d49ea91b70d`) failed across Python 3.11/3.12/3.13 before any runner was assigned (`runner_id=0`, empty steps, no retrievable logs); the cause is not yet established. Do not treat this as a test pass or as proof of a source-code failure. Frontend Hostinger upload and external provider acceptance remain unverified. The phase percentages below are estimates and must not be interpreted as current CI pass rates.
 
 ## How to read these numbers
 
@@ -88,7 +88,7 @@ The weighted implementation estimate at that checkpoint was **63/100**. This is 
 - [x] Secret-safe logging and environment-based provider configuration foundations.
 - [~] Database readiness and migration checks are present; the latest migrations have not been applied/verified against a live database in this work.
 - [x] Historical backend CI passed on commit `013863f` across Python 3.11, 3.12 and 3.13; Python 3.12 PostgreSQL authentication integration tests and dependency audit passed. See [run 39957060619](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/39957060619).
-- [ ] Current backend CI is not green: [run 40553185707](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40553185707) failed across all three Python jobs without job steps or retrievable logs. Root cause remains unconfirmed.
+- [ ] Current backend CI is not green: [run 40554561947](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40554561947) failed across all three Python jobs before runner allocation, with empty steps and no retrievable logs. Root cause remains unconfirmed.
 - [ ] Live SMTP, Meta WhatsApp and Paddle sandbox/production acceptance is not established.
 - [ ] Final Hostinger frontend ZIP, accessibility/performance/SEO release checks and production smoke-test evidence remain pending.
 
