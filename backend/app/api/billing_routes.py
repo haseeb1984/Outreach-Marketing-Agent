@@ -9,8 +9,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.auth_routes import _authenticated, _check_csrf
-from app.core.config import settings
-from app.services.paddle_api import PaddleAPIError, create_checkout_transaction, create_customer_portal_session
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
