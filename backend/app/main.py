@@ -23,6 +23,7 @@ install_secret_redaction()
 async def lifespan(application: FastAPI):
     """Create an optional PostgreSQL pool without running migrations at startup."""
     application.state.db_pool = None
+    created_pool = None
     application.state.domain_authorization_store = None
     application.state.auth_store = None
     application.state.auth_rate_limiter = None
@@ -40,6 +41,7 @@ async def lifespan(application: FastAPI):
             timeout=5,
             command_timeout=15,
         )
+        created_pool = pool
         from app.services.domain_authorization_store import DomainAuthorizationStore
 
         application.state.db_pool = pool
@@ -65,9 +67,8 @@ async def lifespan(application: FastAPI):
     try:
         yield
     finally:
-        pool = getattr(application.state, "db_pool", None)
-        if pool is not None:
-            await pool.close()
+        if created_pool is not None:
+            await created_pool.close()
 
 
 app = FastAPI(
