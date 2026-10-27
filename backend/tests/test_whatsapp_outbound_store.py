@@ -104,7 +104,7 @@ def test_queue_persists_only_after_database_gate_checks():
     assert result["usage_reservation_id"] == str(reservation_id)
     assert result["status"] == "queued"
     assert result["replayed"] is False
-    assert len(pool.connection.queries) == 3
+    assert len(pool.connection.queries) == 4
 
 def test_queue_rechecks_account_scoped_consent_before_creating_delivery():
     account_id = uuid4()
