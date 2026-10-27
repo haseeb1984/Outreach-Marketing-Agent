@@ -46,3 +46,15 @@ def test_contact_controls_route_passes_account_id_to_persistence():
     source = inspect.getsource(update_contact_controls)
     assert "whatsapp_account_id=payload.whatsapp_account_id" in source
     assert "whatsapp_account_required_for_consent" in source
+
+
+def test_whatsapp_draft_requires_the_consent_account_to_remain_active():
+    import inspect
+    from app.services.campaign_store import CampaignStore
+
+    source = inspect.getsource(CampaignStore.create_draft)
+    whatsapp_checks = source[source.index('if channel == "whatsapp":'):source.index("facts = self._json_list")]
+    assert 'controls.get("whatsapp_account_id")' in whatsapp_checks
+    assert "FROM workspace_whatsapp_accounts" in whatsapp_checks
+    assert "status='active'" in whatsapp_checks
+    assert 'raise ValueError("WhatsApp consent account is not active")' in whatsapp_checks
