@@ -375,3 +375,86 @@ async def paddle_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=503, detail="billing_event_processing_unavailable") from None
     return {"received": True, **outcome}
+
+
+
+@router.post("/portal")
+async def create_customer_portal(request: Request, workspace_id: str):
+    """Open a Paddle customer portal only for an authorized workspace owner/admin."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role="admin"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=503, detail="paddle_not_configured")
+    try:
+        async with pool.acquire() as conn:
+            customer_id = await conn.fetchval(
+                """SELECT provider_customer_id FROM workspace_subscriptions
+                   WHERE workspace_id=$1 AND provider='paddle' AND provider_customer_id IS NOT NULL""",
+                workspace_id,
+            )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not isinstance(customer_id, str) or not customer_id.startswith("ctm_"):
+        raise HTTPException(status_code=404, detail="paddle_customer_not_found")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{_api_base()}/customers/{customer_id}/portal-sessions",
+                headers={
+                    "Authorization": f"Bearer {settings.paddle_api_key}",
+                    "Paddle-Version": "1",
+                    "Content-Type": "application/json",
+                },
+                json={},
+            )
+        if response.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail="paddle_portal_creation_failed")
+        data = response.json().get("data", {})
+        urls = data.get("urls", {}) if isinstance(data, dict) else {}
+        general = urls.get("general", {}) if isinstance(urls, dict) else {}
+        portal_url = general.get("overview") if isinstance(general, dict) else None
+        if not _trusted_portal_url(portal_url):
+            raise HTTPException(status_code=502, detail="paddle_portal_url_unavailable")
+        return {"portal_url": portal_url}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="paddle_portal_unavailable") from None
+
+
+def _trusted_portal_url(value: Any) -> bool:
+    """Allow only the documented Paddle customer-portal host for the active environment."""
+    if not isinstance(value, str) or len(value) > 2048:
+        return False
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    expected_host = (
+        "customer-portal.sandbox.paddle.com"
+        if settings.paddle_environment == "sandbox"
+        else "customer-portal.paddle.com"
+        if settings.paddle_environment == "production"
+        else None
+    )
+    return bool(
+        expected_host
+        and parsed.scheme == "https"
+        and hostname == expected_host
+        and parsed.username is None
+        and parsed.password is None
+        and port is None
+        and parsed.path.startswith("/")
+    )
