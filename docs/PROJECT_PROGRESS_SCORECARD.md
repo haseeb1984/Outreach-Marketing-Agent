@@ -352,3 +352,14 @@ Implementation is on branch `feat/dashboard-growth-job-history` and awaits front
 - Added recent job status/attempt history and a report-view action for succeeded jobs. Report retrieval remains workspace-scoped.
 - Clears selected report data when workspace data reloads to avoid displaying a report from a previously selected workspace.
 - Frontend CI has not yet verified the change. A queued job is not considered a completed scan, and worker supervision remains a deployment requirement.
+
+
+## Growth scan quota enforcement correction — 2026-10-28
+
+Implementation is on branch `fix/growth-scan-quota-enforcement` and awaits CI/review.
+
+- A post-merge audit found that the new durable one-off and recurring scan enqueue paths were not yet consuming the workspace `website_audits` entitlement. This would allow queued work to bypass the intended usage metering.
+- One-off queueing now reserves and consumes a usage unit, requires a bounded idempotency key, rejects consumed-key replays, and releases a reservation when queue insertion fails.
+- The recurring dispatcher checks entitlement per due slot. If the workspace is not entitled or has no quota, it skips the slot, advances the next-run time, and records `last_error_code` and `last_attempted_at` rather than retrying every poll.
+- Added migration 036, readiness checks, scheduler quota tests, and dashboard visibility for the last attempted run/error.
+- This correction is not merged yet; CI and PostgreSQL migration execution remain unverified. No phase score is increased.
