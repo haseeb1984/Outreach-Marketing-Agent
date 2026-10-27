@@ -81,6 +81,17 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
                 reservation_id=reservation_id,
                 feature="website_audits",
             )
+            if entitlement.get("allowed") and entitlement.get("reservation_status") == "reserved":
+                finished = await subscriptions.finish_reservation(
+                    workspace_id=workspace_id, reservation_id=reservation_id, outcome="consumed"
+                )
+                if not finished:
+                    # The enqueue request may have consumed it concurrently; re-read the state.
+                    entitlement = await subscriptions.validate_job_reservation(
+                        workspace_id=workspace_id,
+                        reservation_id=reservation_id,
+                        feature="website_audits",
+                    )
         else:
             entitlement = await subscriptions.check_feature_enabled(
                 workspace_id=workspace_id, feature="website_audits"
