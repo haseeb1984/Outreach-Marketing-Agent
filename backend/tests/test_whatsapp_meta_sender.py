@@ -91,7 +91,7 @@ def test_sender_classifies_5xx_as_uncertain_not_retryable():
 
 
 def test_sender_classifies_timeout_as_uncertain():
-    async def handler(request):
+    def handler(request):
         raise httpx.ReadTimeout("simulated timeout")
     async def scenario():
         transport = httpx.MockTransport(handler)
