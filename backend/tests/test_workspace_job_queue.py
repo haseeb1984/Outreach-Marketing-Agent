@@ -72,3 +72,16 @@ def test_growth_worker_payload_requires_requester_and_bounded_scan_limits():
 def test_growth_worker_rejects_invalid_payloads(bad):
     with pytest.raises(ValueError, match="job_payload_invalid"):
         _bounded_payload(bad)
+
+
+def test_growth_worker_rejects_non_uuid_requester():
+    with pytest.raises(ValueError, match="job_payload_invalid"):
+        _bounded_payload({
+            "start_url": "https://example.com",
+            "business_type": "SaaS",
+            "target_market": "United States",
+            "target_queries": [],
+            "requested_by": "not-a-uuid",
+            "max_pages": 10,
+            "max_depth": 2,
+        })
