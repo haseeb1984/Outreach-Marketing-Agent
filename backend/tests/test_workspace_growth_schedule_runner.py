@@ -58,44 +58,94 @@ class _Pool:
         yield self.connection
 
 
-@pytest.mark.asyncio
-async def test_due_schedule_enqueues_idempotent_job_and_advances_next_run():
-    schedule_id = uuid4()
-    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
-    now = slot + timedelta(hours=53)
-    schedule = {
+class _Subscriptions:
+    def __init__(self, reservation=None):
+        self.reservation = reservation or {
+            "allowed": True,
+            "reason": "reserved",
+            "status": "reserved",
+            "reservation_id": str(uuid4()),
+        }
+        self.reserve_args = None
+        self.finished = []
+
+    async def reserve_usage(self, **kwargs):
+        self.reserve_args = kwargs
+        return self.reservation
+
+    async def finish_reservation(self, **kwargs):
+        self.finished.append(kwargs)
+        return True
+
+
+def _schedule(schedule_id, slot):
+    return {
         "id": schedule_id,
         "workspace_id": "workspace-a",
         "payload": '{"start_url":"https://example.com/","business_type":"SaaS","target_market":"US","target_queries":[],"max_pages":10,"max_depth":2}',
         "interval_hours": 24,
         "next_run_at": slot,
     }
-    connection = _Connection(schedule)
-    runner = WorkspaceGrowthScheduleRunner(_Pool(connection))
+
+
+@pytest.mark.asyncio
+async def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_next_run():
+    schedule_id = uuid4()
+    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+    now = slot + timedelta(hours=53)
+    connection = _Connection(_schedule(schedule_id, slot))
+    subscriptions = _Subscriptions()
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
 
     result = await runner.enqueue_one_due(now=now)
 
     assert result["schedule_id"] == str(schedule_id)
     assert result["workspace_id"] == "workspace-a"
+    assert result["outcome"] == "enqueued"
     assert connection.queue_insert_args[3] == f"growth-schedule:{schedule_id}:20261028T000000Z"
     assert connection.schedule_update_args[1] == slot + timedelta(hours=72)
     assert connection.schedule_update_args[2] == now
+    assert connection.schedule_update_args[3] is None
+    assert subscriptions.reserve_args["feature"] == "website_audits"
+    assert subscriptions.reserve_args["idempotency_key"] == f"growth-schedule-usage:{schedule_id}:20261028T000000Z"
+    assert subscriptions.finished[0]["outcome"] == "consumed"
+
+
+@pytest.mark.asyncio
+async def test_schedule_skips_due_slot_when_entitlement_is_denied():
+    schedule_id = uuid4()
+    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+    now = slot + timedelta(hours=2)
+    connection = _Connection(_schedule(schedule_id, slot))
+    subscriptions = _Subscriptions({"allowed": False, "reason": "quota_exhausted"})
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
+
+    result = await runner.enqueue_one_due(now=now)
+
+    assert result["outcome"] == "skipped_quota"
+    assert result["job_id"] == ""
+    assert connection.queue_insert_args is None
+    assert connection.schedule_update_args[1] == slot + timedelta(hours=24)
+    assert connection.schedule_update_args[3] == "quota_exhausted"
+    assert subscriptions.finished == []
 
 
 @pytest.mark.asyncio
 async def test_scheduler_does_not_enqueue_when_no_schedule_is_due():
     connection = _Connection(None)
-    runner = WorkspaceGrowthScheduleRunner(_Pool(connection))
+    subscriptions = _Subscriptions()
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
 
     result = await runner.enqueue_one_due(now=datetime.now(timezone.utc))
 
     assert result is None
     assert connection.queue_insert_args is None
+    assert subscriptions.reserve_args is None
 
 
 @pytest.mark.asyncio
 async def test_scheduler_requires_timezone_aware_clock():
-    runner = WorkspaceGrowthScheduleRunner(_Pool(_Connection(None)))
+    runner = WorkspaceGrowthScheduleRunner(_Pool(_Connection(None)), _Subscriptions())
 
     with pytest.raises(ValueError, match="timezone-aware"):
         await runner.enqueue_one_due(now=datetime(2026, 10, 28))
