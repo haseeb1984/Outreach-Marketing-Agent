@@ -46,3 +46,8 @@ From the repository root, run the packaging script (it does not deploy or run te
 ```
 
 The script stages the Next.js source and required runtime configuration, excludes dependency/build/Git directories and refuses to package real `.env` files. The resulting ZIP is source-only: Hostinger must still install dependencies and build the app, and the production origin/cookie/API flows must be verified before launch. The script has been added to source but has not been executed in this code-only pass.
+
+
+## Public support page
+
+The `/contact` page is included because the authenticated dashboard links to it. Set `NEXT_PUBLIC_SUPPORT_EMAIL` to a monitored public support inbox before launch; it is optional during development and must not contain a private credential. Rebuild the frontend after changing public build-time environment variables.
