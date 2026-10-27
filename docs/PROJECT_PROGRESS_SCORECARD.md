@@ -283,13 +283,13 @@ The phase percentages and 63/65 overall estimates elsewhere in this historical s
 - The queue transaction locks the workspace-scoped draft, campaign, prospect, consent-control row, and active WhatsApp account. Opt-out preference state is read under a row lock when present.
 - Added unit regressions for missing consent, current opt-out, and successful queue persistence. These are code changes only until CI can execute them.
 - No live WhatsApp dispatch is enabled by this change.
-- Overall and phase estimates remain unchanged at 63/100 overall, with phases 1–6 at 82%, 55%, 64%, 76%, 53%, and 25%, respectively. PR #10 is open and not merged; the latest Actions jobs remain unavailable for reliable test-result confirmation. Do not increase scores based solely on the new patch.
+- Overall and phase estimates remain unchanged at 63/100 overall, with phases 1–6 at 82%, 55%, 64%, 76%, 53%, and 25%, respectively. PR #10 has since merged; the latest Actions jobs remain unavailable for reliable test-result confirmation. Do not increase scores based solely on the new patch.
 
 
 
 ## Workspace growth-job API batch — 2026-10-28
 
-Implementation is on branch `feat/workspace-growth-job-api` and is awaiting review/CI; do not count it as merged or verified yet.
+Merged through [PR #11](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/11). The implementation is in `main`; its CI is still unverified and it must not be counted as production-accepted.
 
 - Added authenticated `POST /api/v1/workspace-jobs/website-growth-scan`, requiring a session, CSRF validation, workspace member authorization, and persisted domain authorization before queue insertion.
 - Added viewer-authorized `GET /api/v1/workspace-jobs` for tenant-scoped job metadata. It deliberately omits payloads and result bodies from the listing.
@@ -301,3 +301,15 @@ Implementation is on branch `feat/workspace-growth-job-api` and is awaiting revi
 ## WhatsApp queue hardening merge correction — 2026-10-28
 
 PRs [#8](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/8), [#9](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/9), and [#10](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/10) have since been merged to `main`. Their targeted CRM-phone persistence and WhatsApp consent/queue protections are now part of the mainline. This corrects the earlier snapshot above that described PR #10 as open; the CI status remains unresolved, so the merges are not evidence of passing tests or live outbound delivery.
+
+
+## Recurring website-growth automation batch — 2026-10-28
+
+Implementation is on branch `feat/recurring-growth-schedules` and awaits CI/review; it is not yet merged.
+
+- Added migration `035_workspace_growth_schedules.sql` for tenant-scoped active/paused recurring schedules with bounded 6–720 hour intervals.
+- Added authenticated create/list/pause/resume/delete endpoints. Creation requires member access, CSRF validation and persisted domain authorization; listing requires viewer access and deletion requires admin access.
+- Added a separate scheduler worker. It uses row locks, stable per-schedule/per-slot idempotency keys and bounded catch-up behavior, then enqueues existing read-only website-growth jobs.
+- Updated readiness to require all 35 migrations and the schedule table. Added schedule input and scheduler behavior tests, plus operational documentation.
+- The schedule dispatcher and website-growth worker are separate long-running processes; both need supervised deployment. This feature does not send outreach.
+- No phase score is increased until CI runs tests and the migration/worker is accepted in a configured environment.
