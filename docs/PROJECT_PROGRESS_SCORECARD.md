@@ -252,3 +252,11 @@ A feature marked implemented means repository code exists. It must not be descri
 - The scorecard itself contains 36 checklist entries: 20 marked implemented, 11 partial, and 5 unchecked. This is a count of the scorecard's checklist only, **not** a count of every requirement across all specification documents. The roadmap, SaaS, client growth, AI discoverability, safety and quality documents are prose specifications rather than consistently checkbox-tracked acceptance matrices, so a defensible total-complete/total-remaining requirement count cannot be derived from checkbox parsing alone.
 - Release blockers remain: Hostinger production upload and real-domain browser acceptance; live SMTP delivery; eligible Meta/WhatsApp staging acceptance and a fully wired outbound sender; verified Paddle sandbox/subscription lifecycle; production database migration and backup/restore evidence; comprehensive tenant isolation/security review; accessibility, performance and crawl acceptance; and operational monitoring/incident readiness.
 - No claim is made that the current production deployment is at the latest repository commit. Deployment acceptance is separate from source/CI evidence.
+
+
+## Phase 1 readiness audit batch — 2026-10-27
+
+- Fixed a concrete production-readiness gap: `/ready` checked only 28 migration records and omitted migrations 015–019 and 034, so it could report ready while workspace projects, invitations, SMTP account, website-audit, or final delivery-cascade schema changes were missing.
+- Readiness now verifies all 34 migrations and checks the missing Phase 1 tables.
+- Added regression coverage for the complete migration list and for failing closed when schema checks fail. These tests are committed but **not yet executed successfully** because current GitHub Actions runs have no retrievable job-step logs.
+- Phase 1 score remains an estimate and is not marked complete until CI and PostgreSQL integration tests execute successfully.

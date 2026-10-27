@@ -244,6 +244,10 @@ async def readiness() -> Response:
             schema_ready = await connection.fetchval(
                 """SELECT
                      to_regclass('public.workspace_domains') IS NOT NULL
+                     AND to_regclass('public.workspace_projects') IS NOT NULL
+                     AND to_regclass('public.workspace_invitations') IS NOT NULL
+                     AND to_regclass('public.workspace_email_accounts') IS NOT NULL
+                     AND to_regclass('public.website_audit_reports') IS NOT NULL
                      AND to_regclass('public.domain_verification_challenges') IS NOT NULL
                      AND to_regclass('public.workspace_jobs') IS NOT NULL
                      AND to_regclass('public.app_users') IS NOT NULL
@@ -287,6 +291,11 @@ async def readiness() -> Response:
                             '012_delivery_outcome_uncertainty.sql',
                             '013_subscription_entitlements_and_usage.sql',
                             '014_billing_provider_event_ledger.sql',
+                            '015_workspace_projects.sql',
+                            '016_workspace_invitations.sql',
+                            '017_workspace_settings.sql',
+                            '018_workspace_email_accounts.sql',
+                            '019_website_audit_reports.sql',
                             '020_meta_whatsapp_webhook_inbox.sql',
                             '021_workspace_whatsapp_accounts.sql',
                             '022_prospect_whatsapp_phone.sql',
@@ -300,8 +309,9 @@ async def readiness() -> Response:
                             '030_subscription_plan_slug.sql',
                             '031_whatsapp_outbound_queue.sql',
                             '032_whatsapp_consent_account_scope.sql',
-                            '033_draft_edit_audit_event.sql'
-                          )) = 28"""
+                            '033_draft_edit_audit_event.sql',
+                            '034_workspace_delivery_cascade_cleanup.sql'
+                          )) = 34"""
             )
             if not schema_ready:
                 return JSONResponse(
