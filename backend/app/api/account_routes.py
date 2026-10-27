@@ -42,6 +42,11 @@ async def export_account_data(request: Request) -> JSONResponse:
                        ORDER BY w.created_at,w.id LIMIT 100""",
                     user_id,
                 )
+                if len(memberships) > 100:
+                    export_memberships_truncated = True
+                    memberships = memberships[:100]
+                else:
+                    export_memberships_truncated = False
                 workspace_ids = [row["workspace_id"] for row in memberships]
                 export = {
                     "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -69,9 +74,12 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "billing_events": [],
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
-                        "note": "Collections are capped to protect service availability; if any collection reaches the cap, request a larger operator-assisted export.",
+                        "truncated_collections": [],
+                        "note": "A collection listed in truncated_collections exceeded the export cap; this export is incomplete for that collection.",
                     },
                 }
+                if export_memberships_truncated:
+                    export["limits"]["truncated_collections"].append("workspaces")
                 if workspace_ids:
                     queries = {
                         "projects": """SELECT id,workspace_id,name,website_url,business_model,target_market,
@@ -132,37 +140,52 @@ async def export_account_data(request: Request) -> JSONResponse:
                             WHERE workspace_id=ANY($1::text[]) ORDER BY event_created_at,id LIMIT $2""",
                     }
                     for collection, query in queries.items():
-                        rows = await conn.fetch(query, workspace_ids, _MAX_EXPORT_ROWS)
+                        rows = await conn.fetch(query, workspace_ids, _MAX_EXPORT_ROWS + 1)
+                        if len(rows) > _MAX_EXPORT_ROWS:
+                            export["limits"]["truncated_collections"].append(collection)
+                            rows = rows[:_MAX_EXPORT_ROWS]
                         export[collection] = [dict(row) for row in rows]
                     invitation_rows = await conn.fetch(
                         """SELECT workspace_id,invited_email,role,status,created_at,expires_at,accepted_at,revoked_at
                            FROM workspace_invitations WHERE workspace_id=ANY($1::text[])
                            ORDER BY created_at DESC LIMIT $2""",
-                        workspace_ids, _MAX_EXPORT_ROWS,
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
                     )
+                    if len(invitation_rows) > _MAX_EXPORT_ROWS:
+                        export["limits"]["truncated_collections"].append("invitations")
+                        invitation_rows = invitation_rows[:_MAX_EXPORT_ROWS]
                     export["invitations"] = [dict(row) for row in invitation_rows]
                     email_account_rows = await conn.fetch(
                         """SELECT id,workspace_id,label,smtp_host,smtp_port,smtp_username,from_email,
                                   from_name,starttls,status,created_at,updated_at
                            FROM workspace_email_accounts WHERE workspace_id=ANY($1::text[])
                            ORDER BY created_at DESC LIMIT $2""",
-                        workspace_ids, _MAX_EXPORT_ROWS,
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
                     )
+                    if len(email_account_rows) > _MAX_EXPORT_ROWS:
+                        export["limits"]["truncated_collections"].append("email_accounts")
+                        email_account_rows = email_account_rows[:_MAX_EXPORT_ROWS]
                     export["email_accounts"] = [dict(row) for row in email_account_rows]
                     audit_report_rows = await conn.fetch(
                         """SELECT id,workspace_id,start_url,status,created_at
                            FROM website_audit_reports WHERE workspace_id=ANY($1::text[])
-                           ORDER BY created_at DESC LIMIT 1000""",
+                           ORDER BY created_at DESC LIMIT 1001""",
                         workspace_ids,
                     )
+                    if len(audit_report_rows) > 1000:
+                        export["limits"]["truncated_collections"].append("website_audits")
+                        audit_report_rows = audit_report_rows[:1000]
                     export["website_audits"] = [dict(row) for row in audit_report_rows]
                     audit_rows = await conn.fetch(
                         """SELECT workspace_id,event_type,outcome,created_at
                            FROM security_audit_events
                            WHERE actor_user_id=$1 AND (workspace_id=ANY($2::text[]) OR workspace_id IS NULL)
                            ORDER BY created_at LIMIT $3""",
-                        user_id, workspace_ids, _MAX_EXPORT_ROWS,
+                        user_id, workspace_ids, _MAX_EXPORT_ROWS + 1,
                     )
+                    if len(audit_rows) > _MAX_EXPORT_ROWS:
+                        export["limits"]["truncated_collections"].append("account_audit_events")
+                        audit_rows = audit_rows[:_MAX_EXPORT_ROWS]
                     export["account_audit_events"] = [dict(row) for row in audit_rows]
     except HTTPException:
         raise
