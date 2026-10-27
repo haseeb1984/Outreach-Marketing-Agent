@@ -8,7 +8,8 @@ python -m scripts.launch_preflight
 ```
 
 The command emits one JSON document and exits non-zero when required configuration or
-operational artifacts are missing. It checks the PostgreSQL DSN shape, session-secret
+operational artifacts are missing. Save the JSON output as a release artifact, but remove
+any operator-added private metadata before sharing it outside the deployment team. It checks the PostgreSQL DSN shape, session-secret
 length, provider-encryption key, HTTPS origins, SMTP all-or-none configuration, Paddle
 mode consistency, Meta configuration completeness/version format, migration artifacts,
 backup tooling, and growth-worker supervision/runbook.
