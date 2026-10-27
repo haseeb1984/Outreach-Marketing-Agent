@@ -190,6 +190,7 @@ class WorkspaceJobQueue:
         worker_id: str,
         error_code: str,
         retry_delay_seconds: int = 30,
+        retry: bool = True,
     ) -> str:
         if not error_code or len(error_code) > 100:
             raise ValueError("error_code must contain 1–100 characters")
@@ -206,7 +207,7 @@ class WorkspaceJobQueue:
                 )
                 if row is None:
                     return "lease_lost"
-                terminal = row["attempt_count"] >= row["max_attempts"]
+                terminal = (not retry) or row["attempt_count"] >= row["max_attempts"]
                 if terminal:
                     await connection.execute(
                         """UPDATE workspace_jobs SET status='failed', error_code=$3,
