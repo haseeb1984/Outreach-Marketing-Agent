@@ -9,11 +9,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import socket
 from typing import Any
+from uuid import UUID
 
 import asyncpg
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import settings
 from app.services.domain_authorization_store import DomainAuthorizationStore
@@ -36,6 +40,10 @@ def _bounded_payload(value: Any) -> dict[str, Any]:
     max_depth = value.get("max_depth", 2)
     if not all(isinstance(v, str) and v.strip() for v in (start_url, business_type, target_market, requested_by)):
         raise ValueError("job_payload_invalid")
+    try:
+        requested_by = str(UUID(requested_by.strip()))
+    except (ValueError, AttributeError):
+        raise ValueError("job_payload_invalid") from None
     if not isinstance(queries, list) or len(queries) > 20 or any(not isinstance(q, str) or not q.strip() or len(q) > 200 for q in queries):
         raise ValueError("job_payload_invalid")
     if type(max_pages) is not int or not 1 <= max_pages <= 10:
@@ -126,10 +134,10 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
         while True:
             try:
                 await schedules.enqueue_one_due()
-            except Exception:
-                # A schedule poll failure must not crash job processing; alerting belongs
-                # to the process supervisor/log pipeline and no sensitive details are logged.
-                pass
+            except Exception as exc:
+                # Keep sensitive SQL/config details out of logs while making the failure
+                # visible to a process supervisor and log-based alerting.
+                logger.warning("growth_schedule_poll_failed error_type=%s", type(exc).__name__)
             processed = await process_one_job(pool, worker_id=worker_id)
             if once:
                 return
