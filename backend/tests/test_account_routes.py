@@ -98,3 +98,45 @@ def test_delete_account_requires_csrf_before_database_access(monkeypatch):
         app.state.db_pool = NeverPool()
         response = client.delete("/api/v1/account")
     assert response.status_code == 403
+
+
+class FakeExportConnection:
+    def __init__(self):
+        self.fetch_queries: list[str] = []
+
+    @asynccontextmanager
+    async def transaction(self, **kwargs):
+        assert kwargs == {"isolation": "repeatable_read", "readonly": True}
+        yield
+
+    async def fetchrow(self, query, *args):
+        assert "FROM app_users" in query
+        return {"id": args[0], "email": "user@example.test", "status": "active"}
+
+    async def fetch(self, query, *args):
+        self.fetch_queries.append(query)
+        if "FROM workspaces w JOIN workspace_memberships" in query:
+            return [{
+                "workspace_id": "workspace-export-test",
+                "workspace_name": "Example workspace",
+                "workspace_created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                "role": "owner",
+                "membership_created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            }]
+        return []
+
+
+def test_account_export_includes_workspace_names_and_domain_verification_records(monkeypatch):
+    conn = FakeExportConnection()
+    monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
+    with TestClient(app) as client:
+        app.state.db_pool = FakePool(conn)
+        response = client.get("/api/v1/account/export")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["workspaces"][0]["workspace_name"] == "Example workspace"
+    assert payload["domains"] == []
+    assert any("FROM workspace_domains" in query for query in conn.fetch_queries)
+    assert response.headers["content-disposition"].startswith("attachment;")
+    assert response.headers["cache-control"] == "no-store, private"
