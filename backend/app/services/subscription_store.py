@@ -84,8 +84,8 @@ class SubscriptionStore:
             )
         if row is None:
             return {"allowed": False, "reason": "subscription_missing"}
-        if row["reservation_id"] is None or row["reservation_status"] != "consumed":
-            return {"allowed": False, "reason": "reservation_not_consumed"}
+        if row["reservation_id"] is None or row["reservation_status"] not in {"reserved", "consumed"}:
+            return {"allowed": False, "reason": "reservation_not_active"}
         if row["reservation_feature"] != feature:
             return {"allowed": False, "reason": "reservation_feature_mismatch"}
         if (
@@ -103,7 +103,7 @@ class SubscriptionStore:
             usage=usage_before_this_job,
             now=current,
         )
-        return {"allowed": decision.allowed, "reason": decision.reason}
+        return {"allowed": decision.allowed, "reason": decision.reason, "reservation_status": row["reservation_status"]}
 
     async def check_feature_enabled(
         self, *, workspace_id: str, feature: str, now: datetime | None = None,
