@@ -400,3 +400,8 @@ A current-main branch carries the backup/restore implementation, unit tests, and
 - Paddle webhook, checkout/customer-portal client, and dashboard billing contract are merged in PRs #22, #26 and #27. Server-side entitlements remain authoritative; checkout is sandbox-first and live checkout is explicitly gated.
 - The CI repair batch in PR #23 is merged after successful Python 3.11/3.12/3.13 test jobs; Python 3.12 PostgreSQL auth integration and dependency audit passed. The earlier 14-failure CI run is historical evidence, not the current result.
 - This is implementation progress, not launch certification. Actual Paddle sandbox credentials, subscription lifecycle acceptance, database migration verification, live email delivery, Meta account acceptance, production frontend upload and recovery rehearsal remain outstanding.
+
+
+## Paddle route consolidation — 2026-10-28
+
+Removed duplicate Paddle webhook/checkout route implementations so the existing slug-based `paddle_routes.py` remains authoritative; added customer portal support there and aligned the environment example/runbooks with the established `PADDLE_PLANS_JSON` schema. CI must confirm the consolidated route table and portal URL validation. No live payment readiness is claimed.
