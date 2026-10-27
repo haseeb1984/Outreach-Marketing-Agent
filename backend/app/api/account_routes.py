@@ -39,7 +39,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                               m.role,m.created_at AS membership_created_at
                        FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id
                        WHERE m.user_id=$1 AND m.status='active'
-                       ORDER BY w.created_at,w.id LIMIT 100""",
+                       ORDER BY w.created_at,w.id LIMIT 101""",
                     user_id,
                 )
                 if len(memberships) > 100:
