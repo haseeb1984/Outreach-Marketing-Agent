@@ -51,6 +51,7 @@ async def _exercise_password_reset() -> None:
             "009_contact_controls.sql",
             "010_outbound_delivery_queue.sql",
             "011_conversation_webhook_inbox.sql",
+            "012_delivery_outcome_uncertainty.sql",
             "013_subscription_entitlements_and_usage.sql",
             "014_billing_provider_event_ledger.sql",
             "015_workspace_projects.sql",
@@ -69,6 +70,9 @@ async def _exercise_password_reset() -> None:
             "028_platform_admin_audit.sql",
             "029_unique_platform_plan_price_ids.sql",
             "030_subscription_plan_slug.sql",
+            "031_whatsapp_outbound_queue.sql",
+            "032_whatsapp_consent_account_scope.sql",
+            "033_draft_edit_audit_event.sql",
         ):
             await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
