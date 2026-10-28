@@ -223,27 +223,37 @@ class WhatsAppOutboundStore:
         return row is not None
 
     async def mark_expired_claims_uncertain(self, *, limit: int = 100) -> int:
-        """Move expired processing leases to uncertain; never re-send after a crash."""
+        """Recover expired sends as uncertain and settle their reserved quota atomically."""
         if not 1 <= limit <= 1000:
             raise ValueError("recovery_limit_out_of_range")
         async with self._pool.acquire() as conn:
-            rows = await conn.fetch(
+            recovered_count = await conn.fetchval(
                 """WITH expired AS (
                        SELECT id FROM whatsapp_outbound_deliveries
                        WHERE status='processing' AND lease_expires_at <= now()
                        ORDER BY lease_expires_at,id
                        FOR UPDATE SKIP LOCKED
                        LIMIT $1
+                   ), recovered AS (
+                       UPDATE whatsapp_outbound_deliveries q
+                       SET status='uncertain', error_code='worker_lease_expired',
+                           lease_token=NULL, lease_expires_at=NULL, updated_at=now()
+                       FROM expired e
+                       WHERE q.id=e.id
+                       RETURNING q.workspace_id,q.usage_reservation_id
+                   ), settled AS (
+                       UPDATE feature_usage_reservations r
+                       SET status='consumed',updated_at=now()
+                       FROM recovered q
+                       WHERE r.id=q.usage_reservation_id
+                         AND r.workspace_id=q.workspace_id
+                         AND r.status='reserved'
+                       RETURNING r.id
                    )
-                   UPDATE whatsapp_outbound_deliveries q
-                   SET status='uncertain', error_code='worker_lease_expired',
-                       lease_token=NULL, lease_expires_at=NULL, updated_at=now()
-                   FROM expired e
-                   WHERE q.id=e.id
-                   RETURNING q.id""",
+                   SELECT count(*) FROM recovered""",
                 limit,
             )
-        return len(rows)
+        return int(recovered_count or 0)
 
     async def list(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 100000:

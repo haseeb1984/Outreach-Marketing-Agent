@@ -33,6 +33,13 @@ class FakeConnection:
         row = self.rows.pop(0)
         return row if isinstance(row, list) else [row]
 
+    async def fetchval(self, query, *args):
+        self.queries.append((query, args))
+        if not self.rows:
+            return 0
+        row = self.rows.pop(0)
+        return len(row) if isinstance(row, list) else row
+
 
 class FakePool:
     def __init__(self, rows):

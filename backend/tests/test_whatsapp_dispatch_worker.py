@@ -61,7 +61,7 @@ def test_claimed_delivery_never_touches_provider_when_disabled(monkeypatch):
     assert result == "dispatch_disabled"
 
 
-def _dispatch_fakes(monkeypatch, *, queue_result=True, policy_result=None):
+def _dispatch_fakes(monkeypatch, *, queue_result=True, policy_result=None, queue_error=False):
     from uuid import uuid4
 
     monkeypatch.setattr(settings, "whatsapp_dispatch_enabled", True)
@@ -84,6 +84,8 @@ def _dispatch_fakes(monkeypatch, *, queue_result=True, policy_result=None):
             self.finished = []
         async def finish_claim(self, **kwargs):
             self.finished.append(kwargs)
+            if queue_error:
+                raise RuntimeError("simulated queue persistence outage")
             return queue_result
 
     class Subscriptions:
@@ -179,3 +181,55 @@ def test_confirmed_provider_send_consumes_usage_even_if_lease_completion_loses(m
     assert queue.finished[0]["outcome"] == "sent"
     assert queue.finished[0]["provider_message_id"] == "wamid.test-confirmed"
     assert subscriptions.finished[0]["outcome"] == "consumed"
+
+
+def test_confirmed_provider_send_consumes_usage_when_queue_persistence_raises(monkeypatch):
+    pool, queue, subscriptions, delivery = _dispatch_fakes(monkeypatch, queue_error=True)
+
+    class Sender:
+        async def send(self, **kwargs):
+            return {"provider_message_id": "wamid.confirmed-db-outage"}
+
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery, sender=Sender(),
+    ))
+
+    assert result == "sent_lease_completion_lost"
+    assert queue.finished[0]["outcome"] == "sent"
+    assert subscriptions.finished[0]["outcome"] == "consumed"
+
+
+def test_uncertain_provider_outcome_consumes_usage_when_queue_persistence_raises(monkeypatch):
+    from app.services.whatsapp_meta_sender import MetaSendUncertain
+
+    pool, queue, subscriptions, delivery = _dispatch_fakes(monkeypatch, queue_error=True)
+
+    class Sender:
+        async def send(self, **kwargs):
+            raise MetaSendUncertain("meta_transport_outcome_uncertain")
+
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery, sender=Sender(),
+    ))
+
+    assert result == "provider_uncertain"
+    assert queue.finished[0]["outcome"] == "uncertain"
+    assert subscriptions.finished[0]["outcome"] == "consumed"
+
+
+def test_definite_provider_rejection_releases_usage_when_queue_persistence_raises(monkeypatch):
+    from app.services.whatsapp_meta_sender import MetaSendRejected
+
+    pool, queue, subscriptions, delivery = _dispatch_fakes(monkeypatch, queue_error=True)
+
+    class Sender:
+        async def send(self, **kwargs):
+            raise MetaSendRejected("meta_request_rejected")
+
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery, sender=Sender(),
+    ))
+
+    assert result == "provider_rejected"
+    assert queue.finished[0]["outcome"] == "failed"
+    assert subscriptions.finished[0]["outcome"] == "released"
