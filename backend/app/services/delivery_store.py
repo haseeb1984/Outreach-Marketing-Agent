@@ -43,20 +43,25 @@ class DeliveryStore:
         async with self._pool.acquire() as c:
             async with c.transaction():
                 r=await c.fetchrow("""SELECT q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id,
-                  p.contact_email,p.stage,cc.email_suppressed,c.status AS campaign_status FROM outreach_deliveries q
+                  p.contact_email,p.stage,p.archived_at,cc.email_suppressed,c.status AS campaign_status,ea.status AS email_account_status
+                  FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                   JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
                   LEFT JOIN outreach_contact_controls cc ON cc.workspace_id=d.workspace_id AND cc.prospect_id=d.prospect_id
-                  WHERE q.id=$1 AND q.workspace_id=$2 FOR UPDATE OF q,d""",delivery_id,workspace_id)
+                  LEFT JOIN workspace_email_accounts ea ON ea.id=q.email_account_id AND ea.workspace_id=q.workspace_id
+                  WHERE q.id=$1 AND q.workspace_id=$2 FOR UPDATE OF q,d,c,p""",delivery_id,workspace_id)
                 if r is None: raise LookupError("delivery_not_found")
                 if r["queue_status"]!="queued": raise ValueError("delivery_not_queued")
                 if r["draft_status"]!="approved": raise ValueError("draft_not_approved")
                 if r["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if r["campaign_status"] == "paused": raise ValueError("campaign_paused")
                 if r["channel"]!="email": raise ValueError("provider_channel_not_configured")
+                if r["archived_at"] is not None: raise ValueError("prospect_archived")
                 if not r["contact_email"]: raise ValueError("prospect_email_required")
                 if r["email_suppressed"] or r["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
+                if r["email_account_id"] is not None and r["email_account_status"] != "active":
+                    raise ValueError("email_account_not_available")
                 await c.execute("""UPDATE outreach_deliveries SET status='processing',attempt_count=attempt_count+1,
                   processing_at=now(),updated_at=now() WHERE id=$1 AND workspace_id=$2 AND status='queued'""",delivery_id,workspace_id)
                 return {"recipient":r["contact_email"],"subject":r["subject"] or "A message from a business","body":r["body"],"email_account_id":str(r["email_account_id"]) if r["email_account_id"] else None}
