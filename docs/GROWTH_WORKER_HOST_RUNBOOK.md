@@ -46,3 +46,27 @@ The service uses a fixed working directory and virtualenv path. If your host lay
 ## Important boundaries
 
 The unit makes the process restartable; it does not prove a successful production deployment or a real scan. A one-shot run may simply find no eligible jobs. The release is not launch-ready until the acceptance checklist is executed against the actual production-like environment. This worker handles website-growth scans only; it does not deliver queued email or WhatsApp outreach.
+
+## Additional supervised processes
+
+The durable scan worker, recurring schedule dispatcher, and WhatsApp sender are separate processes. A running API or scan worker does not imply that recurring schedules or outbound WhatsApp deliveries are being processed.
+
+### Recurring growth scheduler
+
+1. Create /etc/outreach-marketing-agent/scheduler.env as root-owned and readable only by the service group (for example mode 0640). Set the production DATABASE_URL and required application settings; never place secret values in the unit file.
+2. Install ops/systemd/outreach-growth-scheduler.service as /etc/systemd/system/outreach-growth-scheduler.service.
+3. Confirm the database has migrations 035 and 036 and run the scheduler smoke tests in CI before enabling it.
+4. Enable with: sudo systemctl daemon-reload && sudo systemctl enable --now outreach-growth-scheduler.
+5. Verify systemctl status outreach-growth-scheduler and inspect sanitized logs with journalctl -u outreach-growth-scheduler -n 100 --no-pager. Confirm a due schedule advances and its idempotent job is visible in the same workspace.
+
+### WhatsApp dispatch worker
+
+This worker is deliberately fail-closed and must remain disabled until Meta sandbox acceptance, approved-template/consent checks, production credentials, and quota reconciliation have been reviewed.
+
+1. Create /etc/outreach-marketing-agent/whatsapp-worker.env with restrictive permissions and required application settings. Configure both WHATSAPP_DISPATCH_ENABLED=true and the application setting whatsapp_dispatch_enabled=true only after acceptance; the process requires both configuration paths to opt in. Do not copy production credentials into tickets or logs.
+2. Install ops/systemd/outreach-whatsapp-dispatch-worker.service as /etc/systemd/system/outreach-whatsapp-dispatch-worker.service.
+3. Before enabling, verify migration 038, active Meta credentials, webhook/status reconciliation, recipient consent and template policy, and explicit product-owner approval for outbound sends.
+4. Enable only after the above gates pass: sudo systemctl daemon-reload && sudo systemctl enable --now outreach-whatsapp-dispatch-worker.
+5. Verify the service status and sanitized logs. Test a controlled approved recipient and confirm provider status, queue state, and quota reservation reconcile. If acceptance has not passed, leave this service disabled; its startup is expected to fail closed.
+
+Do not treat installing these unit files as proof that the services have been deployed or enabled on a persistent host. Production acceptance still requires the checklist above.

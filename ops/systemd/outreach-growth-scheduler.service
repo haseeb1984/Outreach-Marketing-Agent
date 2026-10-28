@@ -1,0 +1,28 @@
+[Unit]
+Description=Outreach Marketing Agent recurring growth-schedule dispatcher
+Documentation=https://github.com/haseeb1984/Outreach-Marketing-Agent/blob/main/docs/GROWTH_WORKER_HOST_RUNBOOK.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oma-worker
+Group=oma-worker
+WorkingDirectory=/opt/outreach-marketing-agent/backend
+EnvironmentFile=/etc/outreach-marketing-agent/scheduler.env
+ExecStart=/opt/outreach-marketing-agent/venv/bin/python -m app.workers.workspace_growth_scheduler
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/outreach-marketing-agent
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
