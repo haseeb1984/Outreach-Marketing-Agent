@@ -120,14 +120,15 @@ def test_preflight_flags_missing_required_operational_artifacts(tmp_path: Path):
     assert status["growth_worker_runbook"] == "fail"
 
 
-def test_preflight_fails_when_any_critical_release_migration_is_missing(tmp_path: Path):
+@pytest.mark.parametrize("migration", REQUIRED_RELEASE_MIGRATIONS)
+def test_preflight_fails_when_any_critical_release_migration_is_missing(tmp_path: Path, migration: str):
     _release_root(tmp_path)
-    (tmp_path / "backend/migrations/038_whatsapp_outbound_queue_leases.sql").unlink()
+    (tmp_path / "backend/migrations" / migration).unlink()
     result = evaluate_config(_env(), tmp_path)
     assert result["ok"] is False
     assert _statuses(result)["required_release_migrations"] == "fail"
     missing_check = next(c for c in result["checks"] if c["name"] == "required_release_migrations")
-    assert "038_whatsapp_outbound_queue_leases.sql" in missing_check["detail"]
+    assert migration in missing_check["detail"]
 
 
 def test_preflight_uses_safe_json_statuses_for_remote_gates(tmp_path: Path):
