@@ -64,6 +64,35 @@ async def _consume_reservation(
         logger.error("WhatsApp reservation consumption failed; manual billing reconciliation required")
 
 
+
+
+async def _finish_provider_outcome(
+    queue: Any, subscriptions: Any, *, delivery_id: UUID, lease_token: UUID,
+    workspace_id: str, reservation_id: str, outcome: str,
+    provider_message_id: str | None = None, error_code: str | None = None,
+) -> bool:
+    """Persist a post-provider outcome best-effort, but always settle its quota reservation.
+
+    Provider outcomes are irreversible: once accepted or uncertain, a database error
+    while writing queue state must not skip quota settlement. Lease-expiry recovery
+    reconciles the queue row if the status write fails.
+    """
+    completed = False
+    try:
+        completed = await queue.finish_claim(
+            delivery_id=delivery_id, lease_token=lease_token, outcome=outcome,
+            provider_message_id=provider_message_id, error_code=error_code,
+        )
+    except Exception:
+        logger.error(
+            "WhatsApp post-provider status write failed; lease recovery required"
+        )
+    await _consume_reservation(
+        subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
+    )
+    return completed
+
+
 async def process_claimed_delivery(
     *,
     pool: Any,
@@ -180,44 +209,36 @@ async def process_claimed_delivery(
             )
         return "provider_rejected"
     except MetaSendUncertain as exc:
-        await queue.finish_claim(
-            delivery_id=delivery_id, lease_token=lease_token, outcome="uncertain",
-            error_code=exc.code[:100],
-        )
-        # The provider may have accepted it; charge/reserve usage and never auto-retry.
-        await _consume_reservation(
-            subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
+        # The provider may have accepted it; never retry and always settle reserved usage.
+        await _finish_provider_outcome(
+            queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+            workspace_id=workspace_id, reservation_id=reservation_id,
+            outcome="uncertain", error_code=exc.code[:100],
         )
         return "provider_uncertain"
     except Exception:
         # Once the sender has been invoked, any unclassified exception is treated as uncertain.
-        await queue.finish_claim(
-            delivery_id=delivery_id, lease_token=lease_token, outcome="uncertain",
-            error_code="provider_outcome_uncertain",
-        )
-        await _consume_reservation(
-            subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
+        await _finish_provider_outcome(
+            queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+            workspace_id=workspace_id, reservation_id=reservation_id,
+            outcome="uncertain", error_code="provider_outcome_uncertain",
         )
         return "provider_uncertain"
 
     message_id = result.get("provider_message_id") if isinstance(result, dict) else None
     if not isinstance(message_id, str) or not message_id.strip():
-        await queue.finish_claim(
-            delivery_id=delivery_id, lease_token=lease_token, outcome="uncertain",
-            error_code="provider_message_id_missing",
-        )
-        await _consume_reservation(
-            subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
+        await _finish_provider_outcome(
+            queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+            workspace_id=workspace_id, reservation_id=reservation_id,
+            outcome="uncertain", error_code="provider_message_id_missing",
         )
         return "provider_uncertain"
 
-    completed = await queue.finish_claim(
-        delivery_id=delivery_id, lease_token=lease_token, outcome="sent",
-        provider_message_id=message_id,
-    )
-    # Even if lease fencing rejects completion, the provider already confirmed a send.
-    await _consume_reservation(
-        subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
+    # Provider confirmed a send; settle quota even if persisting the queue state fails.
+    completed = await _finish_provider_outcome(
+        queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+        workspace_id=workspace_id, reservation_id=reservation_id,
+        outcome="sent", provider_message_id=message_id,
     )
     return "sent" if completed else "sent_lease_completion_lost"
 
