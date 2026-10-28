@@ -43,7 +43,6 @@ async def _exercise_password_reset() -> None:
         assert migration_files, "repository migration directory must not be empty"
         for migration_path in migration_files:
             await connection.execute(migration_path.read_text(encoding="utf-8"))
-            await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
 
         # Verify workspace-owned delivery references cascade instead of blocking tenant deletion.
         cascade_constraints = await connection.fetch(
