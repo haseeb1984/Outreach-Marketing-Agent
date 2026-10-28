@@ -117,5 +117,40 @@ async def _exercise_billing_lifecycle() -> None:
                    WHERE provider=$1 AND provider_event_id=$2""",
                 conflict.provider, conflict.event_id,
             ) == 0
+
+        # Two first-time subscriptions racing for the same workspace must never be
+        # silently reported as stale. Exactly one identity wins; the other transaction
+        # rolls back its event-ledger row and reports an explicit identity conflict.
+        race_workspace = "billing-lifecycle-race-" + uuid4().hex
+        async with pool.acquire() as conn:
+            await conn.execute("INSERT INTO workspaces (id) VALUES ($1)", race_workspace)
+        race_a = make_event(
+            "evt_race_a_" + uuid4().hex, NOW,
+            workspace_id=race_workspace, provider_subscription_id="sub_race_a",
+        )
+        race_b = make_event(
+            "evt_race_b_" + uuid4().hex, NOW,
+            workspace_id=race_workspace, provider_subscription_id="sub_race_b",
+        )
+        results = await asyncio.gather(
+            store.apply_verified_event(race_a),
+            store.apply_verified_event(race_b),
+            return_exceptions=True,
+        )
+        successes = [result for result in results if isinstance(result, dict)]
+        errors = [result for result in results if isinstance(result, ValueError)]
+        assert successes == [{"outcome": "applied"}]
+        assert len(errors) == 1
+        assert str(errors[0]) == "billing_subscription_identity_conflict"
+        async with pool.acquire() as conn:
+            race_snapshot = await conn.fetchrow(
+                "SELECT provider_subscription_id FROM workspace_subscriptions WHERE workspace_id=$1",
+                race_workspace,
+            )
+            assert race_snapshot["provider_subscription_id"] in {"sub_race_a", "sub_race_b"}
+            assert await conn.fetchval(
+                "SELECT count(*) FROM billing_provider_events WHERE workspace_id=$1",
+                race_workspace,
+            ) == 1
     finally:
         await pool.close()
