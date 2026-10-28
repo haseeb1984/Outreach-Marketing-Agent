@@ -106,6 +106,33 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
         "Paddle credentials and plan catalog are complete or absent" if paddle_config_ok
         else "Paddle API key, webhook secret, and plan catalog must be configured together; live checkout requires all three in production mode")
 
+    # Validate the actual catalog syntax/shape without ever echoing its contents.
+    plans_raw = env.get("PADDLE_PLANS_JSON", "").strip()
+    plans_ok = True
+    if plans_raw:
+        try:
+            plans_value = json.loads(plans_raw)
+            if not isinstance(plans_value, dict) or not plans_value:
+                plans_ok = False
+            else:
+                seen_price_ids: set[str] = set()
+                for slug, plan in plans_value.items():
+                    if (not isinstance(slug, str)
+                            or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,79}", slug)
+                            or not isinstance(plan, dict)
+                            or not isinstance(plan.get("price_id"), str)
+                            or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", plan["price_id"])
+                            or plan["price_id"] in seen_price_ids
+                            or not isinstance(plan.get("entitlements"), dict)):
+                        plans_ok = False
+                        break
+                    seen_price_ids.add(plan["price_id"])
+        except (TypeError, json.JSONDecodeError):
+            plans_ok = False
+    add("paddle_plan_catalog_shape", plans_ok,
+        "Paddle plan catalog has valid JSON, unique price IDs, and entitlement objects" if plans_ok
+        else "PADDLE_PLANS_JSON must be a non-empty JSON object with valid plan slugs, unique pri_ price IDs, and entitlements objects")
+
     meta_fields = ("META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_APP_SECRET",
                    "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID",
                    "META_WHATSAPP_WABA_ID", "META_GRAPH_API_VERSION")
