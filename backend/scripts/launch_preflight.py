@@ -21,6 +21,9 @@ from urllib.parse import urlsplit
 
 
 REQUIRED_RELEASE_MIGRATIONS = (
+    "032_whatsapp_consent_account_scope.sql",
+    "033_draft_edit_audit_event.sql",
+    "034_workspace_delivery_cascade_cleanup.sql",
     "035_workspace_growth_schedules.sql",
     "036_growth_schedule_quota_status.sql",
     "037_whatsapp_outbound_template_persistence.sql",
