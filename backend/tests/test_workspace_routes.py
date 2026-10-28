@@ -16,8 +16,9 @@ class _Transaction:
 
 
 class _Connection:
-    def __init__(self, active_workspaces):
+    def __init__(self, active_workspaces, account_exists=True):
         self.active_workspaces = active_workspaces
+        self.account_exists = account_exists
         self.calls = []
 
     def transaction(self):
@@ -25,7 +26,7 @@ class _Connection:
 
     async def fetchrow(self, query, *args):
         self.calls.append(("fetchrow", query))
-        return {"id": args[0]} if "FOR UPDATE" in query else None
+        return {"id": args[0]} if "FOR UPDATE" in query and self.account_exists else None
 
     async def fetch(self, query, *args):
         self.calls.append(("fetch", query))
@@ -57,7 +58,7 @@ class _AuthStore:
         return True
 
 
-def _configure_request(monkeypatch, active_workspaces):
+def _configure_request(monkeypatch, active_workspaces, account_exists=True):
     user_id = "00000000-0000-0000-0000-000000000001"
     monkeypatch.setattr(
         workspace_routes,
@@ -65,7 +66,7 @@ def _configure_request(monkeypatch, active_workspaces):
         _fake_authenticated(user_id),
     )
     monkeypatch.setattr(workspace_routes, "_check_csrf", lambda request, session: None)
-    connection = _Connection(active_workspaces)
+    connection = _Connection(active_workspaces, account_exists=account_exists)
     return user_id, connection
 
 
@@ -130,3 +131,21 @@ def test_invitation_list_query_uses_real_sql_newlines(monkeypatch):
     query = next(call[1] for call in connection.calls if call[0] == "fetch")
     assert "CASE WHEN status='pending'" in query
     assert "\\n" not in query
+
+
+def test_workspace_creation_rejects_missing_account_row(monkeypatch):
+    _user_id, connection = _configure_request(
+        monkeypatch, active_workspaces=0, account_exists=False
+    )
+    with TestClient(app) as client:
+        app.state.db_pool = _Pool(connection)
+        app.state.auth_store = _AuthStore()
+        response = client.post(
+            "/api/v1/workspaces",
+            json={"name": "Orphan workspace"},
+            headers={"Origin": "https://app.example.test"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "account_unavailable"
+    assert not any(call[0] == "execute" and "INSERT INTO workspaces" in call[1] for call in connection.calls)
