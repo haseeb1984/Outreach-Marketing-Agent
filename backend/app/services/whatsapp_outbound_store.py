@@ -212,8 +212,8 @@ class WhatsAppOutboundStore:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """UPDATE whatsapp_outbound_deliveries
-                   SET status=$3, provider_message_id=$4, error_code=$5,
-                       sent_at=CASE WHEN $3='sent' THEN now() ELSE sent_at END,
+                   SET status=$3::text, provider_message_id=$4, error_code=$5,
+                       sent_at=CASE WHEN $3::text='sent' THEN now() ELSE sent_at END,
                        lease_token=NULL, lease_expires_at=NULL, updated_at=now()
                    WHERE id=$1 AND lease_token=$2 AND status='processing'
                      AND lease_expires_at > now()
