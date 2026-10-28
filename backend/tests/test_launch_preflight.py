@@ -137,6 +137,44 @@ def test_preflight_accepts_complete_paddle_setup_for_live_checkout(tmp_path: Pat
     assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
 
 
+@pytest.mark.parametrize("catalog", [
+    "not-json",
+    "[]",
+    '{"starter":{"price_id":"bad_id","entitlements":{}}}',
+    '{"starter":{"price_id":"pri_same","entitlements":{}},"growth":{"price_id":"pri_same","entitlements":{}}}',
+    '{"Starter":{"price_id":"pri_starter","entitlements":{}}}',
+    '{"starter":{"price_id":"pri_starter"}}',
+])
+def test_preflight_rejects_invalid_paddle_plan_catalog_shape(tmp_path: Path, catalog: str):
+    env = _env()
+    env.update({
+        "PADDLE_API_KEY": "pdl_sandbox_key",
+        "PADDLE_WEBHOOK_SECRET": "webhook-secret",
+        "PADDLE_PLANS_JSON": catalog,
+    })
+    result = evaluate_config(env, tmp_path)
+    assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
+    assert _statuses(result)["paddle_plan_catalog_shape"] == "fail"
+    assert result["ok"] is False
+    assert catalog not in str(result)
+
+
+def test_preflight_accepts_valid_unique_sandbox_plan_catalog(tmp_path: Path):
+    env = _env()
+    env.update({
+        "PADDLE_API_KEY": "pdl_sandbox_key",
+        "PADDLE_WEBHOOK_SECRET": "webhook-secret",
+        "PADDLE_PLANS_JSON": (
+            '{"starter":{"price_id":"pri_starter","entitlements":{}},'
+            '"growth":{"price_id":"pri_growth","entitlements":{}},'
+            '"agency":{"price_id":"pri_agency","entitlements":{}}}'
+        ),
+    })
+    result = evaluate_config(env, tmp_path)
+    assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
+    assert _statuses(result)["paddle_plan_catalog_shape"] == "pass"
+
+
 def test_preflight_flags_partial_meta_configuration(tmp_path: Path):
     env = _env()
     env["META_WHATSAPP_ACCESS_TOKEN"] = "configured"
