@@ -39,7 +39,7 @@ def dispatch_is_enabled() -> bool:
     """Both explicit app config and an exact opt-in environment value are required."""
     return bool(settings.whatsapp_dispatch_enabled) and os.getenv(
         "WHATSAPP_DISPATCH_ENABLED", ""
-    ).strip().lower() in {"1", "true", "yes"}
+    ).strip().lower() in {"1", "true"}
 
 
 async def _release_if_reserved(
