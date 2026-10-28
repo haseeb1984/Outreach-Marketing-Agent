@@ -65,7 +65,7 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
                 """INSERT INTO crm_prospects
                    (id,workspace_id,name,company,website_url,evidence_url,fit_reason,created_by,contact_phone_e164)
                    VALUES ($1,$2,$3,'Integration Co','https://example.test/',
-                           'https://example.test/evidence/' || $3,'Integration fixture',$4,'+14155550123')""",
+                           'https://example.test/evidence/' || $3,'Integration fixture',$4,NULL)""",
                 prospect_id, workspace_id, "Prospect " + suffix, actor_id,
             )
             await connection.execute(
