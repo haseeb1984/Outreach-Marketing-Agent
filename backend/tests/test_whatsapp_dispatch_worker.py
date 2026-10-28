@@ -215,3 +215,21 @@ def test_uncertain_provider_outcome_consumes_usage_when_queue_persistence_raises
     assert result == "provider_uncertain"
     assert queue.finished[0]["outcome"] == "uncertain"
     assert subscriptions.finished[0]["outcome"] == "consumed"
+
+
+def test_definite_provider_rejection_releases_usage_when_queue_persistence_raises(monkeypatch):
+    from app.services.whatsapp_meta_sender import MetaSendRejected
+
+    pool, queue, subscriptions, delivery = _dispatch_fakes(monkeypatch, queue_error=True)
+
+    class Sender:
+        async def send(self, **kwargs):
+            raise MetaSendRejected("meta_request_rejected")
+
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery, sender=Sender(),
+    ))
+
+    assert result == "provider_rejected"
+    assert queue.finished[0]["outcome"] == "failed"
+    assert subscriptions.finished[0]["outcome"] == "released"

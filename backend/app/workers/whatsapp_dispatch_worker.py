@@ -199,10 +199,17 @@ async def process_claimed_delivery(
         else:
             result = await provider.send(**kwargs, body=str(content["body"]))
     except MetaSendRejected as exc:
-        await queue.finish_claim(
-            delivery_id=delivery_id, lease_token=lease_token, outcome="failed",
-            error_code=exc.code[:100],
-        )
+        # A definite rejection means no send occurred, so release quota even if the
+        # queue status write fails; lease recovery can reconcile the delivery row.
+        try:
+            await queue.finish_claim(
+                delivery_id=delivery_id, lease_token=lease_token, outcome="failed",
+                error_code=exc.code[:100],
+            )
+        except Exception:
+            logger.error(
+                "WhatsApp rejection status write failed; lease recovery required"
+            )
         if entitlement.get("reservation_status") == "reserved":
             await _release_if_reserved(
                 subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
