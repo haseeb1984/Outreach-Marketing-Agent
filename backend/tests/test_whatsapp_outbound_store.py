@@ -59,6 +59,7 @@ def test_find_by_idempotency_key_is_workspace_scoped_and_serializes_record():
     pool = FakePool([{
         "id": queue_id, "account_id": account_id, "draft_id": draft_id,
         "status": "queued", "queued_at": queued_at,
+        "template_name": "welcome_offer", "language_code": "en_US",
     }])
     result = asyncio.run(WhatsAppOutboundStore(pool).find_by_idempotency_key(
         workspace_id="workspace-test", idempotency_key="queue-key-123",
@@ -69,6 +70,8 @@ def test_find_by_idempotency_key_is_workspace_scoped_and_serializes_record():
         "draft_id": str(draft_id),
         "status": "queued",
         "queued_at": queued_at.isoformat(),
+        "template_name": "welcome_offer",
+        "language_code": "en_US",
         "replayed": True,
     }
     query, args = pool.connection.queries[0]
