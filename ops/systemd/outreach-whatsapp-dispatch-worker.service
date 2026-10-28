@@ -1,0 +1,28 @@
+[Unit]
+Description=Outreach Marketing Agent WhatsApp outbound dispatch worker
+Documentation=https://github.com/haseeb1984/Outreach-Marketing-Agent/blob/main/backend/docs/WHATSAPP_DISPATCH_WORKER.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oma-worker
+Group=oma-worker
+WorkingDirectory=/opt/outreach-marketing-agent/backend
+EnvironmentFile=/etc/outreach-marketing-agent/whatsapp-worker.env
+ExecStart=/opt/outreach-marketing-agent/venv/bin/python -m app.workers.whatsapp_dispatch_worker
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/outreach-marketing-agent
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
