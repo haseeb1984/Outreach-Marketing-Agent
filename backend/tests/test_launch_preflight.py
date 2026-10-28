@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from scripts.launch_preflight import REQUIRED_RELEASE_MIGRATIONS, evaluate_config
+from scripts.launch_preflight import REQUIRED_RELEASE_MIGRATIONS, evaluate_config, exit_code
 
 
 def _env() -> dict[str, str]:
@@ -39,6 +39,7 @@ def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: 
     _release_root(tmp_path)
     result = evaluate_config(_env(), tmp_path)
     assert result["ok"] is True
+    assert result["launch_ready"] is False
     status = _statuses(result)
     assert status["database_url"] == "pass"
     assert status["provider_encryption_key"] == "pass"
@@ -48,12 +49,23 @@ def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: 
     assert result["summary"]["total"] >= 15
 
 
+def test_legacy_exit_code_stays_green_for_valid_local_configuration(tmp_path: Path):
+    _release_root(tmp_path)
+    assert exit_code(evaluate_config(_env(), tmp_path)) == 0
+
+
+def test_strict_launch_gate_fails_until_runtime_acceptance_is_verified(tmp_path: Path):
+    _release_root(tmp_path)
+    assert exit_code(evaluate_config(_env(), tmp_path), require_launch_ready=True) == 2
+
+
 def test_preflight_fails_weak_session_secret_without_echoing_values(tmp_path: Path):
     env = _env()
     env["SECRET_KEY"] = "tiny-secret"
     result = evaluate_config(env, tmp_path)
     assert result["ok"] is False
     assert _statuses(result)["session_secret"] == "fail"
+    assert exit_code(result, require_launch_ready=True) == 1
     assert "tiny-secret" not in str(result)
 
 
