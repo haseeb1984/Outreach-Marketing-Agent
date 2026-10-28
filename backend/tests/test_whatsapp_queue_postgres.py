@@ -9,7 +9,7 @@ import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
@@ -57,7 +57,7 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
             account_id, workspace_id, actor_id,
         )
 
-        async def seed_delivery(*, suffix: str, provider_message_id: str | None = None) -> uuid4:
+        async def seed_delivery(*, suffix: str, provider_message_id: str | None = None) -> UUID:
             prospect_id, campaign_id, draft_id, reservation_id, delivery_id = (
                 uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
             )
@@ -146,8 +146,8 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
                 stale_claim["id"],
             )
         assert await queue.finish_claim(
-            delivery_id=uuid4() if False else __import__("uuid").UUID(stale_claim["id"]),
-            lease_token=__import__("uuid").UUID(stale_claim["lease_token"]),
+            delivery_id=UUID(stale_claim["id"]),
+            lease_token=UUID(stale_claim["lease_token"]),
             outcome="sent",
             provider_message_id="wamid.should-not-be-saved",
         ) is False
@@ -170,7 +170,7 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
         # Finish the other still-live lease and prove only the current lease can mutate it.
         live_claim = second[0]
         assert await queue.finish_claim(
-            delivery_id=__import__("uuid").UUID(live_claim["id"]),
+            delivery_id=UUID(live_claim["id"]),
             lease_token=__import__("uuid").UUID(live_claim["lease_token"]),
             outcome="sent",
             provider_message_id="wamid.live.integration",
