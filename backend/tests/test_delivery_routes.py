@@ -133,3 +133,52 @@ def test_send_route_uses_independent_settlement_for_provider_outcomes():
     assert 'quota_outcome="consumed"' in ambiguous
     assert 'quota_outcome="released"' in ambiguous
     assert 'error_code=None, quota_outcome="consumed"' in src
+
+
+def test_delivery_settlement_attempts_quota_when_delivery_write_raises():
+    import asyncio
+    from uuid import uuid4
+    from app.api.delivery_routes import _settle_delivery_attempt
+
+    calls = []
+
+    class BrokenDeliveryStore:
+        async def finish(self, **kwargs):
+            calls.append(("delivery", kwargs["error_code"]))
+            raise RuntimeError("database unavailable")
+
+    class QuotaStore:
+        async def finish_reservation(self, **kwargs):
+            calls.append(("quota", kwargs["outcome"]))
+            return True
+
+    result = asyncio.run(_settle_delivery_attempt(
+        BrokenDeliveryStore(), QuotaStore(), workspace_id="workspace-a",
+        delivery_id=uuid4(), reservation_id=str(uuid4()),
+        error_code="delivery_outcome_unknown", quota_outcome="consumed",
+    ))
+
+    assert result == (False, True)
+    assert calls == [("delivery", "delivery_outcome_unknown"), ("quota", "consumed")]
+
+
+def test_delivery_settlement_reports_quota_failure_without_undoing_delivery_success():
+    import asyncio
+    from uuid import uuid4
+    from app.api.delivery_routes import _settle_delivery_attempt
+
+    class DeliveryStore:
+        async def finish(self, **kwargs):
+            return True
+
+    class BrokenQuotaStore:
+        async def finish_reservation(self, **kwargs):
+            raise RuntimeError("database unavailable")
+
+    result = asyncio.run(_settle_delivery_attempt(
+        DeliveryStore(), BrokenQuotaStore(), workspace_id="workspace-a",
+        delivery_id=uuid4(), reservation_id=str(uuid4()),
+        error_code=None, quota_outcome="consumed",
+    ))
+
+    assert result == (True, False)
