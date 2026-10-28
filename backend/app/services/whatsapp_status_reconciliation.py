@@ -65,7 +65,7 @@ async def reconcile_whatsapp_delivery_statuses(
                           provider_timestamp, status_rank
                    FROM candidates
                    ORDER BY workspace_id, account_id, provider_message_id,
-                            status_rank DESC, provider_timestamp DESC NULLS LAST
+                            provider_timestamp DESC NULLS LAST, status_rank DESC
                )
                UPDATE whatsapp_outbound_deliveries d
                SET status=l.status,
