@@ -90,7 +90,11 @@ async def _exercise_billing_lifecycle() -> None:
             )
             assert snapshot["status"] == "active"
             assert snapshot["plan_slug"] == "starter"
-            assert snapshot["entitlements"]["email_outreach"]["monthly_limit"] == 100
+            entitlements = snapshot["entitlements"]
+            if isinstance(entitlements, str):
+                import json
+                entitlements = json.loads(entitlements)
+            assert entitlements["email_outreach"]["monthly_limit"] == 100
             assert snapshot["provider_event_created_at"] == NOW
             outcomes = await conn.fetch(
                 """SELECT provider_event_id,outcome FROM billing_provider_events
