@@ -108,6 +108,9 @@ async def _exercise_email_enqueue_lifecycle() -> None:
 
         await seed_draft("approved")
         await seed_draft("approved-two")
+        await seed_draft("paused-after-queue")
+        await seed_draft("suppressed-after-queue")
+        await seed_draft("archived-prospect-after-queue")
         await seed_draft("pending", status="pending_approval")
         await seed_draft("rejected", status="rejected")
         await seed_draft("paused", campaign_status="paused")
@@ -178,24 +181,39 @@ async def _exercise_email_enqueue_lifecycle() -> None:
                 idempotency_key="enqueue-approved-001",
             )
 
-        # Send-time checks are repeated: approval, campaign state, and suppression can
-        # change after queueing but before a worker claims the message.
-        for key, mutate_sql, args, expected in (
-            ("approval-revoked",
-             "UPDATE outreach_drafts SET status='rejected',reviewed_at=now() WHERE id=$1",
+        # Recheck mutable policy immediately before a queued delivery is claimed.
+        queued_for_recheck = {}
+        for key in ("paused-after-queue", "suppressed-after-queue", "archived-prospect-after-queue"):
+            queued_for_recheck[key] = await store.enqueue(
+                workspace_id=workspace_id, draft_id=draft_ids[key], actor_id=actor_id,
+                idempotency_key="enqueue-" + key + "-001",
+            )
+
+        checks = (
+            (first["id"], "UPDATE outreach_drafts SET status='rejected',reviewed_at=now() WHERE id=$1",
              (draft_ids["approved"],), "draft_not_approved"),
-        ):
-            # Keep this mutation for the final assertion; this also proves no sendable
-            # payload is returned after human approval is revoked.
+            (queued_for_recheck["paused-after-queue"]["id"],
+             "UPDATE outreach_campaigns SET status='paused' WHERE id=$1",
+             (campaign_ids["paused-after-queue"],), "campaign_paused"),
+            (queued_for_recheck["suppressed-after-queue"]["id"],
+             """INSERT INTO outreach_contact_controls(workspace_id,prospect_id,email_suppressed,updated_by)
+                VALUES ($1,$2,TRUE,$3)
+                ON CONFLICT (workspace_id,prospect_id) DO UPDATE SET email_suppressed=TRUE,updated_by=EXCLUDED.updated_by,updated_at=now()""",
+             (workspace_id, prospect_ids["suppressed-after-queue"], actor_id), "contact_suppressed"),
+            (queued_for_recheck["archived-prospect-after-queue"]["id"],
+             "UPDATE crm_prospects SET archived_at=now() WHERE id=$1",
+             (prospect_ids["archived-prospect-after-queue"],), "prospect_archived"),
+        )
+        for delivery_id, mutate_sql, args, expected in checks:
             async with pool.acquire() as conn:
                 await conn.execute(mutate_sql, *args)
             with pytest.raises(ValueError, match=expected):
-                await store.claim(workspace_id=workspace_id, delivery_id=UUID(first["id"]))
+                await store.claim(workspace_id=workspace_id, delivery_id=UUID(delivery_id))
+            async with pool.acquire() as conn:
+                status = await conn.fetchval(
+                    "SELECT status FROM outreach_deliveries WHERE id=$1", UUID(delivery_id)
+                )
+            assert status == "queued", "rejected send-time policy must leave delivery unclaimed"
 
-        async with pool.acquire() as conn:
-            status = await conn.fetchval(
-                "SELECT status FROM outreach_deliveries WHERE id=$1", UUID(first["id"])
-            )
-        assert status == "queued", "a rejected claim must leave the delivery unclaimed"
     finally:
         await pool.close()
