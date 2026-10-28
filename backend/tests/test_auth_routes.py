@@ -367,3 +367,60 @@ def test_password_reset_landing_keeps_untrusted_token_out_of_script_source():
     assert 'name="token" value=' in html
     assert "const token=this.elements.token.value" in html
     assert "JSON.stringify({token:token,new_password:password})" in html
+
+
+def test_password_reset_request_fails_closed_when_rate_limiter_is_unavailable(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class NeverIssueStore:
+        async def issue_password_reset(self, **kwargs):
+            raise AssertionError("reset token must not be issued if rate limiting is unavailable")
+
+    class UnavailableLimiter:
+        async def consume(self, **kwargs):
+            raise RuntimeError("private database failure")
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = NeverIssueStore()
+        app.state.auth_rate_limiter = UnavailableLimiter()
+        response = client.post(
+            "/api/v1/auth/password-reset/request",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test"},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "authentication_temporarily_unavailable"
+        assert "private database failure" not in response.text
+
+
+def test_password_reset_request_fails_closed_when_store_unavailable(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class UnavailableStore:
+        async def issue_password_reset(self, **kwargs):
+            raise RuntimeError("private database failure")
+
+    class AllowLimiter:
+        async def consume(self, **kwargs):
+            return {
+                "allowed": True,
+                "remaining": 9,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+            }
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = UnavailableStore()
+        app.state.auth_rate_limiter = AllowLimiter()
+        response = client.post(
+            "/api/v1/auth/password-reset/request",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test"},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "password_reset_temporarily_unavailable"
+        assert "private database failure" not in response.text
