@@ -107,6 +107,7 @@ async def _exercise_email_enqueue_lifecycle() -> None:
             return draft_id
 
         await seed_draft("approved")
+        await seed_draft("approved-two")
         await seed_draft("pending", status="pending_approval")
         await seed_draft("rejected", status="rejected")
         await seed_draft("paused", campaign_status="paused")
@@ -164,16 +165,16 @@ async def _exercise_email_enqueue_lifecycle() -> None:
         assert first["id"] == replay["id"]
         assert first["status"] == "queued"
 
-        # Reusing the key for another draft or another key for an already queued draft
-        # must not silently attach the request to a different delivery.
+        # A retry for the same draft with a changed key resolves to the one canonical
+        # delivery. Reusing an existing key for a different draft is a hard conflict.
+        alternate_key_replay = await store.enqueue(
+            workspace_id=workspace_id, draft_id=draft_ids["approved"], actor_id=actor_id,
+            idempotency_key="enqueue-other-key-001",
+        )
+        assert alternate_key_replay["id"] == first["id"]
         with pytest.raises(ValueError, match="idempotency_key_conflict"):
             await store.enqueue(
-                workspace_id=workspace_id, draft_id=draft_ids["approved"], actor_id=actor_id,
-                idempotency_key="enqueue-other-key-001",
-            )
-        with pytest.raises(ValueError, match="idempotency_key_conflict"):
-            await store.enqueue(
-                workspace_id=workspace_id, draft_id=draft_ids["rejected"], actor_id=actor_id,
+                workspace_id=workspace_id, draft_id=draft_ids["approved-two"], actor_id=actor_id,
                 idempotency_key="enqueue-approved-001",
             )
 
