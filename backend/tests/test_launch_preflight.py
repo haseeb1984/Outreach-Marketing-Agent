@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from scripts.launch_preflight import evaluate_config
+from scripts.launch_preflight import REQUIRED_RELEASE_MIGRATIONS, evaluate_config
 
 
 def _env() -> dict[str, str]:
@@ -22,23 +22,30 @@ def _statuses(result):
     return {item["name"]: item["status"] for item in result["checks"]}
 
 
+def _release_root(root: Path) -> None:
+    migrations = root / "backend/migrations"
+    migrations.mkdir(parents=True)
+    for name in ("001_test.sql", *REQUIRED_RELEASE_MIGRATIONS):
+        (migrations / name).write_text("-- test migration")
+    (root / "backend/scripts").mkdir(parents=True)
+    (root / "backend/scripts/database_backup.py").write_text("# test")
+    (root / "ops/systemd").mkdir(parents=True)
+    (root / "ops/systemd/outreach-growth-worker.service").write_text("# test")
+    (root / "docs").mkdir()
+    (root / "docs/GROWTH_WORKER_HOST_RUNBOOK.md").write_text("# test")
+
+
 def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: Path):
-    (tmp_path / "backend/migrations").mkdir(parents=True)
-    (tmp_path / "backend/migrations/001_test.sql").write_text("-- test")
-    (tmp_path / "backend/scripts").mkdir(parents=True)
-    (tmp_path / "backend/scripts/database_backup.py").write_text("# test")
-    (tmp_path / "ops/systemd").mkdir(parents=True)
-    (tmp_path / "ops/systemd/outreach-growth-worker.service").write_text("# test")
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs/GROWTH_WORKER_HOST_RUNBOOK.md").write_text("# test")
+    _release_root(tmp_path)
     result = evaluate_config(_env(), tmp_path)
     assert result["ok"] is True
     status = _statuses(result)
     assert status["database_url"] == "pass"
     assert status["provider_encryption_key"] == "pass"
+    assert status["required_release_migrations"] == "pass"
     assert status["remote_deployment"] == "warning"
     assert status["database_migration_execution"] == "warning"
-    assert result["summary"]["total"] >= 14
+    assert result["summary"]["total"] >= 15
 
 
 def test_preflight_fails_weak_session_secret_without_echoing_values(tmp_path: Path):
@@ -95,9 +102,20 @@ def test_preflight_rejects_malformed_meta_graph_version(tmp_path: Path):
 def test_preflight_flags_missing_required_operational_artifacts(tmp_path: Path):
     status = _statuses(evaluate_config(_env(), tmp_path))
     assert status["migration_artifacts"] == "fail"
+    assert status["required_release_migrations"] == "fail"
     assert status["backup_tool"] == "fail"
     assert status["growth_worker_supervision"] == "fail"
     assert status["growth_worker_runbook"] == "fail"
+
+
+def test_preflight_fails_when_any_critical_release_migration_is_missing(tmp_path: Path):
+    _release_root(tmp_path)
+    (tmp_path / "backend/migrations/038_whatsapp_outbound_queue_leases.sql").unlink()
+    result = evaluate_config(_env(), tmp_path)
+    assert result["ok"] is False
+    assert _statuses(result)["required_release_migrations"] == "fail"
+    missing_check = next(c for c in result["checks"] if c["name"] == "required_release_migrations")
+    assert "038_whatsapp_outbound_queue_leases.sql" in missing_check["detail"]
 
 
 def test_preflight_uses_safe_json_statuses_for_remote_gates(tmp_path: Path):
