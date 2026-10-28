@@ -95,6 +95,48 @@ def test_preflight_rejects_inconsistent_paddle_live_mode(tmp_path: Path):
     assert _statuses(evaluate_config(env, tmp_path))["paddle_mode"] == "fail"
 
 
+def test_preflight_accepts_paddle_configuration_absent_when_checkout_is_disabled(tmp_path: Path):
+    result = evaluate_config(_env(), tmp_path)
+    assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
+
+
+@pytest.mark.parametrize("configured", [
+    {"PADDLE_API_KEY": "pdl_sandbox_key"},
+    {"PADDLE_WEBHOOK_SECRET": "webhook-secret"},
+    {"PADDLE_PLANS_JSON": '{"starter":{"price_id":"pri_starter","entitlements":{}}}'},
+])
+def test_preflight_rejects_partial_paddle_configuration(tmp_path: Path, configured: dict[str, str]):
+    env = _env()
+    env.update(configured)
+    result = evaluate_config(env, tmp_path)
+    assert result["ok"] is False
+    assert _statuses(result)["paddle_credentials_and_catalog"] == "fail"
+
+
+def test_preflight_requires_complete_paddle_setup_for_live_checkout(tmp_path: Path):
+    env = _env()
+    env.update({
+        "PADDLE_ENVIRONMENT": "production",
+        "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
+    })
+    result = evaluate_config(env, tmp_path)
+    assert result["ok"] is False
+    assert _statuses(result)["paddle_credentials_and_catalog"] == "fail"
+
+
+def test_preflight_accepts_complete_paddle_setup_for_live_checkout(tmp_path: Path):
+    env = _env()
+    env.update({
+        "PADDLE_ENVIRONMENT": "production",
+        "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
+        "PADDLE_API_KEY": "pdl_live_key",
+        "PADDLE_WEBHOOK_SECRET": "webhook-secret",
+        "PADDLE_PLANS_JSON": '{"starter":{"price_id":"pri_starter","entitlements":{}}}',
+    })
+    result = evaluate_config(env, tmp_path)
+    assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
+
+
 def test_preflight_flags_partial_meta_configuration(tmp_path: Path):
     env = _env()
     env["META_WHATSAPP_ACCESS_TOKEN"] = "configured"

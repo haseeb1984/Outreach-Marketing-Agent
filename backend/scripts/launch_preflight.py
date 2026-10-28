@@ -97,6 +97,15 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     add("paddle_mode", paddle_ok, "Paddle mode and live-checkout flag are consistent" if paddle_ok
         else "PADDLE_ENVIRONMENT must be sandbox/production; live checkout requires production mode")
 
+    paddle_fields = ("PADDLE_API_KEY", "PADDLE_WEBHOOK_SECRET", "PADDLE_PLANS_JSON")
+    paddle_present = [bool(env.get(name, "").strip()) for name in paddle_fields]
+    paddle_config_ok = not any(paddle_present) or all(paddle_present)
+    if live_checkout:
+        paddle_config_ok = paddle_env == "production" and all(paddle_present)
+    add("paddle_credentials_and_catalog", paddle_config_ok,
+        "Paddle credentials and plan catalog are complete or absent" if paddle_config_ok
+        else "Paddle API key, webhook secret, and plan catalog must be configured together; live checkout requires all three in production mode")
+
     meta_fields = ("META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_APP_SECRET",
                    "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID",
                    "META_WHATSAPP_WABA_ID", "META_GRAPH_API_VERSION")
