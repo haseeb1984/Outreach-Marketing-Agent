@@ -85,7 +85,7 @@ def test_send_route_reserves_server_owned_email_quota_before_provider_call():
 def test_send_route_does_not_release_quota_for_ambiguous_provider_outcome():
  from app.api import delivery_routes
  src=inspect.getsource(delivery_routes.send_delivery)
- ambiguous=src[src.index("except EmailDeliveryFailed"):src.index("if not await store.finish")]
+ ambiguous=src[src.index("except EmailDeliveryFailed"):src.index("return {") ]
  assert 'error_code="delivery_outcome_unknown"' in ambiguous
  assert 'outcome="consumed"' in ambiguous
  assert 'outcome="released"' not in ambiguous
@@ -112,3 +112,74 @@ def test_smtp_connection_test_endpoint_is_staging_only_admin_and_never_sends(mon
  assert "test_connection()" in src
  assert "send_outreach_email" not in src
  assert '"email_sent": False' in src
+
+
+def test_delivery_settlement_attempts_quota_even_if_delivery_status_write_raises():
+    from app.api import delivery_routes
+    src = inspect.getsource(delivery_routes._settle_delivery_attempt)
+    delivery_write = src.index("store.finish")
+    quota_write = src.index("subscriptions.finish_reservation")
+    assert delivery_write < quota_write
+    assert "except Exception:" in src
+    assert "return delivery_saved, quota_saved" in src
+
+
+def test_send_route_uses_independent_settlement_for_provider_outcomes():
+    from app.api import delivery_routes
+    src = inspect.getsource(delivery_routes.send_delivery)
+    assert "_settle_delivery_attempt(" in src
+    ambiguous = src[src.index("except EmailDeliveryFailed"):src.index("return {\"id\": str(delivery_id)")]
+    assert 'error_code="delivery_outcome_unknown"' in ambiguous
+    assert 'quota_outcome="consumed"' in ambiguous
+    safe_failures = src[:src.index("except EmailDeliveryFailed")]
+    assert 'quota_outcome="released"' in safe_failures
+    assert 'error_code=None, quota_outcome="consumed"' in src
+
+
+def test_delivery_settlement_attempts_quota_when_delivery_write_raises():
+    import asyncio
+    from uuid import uuid4
+    from app.api.delivery_routes import _settle_delivery_attempt
+
+    calls = []
+
+    class BrokenDeliveryStore:
+        async def finish(self, **kwargs):
+            calls.append(("delivery", kwargs["error_code"]))
+            raise RuntimeError("database unavailable")
+
+    class QuotaStore:
+        async def finish_reservation(self, **kwargs):
+            calls.append(("quota", kwargs["outcome"]))
+            return True
+
+    result = asyncio.run(_settle_delivery_attempt(
+        BrokenDeliveryStore(), QuotaStore(), workspace_id="workspace-a",
+        delivery_id=uuid4(), reservation_id=str(uuid4()),
+        error_code="delivery_outcome_unknown", quota_outcome="consumed",
+    ))
+
+    assert result == (False, True)
+    assert calls == [("delivery", "delivery_outcome_unknown"), ("quota", "consumed")]
+
+
+def test_delivery_settlement_reports_quota_failure_without_undoing_delivery_success():
+    import asyncio
+    from uuid import uuid4
+    from app.api.delivery_routes import _settle_delivery_attempt
+
+    class DeliveryStore:
+        async def finish(self, **kwargs):
+            return True
+
+    class BrokenQuotaStore:
+        async def finish_reservation(self, **kwargs):
+            raise RuntimeError("database unavailable")
+
+    result = asyncio.run(_settle_delivery_attempt(
+        DeliveryStore(), BrokenQuotaStore(), workspace_id="workspace-a",
+        delivery_id=uuid4(), reservation_id=str(uuid4()),
+        error_code=None, quota_outcome="consumed",
+    ))
+
+    assert result == (True, False)
