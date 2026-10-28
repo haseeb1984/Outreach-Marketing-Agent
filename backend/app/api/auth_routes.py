@@ -135,11 +135,17 @@ async def _consume(limiter, *, namespace: str, identifier: str, limit: int, wind
 
 
 async def _authenticated(request: Request):
-    store, _ = _services(request)
+    # Session-only endpoints do not need the rate limiter; require only the auth store.
+    store = getattr(request.app.state, "auth_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
     token = request.cookies.get(cookie_policy.name)
     if not token:
         raise HTTPException(status_code=401, detail="authentication_required")
-    session = await store.authenticate_session(token)
+    try:
+        session = await store.authenticate_session(token)
+    except Exception:
+        raise HTTPException(status_code=503, detail="authentication_temporarily_unavailable") from None
     if session is None:
         raise HTTPException(status_code=401, detail="authentication_required")
     return store, token, session
@@ -180,6 +186,8 @@ async def register(payload: RegistrationInput, request: Request):
         created = await store.register_user(email=email, password=payload.password)
     except ValueError:
         raise HTTPException(status_code=422, detail="invalid_registration_input") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="registration_temporarily_unavailable") from None
     if created is not None:
         try:
             await delivery.send_verification_email(
@@ -282,7 +290,10 @@ async def login(payload: LoginInput, request: Request):
     await _consume(limiter, namespace="login-ip", identifier=ip, limit=20, window=900)
     email_identifier = payload.email.strip().lower()[:320] or "invalid"
     await _consume(limiter, namespace="login-email", identifier=email_identifier, limit=10, window=900)
-    user = await store.authenticate_password(email=payload.email, password=payload.password)
+    try:
+        user = await store.authenticate_password(email=payload.email, password=payload.password)
+    except Exception:
+        raise HTTPException(status_code=503, detail="authentication_temporarily_unavailable") from None
     if user is None:
         raise HTTPException(status_code=401, detail="email_or_password_incorrect")
     try:
@@ -347,7 +358,10 @@ async def rotate(request: Request):
 async def logout(request: Request):
     store, token, session = await _authenticated(request)
     _check_csrf(request, session)
-    await store.revoke_session(token)
+    try:
+        await store.revoke_session(token)
+    except Exception:
+        raise HTTPException(status_code=503, detail="sign_out_temporarily_unavailable") from None
     response = JSONResponse({"message": "Signed out."})
     response.headers.append("Set-Cookie", cookie_policy.clear_cookie_header())
     response.headers.append("Set-Cookie", "__Host-oma_csrf=; Path=/; Max-Age=0; Secure; SameSite=Lax")

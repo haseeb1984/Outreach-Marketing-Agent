@@ -424,3 +424,83 @@ def test_password_reset_request_fails_closed_when_store_unavailable(monkeypatch)
         assert response.status_code == 503
         assert response.json()["detail"] == "password_reset_temporarily_unavailable"
         assert "private database failure" not in response.text
+
+
+
+def test_http_login_hides_authentication_store_outage(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class BrokenStore:
+        async def authenticate_password(self, **kwargs):
+            raise RuntimeError("private postgres exception")
+
+    class AllowLimiter:
+        async def consume(self, **kwargs):
+            from datetime import datetime, timedelta, timezone
+            return {"allowed": True, "remaining": 9, "reset_at": datetime.now(timezone.utc) + timedelta(minutes=15)}
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = BrokenStore()
+        app.state.auth_rate_limiter = AllowLimiter()
+        response = client.post(
+            "/api/v1/auth/login",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test", "password": "correct-password"},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "authentication_temporarily_unavailable"
+        assert "private postgres exception" not in response.text
+
+
+def test_authenticated_session_hides_store_outage(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class BrokenStore:
+        async def authenticate_session(self, token):
+            raise RuntimeError("private session database exception")
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = BrokenStore()
+        client.cookies.set("__Host-oma_session", "s" * 43)
+        response = client.get("/api/v1/auth/me")
+        assert response.status_code == 503
+        assert response.json()["detail"] == "authentication_temporarily_unavailable"
+        assert "private session database exception" not in response.text
+
+
+def test_logout_hides_session_revocation_store_outage(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    csrf = "c" * 43
+
+    class BrokenStore:
+        async def authenticate_session(self, token):
+            return {
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "email": "person@example.test",
+                "session_id": "session-id",
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+                "csrf_token_sha256": auth_routes.csrf_token_digest(csrf),
+            }
+
+        async def revoke_session(self, token):
+            raise RuntimeError("private revoke database exception")
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = BrokenStore()
+        client.cookies.set("__Host-oma_session", "s" * 43)
+        client.cookies.set("__Host-oma_csrf", csrf)
+        response = client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": csrf},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "sign_out_temporarily_unavailable"
+        assert "private revoke database exception" not in response.text
