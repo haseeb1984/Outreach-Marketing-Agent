@@ -37,6 +37,25 @@ async def _authorize(r: Request,w: str,role: str,session: dict):
  a=getattr(r.app.state,"auth_store",None)
  if a is None: raise HTTPException(status_code=503,detail="authentication_not_configured")
  if not await a.authorize_workspace(user_id=session["user_id"],workspace_id=w,minimum_role=role): raise HTTPException(status_code=404,detail="workspace_not_found")
+
+async def _settle_delivery_attempt(
+    store, subscriptions, *, workspace_id: str, delivery_id: UUID,
+    reservation_id: str, error_code: str | None, quota_outcome: str,
+) -> tuple[bool, bool]:
+    """Persist delivery and quota outcomes independently so one failure cannot skip the other."""
+    try:
+        delivery_saved = await store.finish(
+            workspace_id=workspace_id, delivery_id=delivery_id, error_code=error_code
+        )
+    except Exception:
+        delivery_saved = False
+    try:
+        quota_saved = await subscriptions.finish_reservation(
+            workspace_id=workspace_id, reservation_id=reservation_id, outcome=quota_outcome
+        )
+    except Exception:
+        quota_saved = False
+    return delivery_saved, quota_saved
 class EnqueueDelivery(BaseModel):
  model_config=ConfigDict(extra="forbid")
  workspace_id: str=Field(min_length=1,max_length=200)
@@ -149,48 +168,42 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
                 recipient=data["recipient"], subject=data["subject"], body=data["body"]
             )
     except LookupError:
-        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
-                           error_code="email_account_not_available")
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        await _settle_delivery_attempt(
+            store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            reservation_id=reservation_id, error_code="email_account_not_available", quota_outcome="released",
         )
         raise HTTPException(status_code=409, detail="email_account_not_available") from None
     except CredentialEncryptionNotConfigured:
-        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
-                           error_code="provider_encryption_not_configured")
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        await _settle_delivery_attempt(
+            store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            reservation_id=reservation_id, error_code="provider_encryption_not_configured", quota_outcome="released",
         )
         raise HTTPException(status_code=503, detail="provider_credential_encryption_not_configured") from None
     except CredentialDecryptionFailed:
-        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
-                           error_code="provider_credential_decryption_failed")
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        await _settle_delivery_attempt(
+            store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            reservation_id=reservation_id, error_code="provider_credential_decryption_failed", quota_outcome="released",
         )
         raise HTTPException(status_code=503, detail="provider_credential_decryption_failed") from None
     except EmailDeliveryNotConfigured:
-        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
-                           error_code="provider_not_configured")
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        await _settle_delivery_attempt(
+            store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            reservation_id=reservation_id, error_code="provider_not_configured", quota_outcome="released",
         )
         raise HTTPException(status_code=503, detail="email_provider_not_configured") from None
     except ValueError:
         # Validation errors occur before SMTP is called and are safe to release.
-        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
-                           error_code="invalid_message")
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        await _settle_delivery_attempt(
+            store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            reservation_id=reservation_id, error_code="invalid_message", quota_outcome="released",
         )
         raise HTTPException(status_code=422, detail="email_message_invalid") from None
     except EmailDeliveryFailed:
         # The remote server may have accepted the message before the connection
         # failed. Keep the quota consumed and do not make the send retryable.
-        await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id,
-                           error_code="delivery_outcome_unknown")
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        await _settle_delivery_attempt(
+            store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            reservation_id=reservation_id, error_code="delivery_outcome_unknown", quota_outcome="consumed",
         )
         raise HTTPException(status_code=502, detail="delivery_outcome_unknown") from None
     except Exception:
@@ -201,15 +214,14 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
         )
         raise HTTPException(status_code=502, detail="delivery_outcome_unknown") from None
 
-    if not await store.finish(workspace_id=payload.workspace_id, delivery_id=delivery_id):
-        # SMTP accepted the message; do not release the quota on a persistence issue.
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
-        )
+    delivery_saved, quota_saved = await _settle_delivery_attempt(
+        store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
+        reservation_id=reservation_id, error_code=None, quota_outcome="consumed",
+    )
+    if not delivery_saved:
+        # SMTP accepted the message; quota is still finalized even when status persistence fails.
         raise HTTPException(status_code=503, detail="delivery_status_persistence_failed")
-    if not await subscriptions.finish_reservation(
-        workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
-    ):
+    if not quota_saved:
         raise HTTPException(status_code=503, detail="delivery_quota_persistence_failed")
     return {"id": str(delivery_id), "status": "sent"}
 
