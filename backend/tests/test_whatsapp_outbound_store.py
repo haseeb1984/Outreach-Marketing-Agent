@@ -149,3 +149,45 @@ def test_queue_rechecks_opt_out_before_creating_delivery():
         ))
     assert len(pool.connection.queries) == 2
 
+
+
+def test_queue_persists_selected_template_metadata_for_future_dispatch():
+    draft_id, prospect_id, account_id, queue_id = uuid4(), uuid4(), uuid4(), uuid4()
+    pool = FakePool([
+        {
+            "id": draft_id, "prospect_id": prospect_id, "status": "approved",
+            "channel": "whatsapp", "campaign_status": "active", "stage": "new",
+            "archived_at": None, "active_account_id": account_id,
+            "contact_phone_e164": "+14155550123",
+            "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+            "whatsapp_account_id": account_id,
+        },
+        None,
+        None,
+        {
+            "id": queue_id, "status": "queued",
+            "queued_at": datetime(2026, 10, 23, tzinfo=timezone.utc),
+        },
+    ])
+    result = asyncio.run(WhatsAppOutboundStore(pool).enqueue(
+        workspace_id="workspace-test", account_id=account_id, draft_id=draft_id,
+        actor_id=uuid4(), idempotency_key="template-key-123",
+        usage_reservation_id=uuid4(), template_name="welcome_offer", language_code="en_US",
+    ))
+    insert_query, insert_args = pool.connection.queries[-1]
+    assert "template_name,language_code" in insert_query
+    assert insert_args[-2:] == ("welcome_offer", "en_US")
+    assert result["template_name"] == "welcome_offer"
+    assert result["language_code"] == "en_US"
+
+
+def test_queue_rejects_incomplete_template_metadata_before_database_access():
+    pool = FakePool([])
+    with pytest.raises(ValueError, match="whatsapp_template_metadata_pair_required"):
+        asyncio.run(WhatsAppOutboundStore(pool).enqueue(
+            workspace_id="workspace-test", account_id=uuid4(), draft_id=uuid4(),
+            actor_id=uuid4(), idempotency_key="template-key-456",
+            usage_reservation_id=uuid4(), template_name="welcome_offer",
+        ))
+    assert pool.connection.queries == []
