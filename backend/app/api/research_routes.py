@@ -46,9 +46,18 @@ def _public_https_url(value: object) -> str | None:
         return None
 
 
+_SEARCH_STOP_WORDS = {
+    "about", "and", "are", "for", "from", "how", "into", "its", "our", "the",
+    "their", "this", "that", "with", "you", "your", "who", "what", "where",
+}
+
+
 def _search_terms(value: str) -> set[str]:
-    """Normalize words while ignoring short, low-information tokens."""
-    return {term for term in re.findall(r"[a-z0-9]+", value.lower()) if len(term) >= 3}
+    """Normalize words while ignoring short and common low-information tokens."""
+    return {
+        term for term in re.findall(r"[a-z0-9]+", value.lower())
+        if len(term) >= 3 and term not in _SEARCH_STOP_WORDS
+    }
 
 
 def _relevance(query: str, title: str, description: str) -> tuple[int, list[str]]:
