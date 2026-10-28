@@ -7,7 +7,7 @@ The routes use PostgreSQL-backed AuthStore and AuthRateLimiter instances initial
 ## Required deployment configuration
 
 1. Configure a real HTTPS PUBLIC_BASE_URL, PostgreSQL DATABASE_URL, high-entropy SECRET_KEY, and SMTP settings in the host's encrypted environment settings.
-2. Apply migrations explicitly with python -m app.db.migrations; migrations 001–006 are required for the current readiness check.
+2. Apply migrations explicitly with `python -m app.db.migrations` from `backend/`. Apply the full ordered migration chain from the repository, not just the authentication-era migrations; the current schema includes migrations 035–038 for durable growth schedules and WhatsApp outbound safety. Confirm the database migration ledger reaches the latest repository migration before enabling production workers.
 3. Verify SMTP delivery, HTTPS cookie behavior, database-backed rate limits, and reset/verification links in a non-production environment before enabling public registration.
 4. Configure proxy trust only after verifying deployment forwarding and egress policies. Client IP rate limits intentionally ignore forwarded headers by default.
 5. Do not claim production readiness until the PostgreSQL integration suite, deployment smoke tests, recovery procedures, and real email delivery have been verified.
