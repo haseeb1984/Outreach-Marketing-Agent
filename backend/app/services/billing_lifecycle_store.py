@@ -7,7 +7,7 @@ constructing a VerifiedBillingEvent. Raw payloads and credentials are never stor
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Mapping
 import json
 
@@ -92,6 +92,20 @@ class BillingLifecycleStore:
                     event.event_created_at,
                 )
                 if applied is None:
+                    # The initial SELECT cannot lock a row that does not yet exist.
+                    # A concurrent first event may create a different subscription after
+                    # that SELECT; re-check after ON CONFLICT has waited for its winner.
+                    # Without this second check, that identity conflict was mislabeled stale.
+                    current_after_conflict = await conn.fetchrow(
+                        """SELECT provider,provider_subscription_id
+                           FROM workspace_subscriptions WHERE workspace_id=$1 FOR UPDATE""",
+                        event.workspace_id,
+                    )
+                    if current_after_conflict is not None and (
+                        current_after_conflict["provider"] != event.provider
+                        or current_after_conflict["provider_subscription_id"] != event.provider_subscription_id
+                    ):
+                        raise ValueError("billing_subscription_identity_conflict")
                     # Event remains in the ledger as stale; a retry cannot replay it.
                     return {"outcome": "stale"}
                 await conn.execute(
@@ -118,7 +132,7 @@ class BillingLifecycleStore:
             or len(event.provider_customer_id) > 300
         ):
             raise ValueError("invalid_provider_customer_id")
-        if event.subscription_status not in _ALLOWED_STATUSES:
+        if not isinstance(event.subscription_status, str) or event.subscription_status not in _ALLOWED_STATUSES:
             raise ValueError("invalid_subscription_status")
         dates = (event.event_created_at, event.period_starts_at, event.period_ends_at)
         if any(not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None
