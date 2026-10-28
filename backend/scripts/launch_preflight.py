@@ -14,10 +14,19 @@ import base64
 import json
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
+
+
+# These schema changes support durable scheduling and WhatsApp dispatch safety.
+# Their presence in the checkout is necessary, but not proof they ran in production.
+REQUIRED_RELEASE_MIGRATIONS = (
+    "035_workspace_growth_schedules.sql",
+    "036_growth_schedule_quota_status.sql",
+    "037_whatsapp_outbound_template_persistence.sql",
+    "038_whatsapp_outbound_queue_leases.sql",
+)
 
 
 def _https_origin(value: str) -> bool:
@@ -118,6 +127,13 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     add("migration_artifacts", bool(migration_files),
         f"found {len(migration_files)} numbered SQL migration files" if migration_files
         else "numbered SQL migrations are missing")
+    missing_release_migrations = [
+        name for name in REQUIRED_RELEASE_MIGRATIONS if not (migrations / name).is_file()
+    ]
+    add("required_release_migrations", not missing_release_migrations,
+        "all required growth/WhatsApp release migrations are present"
+        if not missing_release_migrations
+        else "missing required migration files: " + ", ".join(missing_release_migrations))
 
     backup_script = root / "backend" / "scripts" / "database_backup.py"
     add("backup_tool", backup_script.is_file(),
