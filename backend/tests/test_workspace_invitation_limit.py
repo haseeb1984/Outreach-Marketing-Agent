@@ -19,8 +19,10 @@ class _Transaction:
 
 
 class _Connection:
-    def __init__(self, active_memberships):
+    def __init__(self, active_memberships, account_exists=True, invitation_role="member"):
         self.active_memberships = active_memberships
+        self.account_exists = account_exists
+        self.invitation_role = invitation_role
         self.calls = []
         self.token = "t" * 43
 
@@ -34,12 +36,12 @@ class _Connection:
                 "id": UUID("00000000-0000-0000-0000-000000000010"),
                 "workspace_id": "workspace-test",
                 "invited_email": "person@example.test",
-                "role": "member",
+                "role": self.invitation_role,
                 "status": "pending",
                 "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
             }
         if "FROM app_users WHERE id=$1 FOR UPDATE" in query:
-            return {"id": args[0]}
+            return {"id": args[0]} if self.account_exists else None
         if "FROM workspace_memberships" in query:
             return None
         return None
@@ -107,3 +109,18 @@ def test_invitation_acceptance_allows_membership_below_limit(monkeypatch):
 
     assert result["workspace_id"] == "workspace-test"
     assert any(call[0] == "execute" and "INSERT INTO workspace_memberships" in call[1] for call in connection.calls)
+
+
+
+def test_invitation_acceptance_rejects_missing_account_without_membership_insert(monkeypatch):
+    connection = _Connection(active_memberships=0, account_exists=False)
+    _configure(monkeypatch, connection)
+    payload = workspace_invitation_routes.InvitationAccept(token=connection.token)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(workspace_invitation_routes.accept_invitation(payload, SimpleNamespace()))
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "account_unavailable"
+    assert not any(call[0] == "execute" and "INSERT INTO workspace_memberships" in call[1] for call in connection.calls)
+    assert not any(call[0] == "execute" and "SET status='accepted'" in call[1] for call in connection.calls)
