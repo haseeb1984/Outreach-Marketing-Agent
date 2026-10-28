@@ -191,8 +191,8 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
             error_code="late_worker",
         ) is False
 
-        # Reconcile the persisted provider statuses: read wins over older sent/delivered,
-        # and reconciliation does not send or change unrelated queue rows.
+        # Reconcile persisted callbacks. An older failure must not override confirmed read,
+        # even when that failure callback arrived later.
         result = await reconcile_whatsapp_delivery_statuses(
             pool, batch_size=100, workspace_id=workspace_id
         )
