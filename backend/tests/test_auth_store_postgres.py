@@ -39,43 +39,10 @@ async def _exercise_password_reset() -> None:
     try:
         await _ensure_schema_migrations(connection)
         migrations = Path(__file__).resolve().parents[1] / "migrations"
-        for migration_name in (
-            "001_workspace_domain_verification.sql",
-            "002_workspace_jobs.sql",
-            "003_authentication_foundation.sql",
-            "004_auth_rate_limits.sql",
-            "005_session_csrf_tokens.sql",
-            "006_password_reset_tokens.sql",
-            "007_crm_prospects.sql",
-            "008_campaigns_and_approval_queue.sql",
-            "009_contact_controls.sql",
-            "010_outbound_delivery_queue.sql",
-            "011_conversation_webhook_inbox.sql",
-            "012_delivery_outcome_uncertainty.sql",
-            "013_subscription_entitlements_and_usage.sql",
-            "014_billing_provider_event_ledger.sql",
-            "015_workspace_projects.sql",
-            "016_workspace_invitations.sql",
-            "017_workspace_settings.sql",
-            "018_workspace_email_accounts.sql",
-            "019_website_audit_reports.sql",
-            "020_meta_whatsapp_webhook_inbox.sql",
-            "021_workspace_whatsapp_accounts.sql",
-            "022_prospect_whatsapp_phone.sql",
-            "023_whatsapp_conversations_and_status.sql",
-            "024_whatsapp_contact_preferences.sql",
-            "025_whatsapp_status_event_dedup.sql",
-            "026_whatsapp_template_and_window_policy.sql",
-            "027_platform_billing_admin.sql",
-            "028_platform_admin_audit.sql",
-            "029_unique_platform_plan_price_ids.sql",
-            "030_subscription_plan_slug.sql",
-            "031_whatsapp_outbound_queue.sql",
-            "032_whatsapp_consent_account_scope.sql",
-            "033_draft_edit_audit_event.sql",
-            "034_workspace_delivery_cascade_cleanup.sql",
-        ):
-            await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
+        migration_files = sorted(migrations.glob("[0-9][0-9][0-9]_*.sql"))
+        assert migration_files, "repository migration directory must not be empty"
+        for migration_path in migration_files:
+            await connection.execute(migration_path.read_text(encoding="utf-8"))
 
         # Verify workspace-owned delivery references cascade instead of blocking tenant deletion.
         cascade_constraints = await connection.fetch(
