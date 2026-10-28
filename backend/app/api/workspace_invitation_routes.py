@@ -100,7 +100,19 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                actor_id = UUID(str(session["user_id"]))
+                actor_role = await conn.fetchval(
+                    """SELECT role FROM workspace_memberships
+                       WHERE workspace_id=$1 AND user_id=$2 AND status='active' FOR UPDATE""",
+                    payload.workspace_id, actor_id,
+                )
+                if actor_role not in {"owner", "admin"}:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                if payload.role == "admin" and actor_role != "owner":
+                    raise HTTPException(status_code=403, detail="only_owner_can_invite_admin")
                 workspace_name = await conn.fetchval("SELECT name FROM workspaces WHERE id=$1", payload.workspace_id)
+                if workspace_name is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 await conn.execute(
                     """UPDATE workspace_invitations SET status='revoked',revoked_at=$3
                        WHERE workspace_id=$1 AND invited_email=$2 AND status='pending'""",
@@ -169,10 +181,12 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
                     if invitation["invited_email"] != normalize_email(session["email"]):
                         raise HTTPException(status_code=403, detail="invitation_email_mismatch")
                     # Serialize invitation acceptance for this account with workspace creation.
-                    await conn.fetchrow(
+                    account = await conn.fetchrow(
                         "SELECT id FROM app_users WHERE id=$1 FOR UPDATE",
                         UUID(str(session["user_id"])),
                     )
+                    if account is None:
+                        raise HTTPException(status_code=401, detail="account_unavailable")
                     active_memberships = await conn.fetchval(
                         """SELECT count(*) FROM workspace_memberships
                            WHERE user_id=$1 AND status='active'""",
