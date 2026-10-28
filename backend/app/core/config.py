@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     meta_whatsapp_phone_number_id: str | None = None
     meta_whatsapp_waba_id: str | None = None
     meta_graph_api_version: str | None = None
+    # Dispatch requires both this validated setting and explicit process env opt-in.
+    whatsapp_dispatch_enabled: bool = False
 
 
 settings = Settings()
