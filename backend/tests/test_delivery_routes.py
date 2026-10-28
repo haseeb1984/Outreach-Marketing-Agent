@@ -112,3 +112,24 @@ def test_smtp_connection_test_endpoint_is_staging_only_admin_and_never_sends(mon
  assert "test_connection()" in src
  assert "send_outreach_email" not in src
  assert '"email_sent": False' in src
+
+
+def test_delivery_settlement_attempts_quota_even_if_delivery_status_write_raises():
+    from app.api import delivery_routes
+    src = inspect.getsource(delivery_routes._settle_delivery_attempt)
+    delivery_write = src.index("store.finish")
+    quota_write = src.index("subscriptions.finish_reservation")
+    assert delivery_write < quota_write
+    assert "except Exception:" in src
+    assert "return delivery_saved, quota_saved" in src
+
+
+def test_send_route_uses_independent_settlement_for_provider_outcomes():
+    from app.api import delivery_routes
+    src = inspect.getsource(delivery_routes.send_delivery)
+    assert "_settle_delivery_attempt(" in src
+    ambiguous = src[src.index("except EmailDeliveryFailed"):src.index("return {\"id\": str(delivery_id)")]
+    assert 'error_code="delivery_outcome_unknown"' in ambiguous
+    assert 'quota_outcome="consumed"' in ambiguous
+    assert 'quota_outcome="released"' in ambiguous
+    assert 'error_code=None, quota_outcome="consumed"' in src
