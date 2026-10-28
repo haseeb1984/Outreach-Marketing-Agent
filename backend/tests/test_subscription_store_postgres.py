@@ -137,10 +137,11 @@ async def _exercise_usage_reservation_lifecycle() -> None:
         ) == {"allowed": True, "reason": "entitled", "reservation_status": "consumed"}
 
         # Workspace scoping: a valid reservation ID from another tenant is not accepted.
-        assert await store.validate_job_reservation(
+        cross_workspace = await store.validate_job_reservation(
             workspace_id=workspace_id, reservation_id=active["reservation_id"],
             feature=FEATURE, now=NOW,
-        )["allowed"] is False
+        )
+        assert cross_workspace["allowed"] is False
         assert await store.validate_job_reservation(
             workspace_id=other_workspace_id, reservation_id="not-a-uuid",
             feature=FEATURE, now=NOW,
