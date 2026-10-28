@@ -120,6 +120,8 @@ async def queue_whatsapp_draft(
             actor_id=session["user_id"],
             idempotency_key=payload.idempotency_key,
             usage_reservation_id=reservation["reservation_id"],
+            template_name=payload.template_name,
+            language_code=payload.language_code,
         )
         if result.get("replayed") and (
             result.get("usage_reservation_id") != reservation.get("reservation_id")
