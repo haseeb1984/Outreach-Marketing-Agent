@@ -150,6 +150,101 @@ class WhatsAppOutboundStore:
             "replayed": True,
         }
 
+
+    async def claim_batch(self, *, limit: int = 10, lease_seconds: int = 120) -> list[dict[str, Any]]:
+        """Atomically claim queued rows using SKIP LOCKED; each claim gets a unique lease.
+
+        This only manages queue state. It intentionally does not dispatch provider
+        messages or automatically reclaim expired processing rows for another send.
+        """
+        if not 1 <= limit <= 100:
+            raise ValueError("claim_limit_out_of_range")
+        if not 15 <= lease_seconds <= 900:
+            raise ValueError("lease_seconds_out_of_range")
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """WITH candidates AS (
+                       SELECT id FROM whatsapp_outbound_deliveries
+                       WHERE status='queued'
+                       ORDER BY queued_at,id
+                       FOR UPDATE SKIP LOCKED
+                       LIMIT $1
+                   )
+                   UPDATE whatsapp_outbound_deliveries q
+                   SET status='processing', attempts=q.attempts+1,
+                       processing_at=now(), lease_token=gen_random_uuid(),
+                       lease_expires_at=now()+($2::int * interval '1 second'),
+                       updated_at=now()
+                   FROM candidates c
+                   WHERE q.id=c.id
+                   RETURNING q.id,q.workspace_id,q.account_id,q.draft_id,q.prospect_id,
+                             q.usage_reservation_id,q.template_name,q.language_code,
+                             q.status,q.attempts,q.lease_token,q.lease_expires_at""",
+                limit, lease_seconds,
+            )
+        result = []
+        for row in rows:
+            item = dict(row)
+            for key, value in item.items():
+                if isinstance(value, UUID):
+                    item[key] = str(value)
+                elif hasattr(value, "isoformat"):
+                    item[key] = value.isoformat()
+            result.append(item)
+        return result
+
+    async def finish_claim(
+        self, *, delivery_id: UUID, lease_token: UUID, outcome: str,
+        provider_message_id: str | None = None, error_code: str | None = None,
+    ) -> bool:
+        """Finish only the exact live lease; stale workers cannot overwrite newer state."""
+        allowed = {"sent", "failed", "uncertain", "cancelled"}
+        if outcome not in allowed:
+            raise ValueError("invalid_delivery_outcome")
+        if provider_message_id is not None and (
+            not provider_message_id.strip() or len(provider_message_id) > 256
+        ):
+            raise ValueError("provider_message_id_invalid")
+        if error_code is not None and (
+            not error_code.strip() or len(error_code) > 100
+        ):
+            raise ValueError("delivery_error_code_invalid")
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """UPDATE whatsapp_outbound_deliveries
+                   SET status=$3, provider_message_id=$4, error_code=$5,
+                       sent_at=CASE WHEN $3='sent' THEN now() ELSE sent_at END,
+                       lease_token=NULL, lease_expires_at=NULL, updated_at=now()
+                   WHERE id=$1 AND lease_token=$2 AND status='processing'
+                     AND lease_expires_at > now()
+                   RETURNING id""",
+                delivery_id, lease_token, outcome, provider_message_id, error_code,
+            )
+        return row is not None
+
+    async def mark_expired_claims_uncertain(self, *, limit: int = 100) -> int:
+        """Move expired processing leases to uncertain; never re-send after a crash."""
+        if not 1 <= limit <= 1000:
+            raise ValueError("recovery_limit_out_of_range")
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """WITH expired AS (
+                       SELECT id FROM whatsapp_outbound_deliveries
+                       WHERE status='processing' AND lease_expires_at <= now()
+                       ORDER BY lease_expires_at,id
+                       FOR UPDATE SKIP LOCKED
+                       LIMIT $1
+                   )
+                   UPDATE whatsapp_outbound_deliveries q
+                   SET status='uncertain', error_code='worker_lease_expired',
+                       lease_token=NULL, lease_expires_at=NULL, updated_at=now()
+                   FROM expired e
+                   WHERE q.id=e.id
+                   RETURNING q.id""",
+                limit,
+            )
+        return len(rows)
+
     async def list(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
             raise ValueError("pagination_out_of_range")

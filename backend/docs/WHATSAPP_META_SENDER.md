@@ -20,3 +20,18 @@ provider message ID on a confirmed response.
 The parameter-free template payload only supports templates without required variables.
 Do not dispatch variable-bearing templates until the application has a reviewed,
 validated template-parameter mapping.
+
+
+## Durable queue lease lifecycle
+
+Migration `038_whatsapp_outbound_queue_leases.sql` adds per-claim lease tokens and expiry
+timestamps. `WhatsAppOutboundStore.claim_batch()` claims rows in one PostgreSQL statement
+using `FOR UPDATE SKIP LOCKED`, so concurrent workers do not claim the same queued row.
+A completion update must present the same lease token and an unexpired lease; stale
+workers cannot overwrite another worker's state.
+
+Expired processing leases transition to `uncertain`, never back to `queued`. A process may
+have crashed after Meta accepted a message but before recording its message ID, so retrying
+could send a duplicate. Such rows require provider-side reconciliation/manual review.
+The lease store is groundwork only: it is not wired to a dispatch process, does not send
+messages, and outbound dispatch remains disabled.
