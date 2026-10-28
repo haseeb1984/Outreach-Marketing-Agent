@@ -87,6 +87,10 @@ async def queue_whatsapp_draft(
     if existing is not None:
         if existing["account_id"] != str(payload.account_id) or existing["draft_id"] != str(draft_id):
             raise HTTPException(status_code=409, detail="whatsapp_idempotency_conflict")
+        if (existing.get("template_name"), existing.get("language_code")) != (
+            payload.template_name, payload.language_code,
+        ):
+            raise HTTPException(status_code=409, detail="whatsapp_template_metadata_conflict")
         return {
             **existing,
             "policy_reason": decision["reason"],
@@ -120,6 +124,8 @@ async def queue_whatsapp_draft(
             actor_id=session["user_id"],
             idempotency_key=payload.idempotency_key,
             usage_reservation_id=reservation["reservation_id"],
+            template_name=payload.template_name,
+            language_code=payload.language_code,
         )
         if result.get("replayed") and (
             result.get("usage_reservation_id") != reservation.get("reservation_id")

@@ -12,11 +12,20 @@ class WhatsAppOutboundStore:
     async def enqueue(
         self, *, workspace_id: str, account_id: UUID, draft_id: UUID,
         actor_id: UUID | str, idempotency_key: str, usage_reservation_id: UUID | str,
+        template_name: str | None = None, language_code: str | None = None,
     ) -> dict[str, Any]:
         if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
             raise ValueError("workspace_id_invalid")
         if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 200:
             raise ValueError("idempotency_key_invalid")
+        if (template_name is None) != (language_code is None):
+            raise ValueError("whatsapp_template_metadata_pair_required")
+        if template_name is not None:
+            if not template_name.strip() or len(template_name) > 512:
+                raise ValueError("whatsapp_template_name_invalid")
+            import re
+            if not re.fullmatch(r"[A-Za-z0-9_-]{2,32}", language_code or ""):
+                raise ValueError("whatsapp_template_language_invalid")
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 draft = await conn.fetchrow(
@@ -71,7 +80,8 @@ class WhatsAppOutboundStore:
                     if opted_in_at is None or preference["opted_out_at"] >= opted_in_at:
                         raise ValueError("whatsapp_contact_opted_out")
                 existing = await conn.fetchrow(
-                    """SELECT id,account_id,draft_id,status,idempotency_key,usage_reservation_id
+                    """SELECT id,account_id,draft_id,status,idempotency_key,usage_reservation_id,
+                              template_name,language_code
                        FROM whatsapp_outbound_deliveries
                        WHERE workspace_id=$1 AND (idempotency_key=$2 OR draft_id=$3)
                        FOR UPDATE""",
@@ -82,25 +92,33 @@ class WhatsAppOutboundStore:
                         raise ValueError("whatsapp_idempotency_conflict")
                     if existing["account_id"] != account_id:
                         raise ValueError("whatsapp_account_conflict")
+                    if (existing["template_name"], existing["language_code"]) != (template_name, language_code):
+                        raise ValueError("whatsapp_template_metadata_conflict")
                     return {
                         "id": str(existing["id"]),
                         "status": existing["status"],
                         "usage_reservation_id": str(existing["usage_reservation_id"]),
+                        "template_name": existing["template_name"],
+                        "language_code": existing["language_code"],
                         "replayed": True,
                     }
                 row = await conn.fetchrow(
                     """INSERT INTO whatsapp_outbound_deliveries
-                       (workspace_id,account_id,draft_id,prospect_id,idempotency_key,usage_reservation_id,queued_by)
-                       VALUES($1,$2,$3,$4,$5,$6,$7)
+                       (workspace_id,account_id,draft_id,prospect_id,idempotency_key,usage_reservation_id,queued_by,
+                        template_name,language_code)
+                       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
                        RETURNING id,status,queued_at""",
                     workspace_id, account_id, draft_id, draft["prospect_id"],
                     idempotency_key, UUID(str(usage_reservation_id)), UUID(str(actor_id)),
+                    template_name, language_code,
                 )
                 return {
                     "id": str(row["id"]),
                     "status": row["status"],
                     "queued_at": row["queued_at"].isoformat(),
                     "usage_reservation_id": str(UUID(str(usage_reservation_id))),
+                    "template_name": template_name,
+                    "language_code": language_code,
                     "replayed": False,
                 }
 
@@ -114,7 +132,7 @@ class WhatsAppOutboundStore:
             raise ValueError("idempotency_key_invalid")
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT id,account_id,draft_id,status,queued_at
+                """SELECT id,account_id,draft_id,status,queued_at,template_name,language_code
                    FROM whatsapp_outbound_deliveries
                    WHERE workspace_id=$1 AND idempotency_key=$2""",
                 workspace_id, idempotency_key,
@@ -127,6 +145,8 @@ class WhatsAppOutboundStore:
             "draft_id": str(row["draft_id"]),
             "status": row["status"],
             "queued_at": row["queued_at"].isoformat(),
+            "template_name": row["template_name"],
+            "language_code": row["language_code"],
             "replayed": True,
         }
 
