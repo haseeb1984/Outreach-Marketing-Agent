@@ -180,3 +180,22 @@ def test_paddle_public_plans_never_expose_provider_price_ids_or_entitlements(mon
     assert "price_id" not in response.text
     assert "pri_private_provider_id" not in response.text
     assert "entitlements" not in response.text
+
+
+def test_paddle_sandbox_plan_catalog_maps_owner_supplied_price_ids(monkeypatch):
+    from app.api import paddle_routes
+
+    monkeypatch.setattr(
+        paddle_routes.settings,
+        "paddle_plans_json",
+        json.dumps({
+            "starter": {"price_id": "pri_01m61xstp0gy07re6ynykhdcgb", "entitlements": {}},
+            "growth": {"price_id": "pri_01m61y1n4enqgf0qbtbm67tkx2", "entitlements": {}},
+            "agency": {"price_id": "pri_01m61y66jhcs5qf0cf9n20a3xf", "entitlements": {}},
+        }),
+    )
+    plans = paddle_routes._plans()
+    assert plans["starter"]["price_id"] == "pri_01m61xstp0gy07re6ynykhdcgb"
+    assert plans["growth"]["price_id"] == "pri_01m61y1n4enqgf0qbtbm67tkx2"
+    assert plans["agency"]["price_id"] == "pri_01m61y66jhcs5qf0cf9n20a3xf"
+    assert len({plan["price_id"] for plan in plans.values()}) == 3
