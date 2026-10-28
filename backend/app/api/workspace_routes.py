@@ -40,7 +40,11 @@ async def create_workspace(payload: WorkspaceCreate, request: Request) -> dict:
         async with pool.acquire() as conn:
             async with conn.transaction():
                 # Lock the account row so concurrent creates cannot race the limit check.
-                await conn.fetchrow("SELECT id FROM app_users WHERE id=$1 FOR UPDATE", user_id)
+                account = await conn.fetchrow(
+                    "SELECT id FROM app_users WHERE id=$1 FOR UPDATE", user_id
+                )
+                if account is None:
+                    raise HTTPException(status_code=401, detail="account_unavailable")
                 count = await conn.fetchval(
                     "SELECT count(*) FROM workspace_memberships WHERE user_id=$1 AND status='active'",
                     user_id,
