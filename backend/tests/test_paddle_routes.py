@@ -81,3 +81,102 @@ def test_customer_portal_url_requires_exact_paddle_host_for_environment(monkeypa
     monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "production")
     assert paddle_routes._trusted_portal_url("https://customer-portal.paddle.com/session/abc")
     assert not paddle_routes._trusted_portal_url("https://customer-portal.sandbox.paddle.com/session/abc")
+
+
+
+def test_paddle_webhook_rejects_requests_when_secret_is_missing(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", "")
+    with TestClient(app) as client:
+        response = client.post("/api/v1/billing/paddle/webhook", content=b"{}")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "paddle_webhook_not_configured"
+
+
+def test_paddle_webhook_rejects_invalid_signature_before_parsing_payload(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", "integration-secret")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": "ts=1;h1=invalid"},
+            content=b"not-json",
+        )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "invalid_paddle_signature"
+
+
+def test_paddle_webhook_rejects_signed_malformed_json(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    body = b"{invalid-json"
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid_webhook_payload"
+
+
+def test_paddle_webhook_ignores_unrelated_signed_event_without_billing_store(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    body = json.dumps({"event_id": "evt_unrelated", "event_type": "transaction.completed"}).encode()
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "ignored"}
+
+
+def test_paddle_public_plans_never_expose_provider_price_ids_or_entitlements(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    monkeypatch.setattr(
+        paddle_routes.settings,
+        "paddle_plans_json",
+        json.dumps({
+            "starter": {
+                "name": "Starter",
+                "description": "For small teams",
+                "price_id": "pri_private_provider_id",
+                "display_price": "$19",
+                "currency": "USD",
+                "billing_interval": "month",
+                "entitlements": {"email_outreach": {"enabled": True, "monthly_limit": 100}},
+            }
+        }),
+    )
+    monkeypatch.setattr(paddle_routes.settings, "paddle_api_key", "")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", "")
+    with TestClient(app) as client:
+        response = client.get("/api/v1/billing/paddle/plans")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["configured"] is True
+    assert payload["items"][0]["id"] == "starter"
+    assert payload["items"][0]["checkout_available"] is False
+    assert "price_id" not in response.text
+    assert "pri_private_provider_id" not in response.text
+    assert "entitlements" not in response.text
