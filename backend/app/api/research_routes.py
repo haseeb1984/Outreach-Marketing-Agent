@@ -1,10 +1,12 @@
-"""Quota-controlled public-web search for evidence-backed prospect discovery.
+"""Quota-controlled, evidence-ranked public-web prospect discovery.
 
 Search results are suggestions only: they are not automatically added to the CRM and
-must be reviewed by a person. The provider credential is read from server environment.
+must be reviewed by a person. Relevance scores are transparent text-match heuristics,
+not lead-conversion predictions. The provider credential is read from server environment.
 """
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit
 
 import httpx
@@ -44,9 +46,45 @@ def _public_https_url(value: object) -> str | None:
         return None
 
 
+_SEARCH_STOP_WORDS = {
+    "about", "and", "are", "for", "from", "how", "into", "its", "our", "the",
+    "their", "this", "that", "with", "you", "your", "who", "what", "where",
+}
+
+
+def _search_terms(value: str) -> set[str]:
+    """Normalize words while ignoring short and common low-information tokens."""
+    return {
+        term for term in re.findall(r"[a-z0-9]+", value.lower())
+        if len(term) >= 3 and term not in _SEARCH_STOP_WORDS
+    }
+
+
+def _relevance(query: str, title: str, description: str) -> tuple[int, list[str]]:
+    """Return a bounded, explainable lexical-match score (not a business-fit prediction)."""
+    query_terms = _search_terms(query)
+    if not query_terms:
+        return 0, []
+    title_terms = _search_terms(title)
+    description_terms = _search_terms(description)
+    title_matches = sorted(query_terms & title_terms)
+    description_matches = sorted(query_terms & description_terms)
+    # Title matches carry more weight than snippet matches; repeated words do not inflate it.
+    score = round(100 * (
+        0.7 * len(title_matches) / len(query_terms)
+        + 0.3 * len(description_matches) / len(query_terms)
+    ))
+    reasons = []
+    if title_matches:
+        reasons.append("Title matches: " + ", ".join(title_matches))
+    if description_matches:
+        reasons.append("Description matches: " + ", ".join(description_matches))
+    return min(100, max(0, score)), reasons
+
+
 @router.post("/prospects/search")
 async def search_public_prospects(payload: ProspectSearchInput, request: Request) -> dict:
-    """Search public web results with evidence links; does not persist or contact prospects."""
+    """Search public web results with relevance hints and evidence links; never contacts prospects."""
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
     auth_store = getattr(request.app.state, "auth_store", None)
@@ -81,7 +119,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False) as client:
             response = await client.get(
                 "https://api.search.brave.com/res/v1/web/search",
-                params={"q": payload.query.strip(), "count": payload.count, "safesearch": "moderate"},
+                params={"q": payload.query.strip(), "count": min(20, payload.count * 2), "safesearch": "moderate"},
                 headers={
                     "Accept": "application/json",
                     "X-Subscription-Token": settings.brave_search_api_key,
@@ -100,26 +138,47 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
             )
             raise HTTPException(status_code=502, detail="search_response_invalid")
-        results = []
-        seen = set()
+
+        # One result per hostname avoids presenting several pages from one site as separate leads.
+        best_by_host: dict[str, dict] = {}
         for item in raw_results:
             if not isinstance(item, dict):
                 continue
             url = _public_https_url(item.get("url"))
             title = item.get("title")
             description = item.get("description")
-            if not url or url in seen or not isinstance(title, str) or not title.strip():
+            if not url or not isinstance(title, str) or not title.strip():
                 continue
-            seen.add(url)
-            results.append({
-                "title": title.strip()[:300],
+            parsed = urlsplit(url)
+            host = (parsed.hostname or "").lower().rstrip(".")
+            if host.startswith("www."):
+                host = host[4:]
+            if not host:
+                continue
+            clean_title = title.strip()[:300]
+            clean_description = description.strip()[:1200] if isinstance(description, str) else ""
+            score, reasons = _relevance(payload.query.strip(), clean_title, clean_description)
+            candidate = {
+                "title": clean_title,
                 "url": url,
-                "description": description.strip()[:1200] if isinstance(description, str) else "",
+                "domain": host,
+                "description": clean_description,
+                "relevance_score": score,
+                "relevance_reasons": reasons,
+                "relevance_method": "query_term_overlap_v1",
                 "evidence_type": "public_search_result",
                 "requires_human_review": True,
-            })
-            if len(results) >= payload.count:
-                break
+            }
+            previous = best_by_host.get(host)
+            if previous is None or (score, len(clean_description)) > (
+                previous["relevance_score"], len(previous["description"])
+            ):
+                best_by_host[host] = candidate
+
+        results = sorted(
+            best_by_host.values(),
+            key=lambda item: (-item["relevance_score"], item["domain"], item["url"]),
+        )[:payload.count]
         await subscriptions.finish_reservation(
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
         )
@@ -127,10 +186,14 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
             "workspace_id": payload.workspace_id,
             "query": payload.query.strip(),
             "provider": "brave_search",
+            "ranking": {
+                "method": "query_term_overlap_v1",
+                "description": "Lexical overlap between query, title and snippet; not a prediction of lead quality or conversion.",
+            },
             "items": results,
             "count": len(results),
             "persisted_to_crm": False,
-            "notice": "Search results are unverified leads. Review each source and establish fit before saving or contacting anyone.",
+            "notice": "Search results and relevance scores are unverified hints. Review each source and establish business fit before saving or contacting anyone.",
         }
     except HTTPException:
         raise
