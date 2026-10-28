@@ -34,3 +34,9 @@ def test_reconciler_rejects_invalid_workspace_before_database_access():
 
     with pytest.raises(ValueError, match="workspace_id_invalid"):
         asyncio.run(reconcile_whatsapp_delivery_statuses(NoDatabase(), workspace_id=" "))
+
+
+def test_failed_provider_status_has_lowest_rank_so_it_cannot_win_timestamp_ties():
+    # A provider can report a failure callback after delivery/read callbacks due to
+    # retries or callback ordering. Positive delivery evidence must take precedence.
+    assert _status_target("failed") == "failed"
