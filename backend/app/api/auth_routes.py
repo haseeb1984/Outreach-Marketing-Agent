@@ -135,7 +135,10 @@ async def _consume(limiter, *, namespace: str, identifier: str, limit: int, wind
 
 
 async def _authenticated(request: Request):
-    store, _ = _services(request)
+    # Session-only endpoints do not need the rate limiter; require only the auth store.
+    store = getattr(request.app.state, "auth_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
     token = request.cookies.get(cookie_policy.name)
     if not token:
         raise HTTPException(status_code=401, detail="authentication_required")
