@@ -282,6 +282,10 @@ async def readiness() -> Response:
                      AND to_regclass('public.whatsapp_contact_preferences') IS NOT NULL
                      AND to_regclass('public.whatsapp_message_templates') IS NOT NULL
                      AND to_regclass('public.whatsapp_outbound_deliveries') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='template_name')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='language_code')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='lease_token')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='lease_expires_at')
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
@@ -319,8 +323,10 @@ async def readiness() -> Response:
                             '033_draft_edit_audit_event.sql',
                             '034_workspace_delivery_cascade_cleanup.sql',
                             '035_workspace_growth_schedules.sql',
-                            '036_growth_schedule_quota_status.sql'
-                          )) = 36"""
+                            '036_growth_schedule_quota_status.sql',
+                            '037_whatsapp_outbound_template_persistence.sql',
+                            '038_whatsapp_outbound_queue_leases.sql'
+                          )) = 38"""
             )
             if not schema_ready:
                 return JSONResponse(
