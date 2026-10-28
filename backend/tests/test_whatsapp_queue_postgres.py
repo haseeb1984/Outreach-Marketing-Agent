@@ -170,6 +170,11 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
             assert recovered["error_code"] == "worker_lease_expired"
             assert recovered["lease_token"] is None
             assert recovered["lease_expires_at"] is None
+            reservation_status = await conn.fetchval(
+                "SELECT status FROM feature_usage_reservations WHERE id=$1",
+                stale_claim["usage_reservation_id"],
+            )
+            assert reservation_status == "consumed"
             # The recovery path must not silently make the row sendable again.
             assert await conn.fetchval(
                 "SELECT count(*) FROM whatsapp_outbound_deliveries WHERE id=$1 AND status='queued'",
