@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+import pytest
+
 from scripts.launch_preflight import REQUIRED_RELEASE_MIGRATIONS, evaluate_config, exit_code
 
 
