@@ -52,9 +52,9 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
         await connection.execute(
             """INSERT INTO workspace_whatsapp_accounts
                (id,workspace_id,label,waba_id,phone_number_id,encrypted_access_token,status,created_by)
-               VALUES ($1,$2,'Integration account','waba-integration','phone-' || $1::text,
+               VALUES ($1,$2,'Integration account','waba-integration',$4,
                        NULL,'active',$3)""",
-            account_id, workspace_id, actor_id,
+            account_id, workspace_id, actor_id, "phone-" + account_id.hex,
         )
 
         async def seed_delivery(*, suffix: str, provider_message_id: str | None = None) -> UUID:
