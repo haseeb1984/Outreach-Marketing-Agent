@@ -72,6 +72,8 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "034_workspace_delivery_cascade_cleanup.sql",
         "035_workspace_growth_schedules.sql",
         "036_growth_schedule_quota_status.sql",
+        "037_whatsapp_outbound_template_persistence.sql",
+        "038_whatsapp_outbound_queue_leases.sql",
     ):
         assert migration in connection.schema_query
     for table in (
@@ -80,8 +82,11 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "workspace_email_accounts",
         "website_audit_reports",
         "workspace_growth_schedules",
+        "whatsapp_outbound_deliveries",
     ):
         assert f"public.{table}" in connection.schema_query
+    for column in ("template_name", "language_code", "lease_token", "lease_expires_at"):
+        assert f"column_name='{column}'" in connection.schema_query
 
 
 def test_readiness_rejects_incomplete_migration_chain():
