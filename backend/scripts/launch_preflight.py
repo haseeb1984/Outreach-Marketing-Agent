@@ -133,6 +133,21 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
         "Paddle plan catalog has valid JSON, unique price IDs, and entitlement objects" if plans_ok
         else "PADDLE_PLANS_JSON must be a non-empty JSON object with valid plan slugs, unique pri_ price IDs, and entitlements objects")
 
+    # Empty entitlements are acceptable for sandbox wiring, but never for live checkout.
+    live_entitlements_ok = True
+    if live_checkout:
+        try:
+            live_catalog = json.loads(plans_raw)
+            live_entitlements_ok = bool(live_catalog) and all(
+                isinstance(plan, dict) and bool(plan.get("entitlements"))
+                for plan in live_catalog.values()
+            )
+        except (TypeError, json.JSONDecodeError):
+            live_entitlements_ok = False
+    add("paddle_live_entitlements", live_entitlements_ok,
+        "every live plan grants explicit server-side entitlements" if live_entitlements_ok
+        else "live checkout requires non-empty server-side entitlements for every plan")
+
     meta_fields = ("META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_APP_SECRET",
                    "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID",
                    "META_WHATSAPP_WABA_ID", "META_GRAPH_API_VERSION")
@@ -161,9 +176,15 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     add("backup_tool", backup_script.is_file(), "database backup/verification tool exists" if backup_script.is_file()
         else "backend/scripts/database_backup.py is missing")
 
-    worker_unit = root / "ops" / "systemd" / "outreach-growth-worker.service"
-    add("growth_worker_supervision", worker_unit.is_file(), "growth worker systemd unit exists" if worker_unit.is_file()
-        else "growth worker systemd unit is missing")
+    worker_units = (
+        root / "ops" / "systemd" / "outreach-growth-scheduler.service",
+        root / "ops" / "systemd" / "outreach-growth-worker.service",
+        root / "ops" / "systemd" / "outreach-whatsapp-dispatch-worker.service",
+    )
+    missing_worker_units = [unit.name for unit in worker_units if not unit.is_file()]
+    add("growth_worker_supervision", not missing_worker_units,
+        "scheduler, growth worker, and WhatsApp dispatch worker units exist" if not missing_worker_units
+        else "missing worker supervision units: " + ", ".join(missing_worker_units))
 
     worker_runbook = root / "docs" / "GROWTH_WORKER_HOST_RUNBOOK.md"
     add("growth_worker_runbook", worker_runbook.is_file(), "growth worker host runbook exists" if worker_runbook.is_file()

@@ -12,7 +12,7 @@ operational artifacts are missing. Save the JSON output as a release artifact, b
 any operator-added private metadata before sharing it outside the deployment team. It checks the PostgreSQL DSN shape, session-secret
 length, provider-encryption key, HTTPS origins, SMTP all-or-none configuration, Paddle
 mode consistency, Meta configuration completeness/version format, migration artifacts,
-backup tooling, and growth-worker supervision/runbook.
+backup tooling, all scheduler/growth/WhatsApp worker service units, and the worker runbook. Live Paddle checkout also requires explicit non-empty server-side entitlements for every catalog plan.
 
 The JSON distinguishes `ok` from `launch_ready`:
 - `ok` means local configuration and required-artifact checks have no errors.

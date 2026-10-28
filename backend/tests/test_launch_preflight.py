@@ -33,6 +33,8 @@ def _release_root(root: Path) -> None:
     (root / "backend/scripts/database_backup.py").write_text("# test")
     (root / "ops/systemd").mkdir(parents=True)
     (root / "ops/systemd/outreach-growth-worker.service").write_text("# test")
+    (root / "ops/systemd/outreach-growth-scheduler.service").write_text("# test")
+    (root / "ops/systemd/outreach-whatsapp-dispatch-worker.service").write_text("# test")
     (root / "docs").mkdir()
     (root / "docs/GROWTH_WORKER_HOST_RUNBOOK.md").write_text("# test")
 
@@ -218,3 +220,53 @@ def test_preflight_uses_safe_json_statuses_for_remote_gates(tmp_path: Path):
     assert all(item["status"] in {"pass", "fail", "warning"} for item in result["checks"])
     assert "tiny-secret" not in str(result)
     assert "postgresql://app:secret@localhost/app" not in str(result)
+
+
+def test_live_checkout_rejects_empty_entitlements_even_with_valid_price_ids(tmp_path: Path):
+    env = _env()
+    env.update({
+        "PADDLE_ENVIRONMENT": "production",
+        "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
+        "PADDLE_API_KEY": "pdl_live_key",
+        "PADDLE_WEBHOOK_SECRET": "webhook-secret",
+        "PADDLE_PLANS_JSON": (
+            '{"starter":{"price_id":"pri_starter","entitlements":{}},'
+            '"growth":{"price_id":"pri_growth","entitlements":{}}}'
+        ),
+    })
+    result = evaluate_config(env, tmp_path)
+    assert _statuses(result)["paddle_plan_catalog_shape"] == "pass"
+    assert _statuses(result)["paddle_live_entitlements"] == "fail"
+    assert result["ok"] is False
+
+
+def test_live_checkout_requires_entitlements_for_every_plan(tmp_path: Path):
+    env = _env()
+    env.update({
+        "PADDLE_ENVIRONMENT": "production",
+        "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
+        "PADDLE_API_KEY": "pdl_live_key",
+        "PADDLE_WEBHOOK_SECRET": "webhook-secret",
+        "PADDLE_PLANS_JSON": (
+            '{"starter":{"price_id":"pri_starter","entitlements":{"campaigns":true}},'
+            '"growth":{"price_id":"pri_growth","entitlements":{}}}'
+        ),
+    })
+    result = evaluate_config(env, tmp_path)
+    assert _statuses(result)["paddle_live_entitlements"] == "fail"
+
+
+def test_live_checkout_accepts_explicit_entitlements_for_every_plan(tmp_path: Path):
+    env = _env()
+    env.update({
+        "PADDLE_ENVIRONMENT": "production",
+        "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
+        "PADDLE_API_KEY": "pdl_live_key",
+        "PADDLE_WEBHOOK_SECRET": "webhook-secret",
+        "PADDLE_PLANS_JSON": (
+            '{"starter":{"price_id":"pri_starter","entitlements":{"campaigns":true}},'
+            '"growth":{"price_id":"pri_growth","entitlements":{"campaigns":true,"team_members":5}}}'
+        ),
+    })
+    result = evaluate_config(env, tmp_path)
+    assert _statuses(result)["paddle_live_entitlements"] == "pass"
