@@ -112,14 +112,23 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
             status_delivery_id,
         )
         # Events arrive out of order; provider timestamps determine the newest state.
+        event_time = datetime.now(timezone.utc)
         for status, seconds in (("read", 30), ("sent", 10), ("delivered", 20)):
             await connection.execute(
                 """INSERT INTO whatsapp_delivery_status_events
                    (workspace_id,account_id,provider_message_id,status,provider_timestamp)
                    VALUES ($1,$2,$3,$4,$5)""",
                 workspace_id, account_id, provider_message_id, status,
-                datetime.now(timezone.utc) + timedelta(seconds=seconds),
+                event_time + timedelta(seconds=seconds),
             )
+        # A late-arriving failure callback with an older provider timestamp must not
+        # override the already-confirmed read state.
+        await connection.execute(
+            """INSERT INTO whatsapp_delivery_status_events
+               (workspace_id,account_id,provider_message_id,status,provider_timestamp)
+               VALUES ($1,$2,$3,'failed',$4)""",
+            workspace_id, account_id, provider_message_id, event_time + timedelta(seconds=15),
+        )
     finally:
         await connection.close()
 
