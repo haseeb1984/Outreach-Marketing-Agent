@@ -85,7 +85,7 @@ def test_send_route_reserves_server_owned_email_quota_before_provider_call():
 def test_send_route_does_not_release_quota_for_ambiguous_provider_outcome():
  from app.api import delivery_routes
  src=inspect.getsource(delivery_routes.send_delivery)
- ambiguous=src[src.index("except EmailDeliveryFailed"):src.index("if not await store.finish")]
+ ambiguous=src[src.index("except EmailDeliveryFailed"):src.index("return {") ]
  assert 'error_code="delivery_outcome_unknown"' in ambiguous
  assert 'outcome="consumed"' in ambiguous
  assert 'outcome="released"' not in ambiguous
@@ -131,7 +131,8 @@ def test_send_route_uses_independent_settlement_for_provider_outcomes():
     ambiguous = src[src.index("except EmailDeliveryFailed"):src.index("return {\"id\": str(delivery_id)")]
     assert 'error_code="delivery_outcome_unknown"' in ambiguous
     assert 'quota_outcome="consumed"' in ambiguous
-    assert 'quota_outcome="released"' in ambiguous
+    safe_failures = src[:src.index("except EmailDeliveryFailed")]
+    assert 'quota_outcome="released"' in safe_failures
     assert 'error_code=None, quota_outcome="consumed"' in src
 
 
