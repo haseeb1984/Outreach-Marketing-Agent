@@ -169,7 +169,7 @@ def test_paddle_public_plans_never_expose_provider_price_ids_or_entitlements(mon
                     "email_sends": {"enabled": True, "monthly_limit": 1000},
                     "website_audits": {"enabled": True, "monthly_limit": 25},
                     "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
-                    "prospect_research": {"enabled": True, "monthly_limit": 100},
+        "prospect_research": {"enabled": True, "monthly_limit": 100},
                 },
             }
         }),
@@ -242,6 +242,13 @@ def test_entitlement_validator_rejects_malformed_or_missing_required_policies():
 
     assert not _valid_entitlements({})
     assert not _valid_entitlements({"email_sends": {"enabled": True, "monthly_limit": 10}})
+    # Search consumes its own quota, so a plan without this policy must fail closed.
+    assert not _valid_entitlements({
+        "ai_draft_generations": {"enabled": True, "monthly_limit": 10},
+        "email_sends": {"enabled": True, "monthly_limit": 10},
+        "website_audits": {"enabled": True, "monthly_limit": 10},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+    })
     assert not _valid_entitlements({
         "ai_draft_generations": {"enabled": True, "monthly_limit": True},
         "email_sends": {"enabled": True, "monthly_limit": 10},
