@@ -276,3 +276,20 @@ def test_paddle_customer_id_validation_rejects_path_and_query_injection():
     assert not _valid_customer_id("ctm_abc:443")
     assert not _valid_customer_id("ctm_" + "a" * 101)
     assert not _valid_customer_id(None)
+
+def test_paddle_webhook_rejects_oversized_streamed_payload_before_signature(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", "integration-secret")
+    body = b"x" * 1_000_001
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": "ts=1;h1=invalid"},
+            content=body,
+        )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "webhook_payload_too_large"
+
