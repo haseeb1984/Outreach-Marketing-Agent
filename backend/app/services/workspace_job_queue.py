@@ -115,14 +115,20 @@ class WorkspaceJobQueue:
         async with self._pool.acquire() as connection:
             async with connection.transaction():
                 # Jobs whose final lease expired are marked failed before another claim.
-                await connection.execute(
+                expired = await connection.fetch(
                     """UPDATE workspace_jobs SET status='failed', error_code='lease_expired',
                               locked_by=NULL, locked_at=NULL, lease_expires_at=NULL,
                               finished_at=$1, updated_at=$1
                        WHERE status='running' AND lease_expires_at <= $1
-                         AND attempt_count >= max_attempts""",
+                         AND attempt_count >= max_attempts
+                       RETURNING workspace_id, payload""",
                     now,
                 )
+                for expired_job in expired:
+                    await self._release_payload_reservation(
+                        connection, workspace_id=str(expired_job["workspace_id"]),
+                        payload=expired_job["payload"], now=now,
+                    )
                 row = await connection.fetchrow(
                     """SELECT id FROM workspace_jobs
                        WHERE attempt_count < max_attempts AND (
@@ -207,7 +213,8 @@ class WorkspaceJobQueue:
         async with self._pool.acquire() as connection:
             async with connection.transaction():
                 row = await connection.fetchrow(
-                    """SELECT attempt_count, max_attempts FROM workspace_jobs
+                    """SELECT attempt_count, max_attempts, workspace_id, payload
+                       FROM workspace_jobs
                        WHERE id=$1 AND status='running' AND locked_by=$2
                          AND lease_expires_at > $3 FOR UPDATE""",
                     UUID(str(job_id)), worker_id, now,
@@ -223,6 +230,10 @@ class WorkspaceJobQueue:
                            WHERE id=$1 AND locked_by=$2""",
                         UUID(str(job_id)), worker_id, error_code, now,
                     )
+                    await self._release_payload_reservation(
+                        connection, workspace_id=str(row["workspace_id"]),
+                        payload=row["payload"], now=now,
+                    )
                     return "failed"
                 await connection.execute(
                     """UPDATE workspace_jobs SET status='queued', error_code=$3,
@@ -233,6 +244,33 @@ class WorkspaceJobQueue:
                     UUID(str(job_id)), worker_id, error_code, now, retry_delay_seconds,
                 )
                 return "queued_for_retry"
+
+    @staticmethod
+    async def _release_payload_reservation(
+        connection: Any, *, workspace_id: str, payload: Any, now: datetime,
+    ) -> None:
+        """Release quota when a durable job reaches a terminal failure."""
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, json.JSONDecodeError):
+                return
+        if not isinstance(payload, dict):
+            return
+        reservation_id = payload.get("usage_reservation_id")
+        if not reservation_id:
+            return
+        try:
+            reservation_uuid = UUID(str(reservation_id))
+        except (ValueError, TypeError, AttributeError):
+            return
+        await connection.execute(
+            """UPDATE feature_usage_reservations
+               SET status='released', updated_at=$3
+               WHERE id=$1 AND workspace_id=$2
+                 AND status IN ('reserved','consumed')""",
+            reservation_uuid, workspace_id, now,
+        )
 
     async def get_status(self, *, workspace_id: str, job_id: str | UUID) -> dict[str, Any] | None:
         """Read job metadata only inside the owning workspace; omit raw payload/result."""
