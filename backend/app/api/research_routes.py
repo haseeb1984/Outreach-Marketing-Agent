@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
@@ -41,6 +41,28 @@ class ResearchProspectSaveInput(BaseModel):
     fit_reason: str = Field(min_length=1, max_length=2000)
     verified_facts: list[str] = Field(default_factory=list, max_length=30)
     human_reviewed: bool
+
+    @field_validator("name", "company", "fit_reason")
+    @classmethod
+    def require_nonblank_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("must_not_be_blank")
+        return cleaned
+
+    @field_validator("verified_facts")
+    @classmethod
+    def normalize_verified_facts(cls, values: list[str]) -> list[str]:
+        cleaned = []
+        for value in values:
+            fact = value.strip()
+            if not fact:
+                raise ValueError("verified_facts_must_not_be_blank")
+            if len(fact) > 1000:
+                raise ValueError("verified_fact_too_long")
+            if fact not in cleaned:
+                cleaned.append(fact)
+        return cleaned
 
 
 def _public_https_url(value: object) -> str | None:
