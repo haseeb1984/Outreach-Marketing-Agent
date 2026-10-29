@@ -72,8 +72,24 @@ class FakeQueue:
         return "failed"
 
 
+
+class FakeSubscriptions:
+    def __init__(self, decision=None):
+        self.decision = decision or {"allowed": True, "reason": "allowed"}
+        self.calls = []
+
+    async def validate_job_reservation(self, **kwargs):
+        self.calls.append(("validate", kwargs))
+        return self.decision
+
+    async def check_feature_enabled(self, **kwargs):
+        self.calls.append(("check", kwargs))
+        return self.decision
+
+
 def test_process_claimed_job_completes_and_uses_database_workspace_identity():
     queue = FakeQueue()
+    subscriptions = FakeSubscriptions()
     job = {
         "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
         "workspace_id": "trusted-db-workspace",
@@ -81,6 +97,7 @@ def test_process_claimed_job_completes_and_uses_database_workspace_identity():
             "start_url": "https://example.com",
             "business_type": "Retail",
             "target_market": "Pakistan",
+            "usage_reservation_id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
         },
     }
     seen = {}
@@ -91,9 +108,12 @@ def test_process_claimed_job_completes_and_uses_database_workspace_identity():
         return {"status": "report_ready_for_human_review", "actions": []}
 
     outcome = asyncio.run(process_claimed_job(
-        queue=queue, domain_store=object(), job=job, worker_id="worker-1", scan_runner=runner
+        queue=queue, domain_store=object(), job=job, worker_id="worker-1", scan_runner=runner,
+        subscription_store=subscriptions,
     ))
     assert outcome == "succeeded"
+    assert subscriptions.calls[0][0] == "validate"
+    assert subscriptions.calls[0][1]["feature"] == "website_audits"
     assert seen["workspace_id"] == "trusted-db-workspace"
     assert seen["max_pages"] == 10
     assert queue.completed["result"]["status"] == "report_ready_for_human_review"
@@ -101,6 +121,7 @@ def test_process_claimed_job_completes_and_uses_database_workspace_identity():
 
 def test_process_claimed_job_returns_lease_lost_if_completion_is_fenced():
     queue = FakeQueue(complete=False)
+    subscriptions = FakeSubscriptions()
     job = {
         "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
         "workspace_id": "trusted-db-workspace",
@@ -111,13 +132,15 @@ def test_process_claimed_job_returns_lease_lost_if_completion_is_fenced():
         return {"status": "report_ready_for_human_review"}
 
     outcome = asyncio.run(process_claimed_job(
-        queue=queue, domain_store=object(), job=job, worker_id="worker-1", scan_runner=runner
+        queue=queue, domain_store=object(), job=job, worker_id="worker-1", scan_runner=runner,
+        subscription_store=subscriptions,
     ))
     assert outcome == "lease_lost"
 
 
 def test_process_claimed_job_records_safe_failure_code():
     queue = FakeQueue()
+    subscriptions = FakeSubscriptions()
 
     async def runner(url, **kwargs):
         raise ValueError("verified_domain_not_authorized")
@@ -132,6 +155,39 @@ def test_process_claimed_job_records_safe_failure_code():
         },
         worker_id="worker-1",
         scan_runner=runner,
+        subscription_store=subscriptions,
     ))
     assert outcome == "failed"
     assert queue.failed["error_code"] == "website_scan_rejected"
+
+
+def test_process_claimed_job_fails_closed_when_quota_reservation_is_invalid():
+    queue = FakeQueue()
+    subscriptions = FakeSubscriptions({"allowed": False, "reason": "reservation_not_active"})
+    called = False
+
+    async def runner(url, **kwargs):
+        nonlocal called
+        called = True
+        return {"status": "report_ready_for_human_review"}
+
+    outcome = asyncio.run(process_claimed_job(
+        queue=queue,
+        domain_store=object(),
+        job={
+            "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            "workspace_id": "trusted-db-workspace",
+            "payload": {
+                "start_url": "https://example.com",
+                "business_type": "Retail",
+                "target_market": "Pakistan",
+                "usage_reservation_id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            },
+        },
+        worker_id="worker-1",
+        scan_runner=runner,
+        subscription_store=subscriptions,
+    ))
+    assert outcome == "failed"
+    assert queue.failed["error_code"] == "website_growth_quota_unavailable"
+    assert called is False
