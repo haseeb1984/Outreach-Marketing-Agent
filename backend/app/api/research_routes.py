@@ -252,6 +252,17 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         except Exception:
             pass
         raise HTTPException(status_code=502, detail="search_provider_unavailable") from None
+    except Exception:
+        # Unexpected failures after the provider call may have incurred billable usage.
+        # Finalize the reservation rather than leaving it indefinitely reserved or
+        # allowing an idempotent retry to repeat the paid search.
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail="search_provider_unavailable") from None
 
 
 @router.post("/prospects/save", status_code=201)

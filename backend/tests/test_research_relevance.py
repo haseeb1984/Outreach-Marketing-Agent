@@ -297,3 +297,16 @@ def test_research_save_hides_unexpected_persistence_errors(monkeypatch):
     assert response.status_code == 503
     assert response.json()["detail"] == "prospect_save_unavailable"
     assert "private database details" not in response.text
+
+
+def test_search_route_consumes_reservation_on_unexpected_provider_processing_error():
+    import inspect
+    from app.api.research_routes import search_public_prospects
+
+    source = inspect.getsource(search_public_prospects)
+    generic_handler = source.rfind("except Exception:")
+    assert generic_handler > source.index("async with httpx.AsyncClient")
+    handler = source[generic_handler:]
+    assert 'outcome="consumed"' in handler
+    assert 'detail="search_provider_unavailable"' in handler
+    assert "reservation_id=reservation_id" in handler
