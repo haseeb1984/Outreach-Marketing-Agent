@@ -295,6 +295,7 @@ def test_paddle_webhook_rejects_oversized_streamed_payload_before_signature(monk
 
 def test_database_billing_catalog_rejects_duplicate_provider_price_ids(monkeypatch):
     import asyncio
+    import pytest
     from types import SimpleNamespace
     from fastapi import HTTPException
     from app.api import paddle_routes
