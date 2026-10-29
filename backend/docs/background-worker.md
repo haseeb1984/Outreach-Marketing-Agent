@@ -1,26 +1,33 @@
 # Background worker operations
 
-The website-growth worker is a separate process; the API does not start it automatically.
-
-## Prerequisites
-- Configure `DATABASE_URL` using a secret manager/environment variable.
-- Apply database migrations explicitly from the `backend` directory with `python -m app.db.migrations`.
-- Provision a real workspace before enqueuing jobs. Do not expose queue operations publicly until server-side authentication and workspace membership authorization exist.
-- Verify that the database schema is current, including `workspace_jobs`.
+The durable website-growth queue is processed by **one canonical worker entry point**: `backend/scripts/run_workspace_growth_worker.py`. The API and dashboard enqueue/read jobs; they do not execute queue jobs themselves.
 
 ## Run
-From the `backend` directory, install `requirements.txt` and run:
 
-```bash
-python -m app.workers.website_growth_worker
+From the `backend/` directory, install `requirements.txt`, configure the same trusted `DATABASE_URL` and required application settings as the backend, and run a single smoke pass:
+
+```sh
+python scripts/run_workspace_growth_worker.py --once
 ```
 
-The worker polls PostgreSQL, claims one eligible job at a time, and maintains a bounded 5-minute lease. It accepts only `website_growth_scan` jobs and HTTPS start URLs. Scan limits are capped at 10 pages and depth 2. Results are saved to the job row for later retrieval by a future authenticated API.
+For continuous operation on a persistent host, use a process supervisor and run:
+
+```sh
+python scripts/run_workspace_growth_worker.py --poll-seconds 3
+```
+
+The maintained systemd unit is `ops/systemd/outreach-growth-worker.service`; the full host setup and release acceptance procedure is in [Growth Worker Host Runbook](../../docs/GROWTH_WORKER_HOST_RUNBOOK.md).
+
+## Canonical worker and legacy module
+
+Do **not** start `python -m app.workers.website_growth_worker` as a second production consumer. That older module is retained for compatibility/tests; the canonical script validates usage reservations, writes completed reports to `website_audit_reports`, and records the report ID on the durable job. Running a different entry point can produce inconsistent result persistence and complicate operational diagnosis.
 
 ## Safety boundaries
-- Workspace ID comes from the claimed database row, never from the job payload.
-- The pipeline loads verified domains from the workspace-scoped database store before fetching a website.
-- Jobs never send email or WhatsApp messages and never modify client websites.
-- Error records use controlled codes rather than raw exception text.
-- The fetch layer performs DNS/public-IP checks and bounded redirects, but a separate DNS lookup does not eliminate DNS rebinding. Production multi-tenant deployment still needs an egress proxy that pins the validated destination IP to the actual connection.
-- There is not yet an account/session authentication system or public enqueue/status API. Do not expose queue operations publicly until workspace membership authorization, quotas, audit logging, and egress controls are implemented and tested.
+
+- Workspace identity comes from the claimed database row, never from caller-controlled job payload.
+- The worker revalidates the workspace's verified domain and subscription/usage reservation before fetching.
+- Fetching is bounded by page/depth/redirect/response/time limits. DNS pre-resolution alone does not eliminate DNS rebinding; production egress must pin validated destinations through a trusted egress proxy.
+- The worker performs read-only website-growth scans only. It never sends email or WhatsApp messages and never modifies customer websites.
+- Queue failures use stable sanitized error codes; provider credentials must not be placed in source control, command arguments, or logs.
+- A successful code merge or a one-shot run that finds no jobs is not operational acceptance. Follow the host runbook to verify supervised execution, a test job and saved report, subscription denial, retry/lease recovery, logs/alerts, and backup/restore readiness.
+- Do not re-run migrations merely to start a worker. Confirm the intended database's migration ledger/schema against the reviewed release before enabling a service.
