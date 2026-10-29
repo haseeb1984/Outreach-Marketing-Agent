@@ -97,6 +97,7 @@ async def _effective_plans(request: Request, *, include_inactive: bool = False) 
     if not rows:
         return _plans()
     result: dict[str, Any] = {}
+    seen_price_ids: set[str] = set()
     for row in rows:
         item = dict(row)
         if not include_inactive and not item.get("active"):
@@ -107,11 +108,16 @@ async def _effective_plans(request: Request, *, include_inactive: bool = False) 
                 value = json.loads(value)
             except (TypeError, json.JSONDecodeError):
                 raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid") from None
+        price_id = item.get("price_id")
         if (not isinstance(value, dict)
                 or (value and not _valid_entitlements(value))
-                or not isinstance(item.get("price_id"), str)
-                or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", item["price_id"])):
+                or not isinstance(price_id, str)
+                or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", price_id)
+                or price_id in seen_price_ids):
+            # A provider price must map to exactly one plan, otherwise a signed
+            # subscription event cannot be safely resolved to a single entitlement set.
             raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
+        seen_price_ids.add(price_id)
         item["entitlements"] = value
         result[item["slug"]] = item
     return result
