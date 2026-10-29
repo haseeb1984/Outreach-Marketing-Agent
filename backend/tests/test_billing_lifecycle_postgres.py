@@ -68,11 +68,16 @@ async def _exercise_billing_lifecycle() -> None:
 
         # A duplicate provider event must not reapply changed data under the same event ID.
         duplicate = make_event(
-            first.event_id, NOW + timedelta(minutes=5),
+            first.event_id, NOW,
             subscription_status="cancelled",
             entitlements={"email_outreach": {"enabled": False, "monthly_limit": 0}},
         )
         assert await store.apply_verified_event(duplicate) == {"outcome": "duplicate"}
+
+        # Reusing the same provider event ID with a different timestamp is an identity conflict.
+        timestamp_collision = make_event(first.event_id, NOW + timedelta(minutes=5))
+        with pytest.raises(ValueError, match="billing_event_identity_conflict"):
+            await store.apply_verified_event(timestamp_collision)
 
         # Older snapshots are retained in the ledger as stale but cannot regress state.
         stale = make_event(
