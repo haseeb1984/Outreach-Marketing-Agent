@@ -85,13 +85,14 @@ async def process_pending_whatsapp_events(
         not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200
     ):
         raise ValueError("workspace_id_invalid")
+    requested_workspace_id = workspace_id
     processed = messages_saved = statuses_saved = unmapped = failed = 0
     for _ in range(batch_size):
         last_event_id = None
         try:
             async with pool.acquire() as conn:
                 async with conn.transaction():
-                    if workspace_id is None:
+                    if requested_workspace_id is None:
                         event = await conn.fetchrow(
                             """SELECT id, phone_number_id, payload, received_at
                                FROM meta_whatsapp_webhook_events
@@ -111,7 +112,7 @@ async def process_pending_whatsapp_events(
                                  )
                                ORDER BY e.received_at, e.id
                                LIMIT 1 FOR UPDATE OF e SKIP LOCKED""",
-                            workspace_id,
+                            requested_workspace_id,
                         )
                     if event is None:
                         break
