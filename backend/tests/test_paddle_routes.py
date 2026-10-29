@@ -293,3 +293,45 @@ def test_paddle_webhook_rejects_oversized_streamed_payload_before_signature(monk
     assert response.status_code == 413
     assert response.json()["detail"] == "webhook_payload_too_large"
 
+def test_database_billing_catalog_rejects_duplicate_provider_price_ids(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from app.api import paddle_routes
+
+    policy = {
+        "ai_draft_generations": {"enabled": True, "monthly_limit": 10},
+        "email_sends": {"enabled": True, "monthly_limit": 10},
+        "website_audits": {"enabled": True, "monthly_limit": 10},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+        "prospect_research": {"enabled": True, "monthly_limit": 10},
+    }
+    rows = [
+        {"slug": "starter", "name": "Starter", "description": "", "price_id": "pri_duplicate",
+         "display_price": "$29", "currency": "USD", "billing_interval": "month",
+         "entitlements": policy, "active": True},
+        {"slug": "growth", "name": "Growth", "description": "", "price_id": "pri_duplicate",
+         "display_price": "$79", "currency": "USD", "billing_interval": "month",
+         "entitlements": policy, "active": True},
+    ]
+
+    class Connection:
+        async def fetch(self, query):
+            return rows
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db_pool=Pool())))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(paddle_routes._effective_plans(request))
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "billing_plan_catalog_invalid"
+
