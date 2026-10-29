@@ -1,7 +1,7 @@
 """Workspace-authorized provider configuration diagnostics.
 
-SMTP settings are deployment-level environment settings today; no credential is
-returned to the browser. The test endpoint performs TLS + authentication only and
+Deployment-level SMTP is a fallback; workspace SMTP accounts are managed separately.
+No credential is returned to the browser. The test endpoint performs TLS + authentication only and
 never sends a message. WhatsApp sending remains disabled pending Meta onboarding.
 """
 from __future__ import annotations
@@ -48,6 +48,8 @@ async def integration_status(
                      if not isinstance(value, str) or not value.strip()]
     if settings.smtp_starttls is not True:
         missing_email.append("starttls_required")
+    if isinstance(settings.smtp_port, bool) or not isinstance(settings.smtp_port, int) or settings.smtp_port != 587:
+        missing_email.append("smtp_port_587_required")
 
     whatsapp_fields = {
         "access_token": settings.meta_whatsapp_access_token,
@@ -63,7 +65,7 @@ async def integration_status(
         "email": {
             "configuration_complete": not missing_email,
             "missing_fields": missing_email,
-            "note": "Deployment-level SMTP configuration; presence does not prove successful authentication or delivery.",
+            "note": "Deployment-level fallback SMTP configuration; TLS on port 587 is required, and presence does not prove successful authentication or inbox delivery.",
         },
         "whatsapp": {
             "configuration_complete": not missing_whatsapp,
