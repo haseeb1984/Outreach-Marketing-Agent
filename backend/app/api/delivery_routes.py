@@ -237,7 +237,7 @@ def smtp_configuration_status(configuration=settings)->dict:
  }
  missing = sorted(name for name, value in required.items() if not isinstance(value, str) or not value.strip())
  port = configuration.smtp_port
- port_valid = isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
+ port_valid = isinstance(port, int) and not isinstance(port, bool) and port == 587
  tls_enabled = configuration.smtp_starttls is True
  if not port_valid:
   missing.append("SMTP_PORT")
