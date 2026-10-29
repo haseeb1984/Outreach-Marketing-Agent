@@ -152,7 +152,8 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
         return True
     except ValueError:
         await queue.fail(job_id=job["id"], worker_id=worker_id,
-                         error_code="growth_scan_payload_or_domain_rejected", retry_delay_seconds=0)
+                         error_code="growth_scan_payload_or_domain_rejected",
+                         retry_delay_seconds=0, retry=False)
         return True
     except Exception:
         # Keep provider, URL, SQL, and credential details out of the durable job record.
