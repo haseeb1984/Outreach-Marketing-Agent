@@ -110,6 +110,8 @@ def test_due_schedule_enqueues_quota_metered_idempotent_job_and_advances_next_ru
     assert subscriptions.reserve_args["feature"] == "website_audits"
     assert subscriptions.reserve_args["idempotency_key"] == f"growth-schedule-usage:{schedule_id}:20261028T000000Z"
     assert subscriptions.finished[0]["outcome"] == "consumed"
+    queued_payload = __import__("json").loads(connection.queue_insert_args[2])
+    assert queued_payload["usage_reservation_id"] == subscriptions.reservation["reservation_id"]
 
 
 def test_schedule_skips_due_slot_when_entitlement_is_denied():
