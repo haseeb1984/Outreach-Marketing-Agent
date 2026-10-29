@@ -199,3 +199,34 @@ def test_paddle_sandbox_plan_catalog_maps_owner_supplied_price_ids(monkeypatch):
     assert plans["growth"]["price_id"] == "pri_01m61y1n4enqgf0qbtbm67tkx2"
     assert plans["agency"]["price_id"] == "pri_01m61y66jhcs5qf0cf9n20a3xf"
     assert len({plan["price_id"] for plan in plans.values()}) == 3
+
+
+def test_checkout_rejects_plan_with_empty_entitlements_before_provider_call(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "sandbox")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_api_key", "sandbox-key")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", "sandbox-secret")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_plans_json", json.dumps({
+        "starter": {"price_id": "pri_test_starter", "entitlements": {}}
+    }))
+
+    class AuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    async def fake_authenticated(request):
+        return AuthStore(), None, {"user_id": "user-1"}
+
+    monkeypatch.setattr(paddle_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(paddle_routes, "_check_csrf", lambda request, session: None)
+    with TestClient(app) as client:
+        app.state.auth_store = AuthStore()
+        response = client.post(
+            "/api/v1/billing/paddle/checkout",
+            json={"workspace_id": "workspace-1", "plan_id": "starter"},
+        )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "billing_plan_entitlements_not_configured"
