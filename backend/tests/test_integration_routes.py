@@ -105,16 +105,16 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
 
 
 def test_provider_status_marks_nonstandard_smtp_port_incomplete(monkeypatch):
-    from app.api import integration_routes
+    from app.api import delivery_routes
 
-    # Patch the exact settings object consumed by the endpoint so this regression
-    # test cannot accidentally pass/fail based on a separately imported config alias.
-    monkeypatch.setattr(integration_routes.settings, "smtp_host", "smtp.example.test")
-    monkeypatch.setattr(integration_routes.settings, "smtp_username", "mailer")
-    monkeypatch.setattr(integration_routes.settings, "smtp_password", "never-return-this")
-    monkeypatch.setattr(integration_routes.settings, "smtp_from_email", "noreply@example.test")
-    monkeypatch.setattr(integration_routes.settings, "smtp_starttls", True)
-    monkeypatch.setattr(integration_routes.settings, "smtp_port", 2525)
+    # /integrations/status is registered by delivery_routes first in app/main.py.
+    # Patch the settings object used by that active route, not the shadowed route.
+    monkeypatch.setattr(delivery_routes.settings, "smtp_host", "smtp.example.test")
+    monkeypatch.setattr(delivery_routes.settings, "smtp_username", "mailer")
+    monkeypatch.setattr(delivery_routes.settings, "smtp_password", "never-return-this")
+    monkeypatch.setattr(delivery_routes.settings, "smtp_from_email", "noreply@example.test")
+    monkeypatch.setattr(delivery_routes.settings, "smtp_starttls", True)
+    monkeypatch.setattr(delivery_routes.settings, "smtp_port", 2525)
 
     with _client(monkeypatch) as client:
         response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
@@ -122,4 +122,5 @@ def test_provider_status_marks_nonstandard_smtp_port_incomplete(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["email"]["configuration_complete"] is False
-    assert "smtp_port_587_required" in payload["email"]["missing_fields"]
+    assert payload["email"]["port_valid"] is False
+    assert "SMTP_PORT" in payload["email"]["missing_fields"]
