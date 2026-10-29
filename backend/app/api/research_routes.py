@@ -28,6 +28,21 @@ class ProspectSearchInput(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=180, pattern=r"^[A-Za-z0-9._:-]+$")
 
 
+
+
+class ResearchProspectSaveInput(BaseModel):
+    """Explicit human-reviewed selection to persist a research result to the CRM."""
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    company: str = Field(min_length=1, max_length=240)
+    website_url: str = Field(min_length=8, max_length=2048)
+    evidence_url: str = Field(min_length=8, max_length=2048)
+    fit_reason: str = Field(min_length=1, max_length=2000)
+    verified_facts: list[str] = Field(default_factory=list, max_length=30)
+    human_reviewed: bool
+
+
 def _public_https_url(value: object) -> str | None:
     if not isinstance(value, str) or len(value) > 2048:
         return None
@@ -215,3 +230,37 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         except Exception:
             pass
         raise HTTPException(status_code=502, detail="search_provider_unavailable") from None
+
+
+@router.post("/prospects/save", status_code=201)
+async def save_researched_prospect(payload: ResearchProspectSaveInput, request: Request) -> dict:
+    """Save one reviewed search result; discovery results are never auto-imported."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    if payload.human_reviewed is not True:
+        raise HTTPException(status_code=422, detail="human_review_required")
+    website_url = _public_https_url(payload.website_url)
+    evidence_url = _public_https_url(payload.evidence_url)
+    if website_url is None or evidence_url is None:
+        raise HTTPException(status_code=422, detail="public_https_urls_required")
+    store = getattr(request.app.state, "prospect_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="prospect_service_not_configured")
+    try:
+        return await store.create_prospect(
+            workspace_id=payload.workspace_id, created_by=session["user_id"],
+            name=payload.name, company=payload.company, website_url=website_url,
+            evidence_url=evidence_url, fit_reason=payload.fit_reason,
+            verified_facts=payload.verified_facts,
+        )
+    except Exception as exc:
+        if type(exc).__name__ == "UniqueViolationError":
+            raise HTTPException(status_code=409, detail="prospect_evidence_already_exists") from None
+        raise HTTPException(status_code=503, detail="prospect_save_unavailable") from None
