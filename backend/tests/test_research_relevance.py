@@ -194,3 +194,30 @@ def test_research_save_rejects_cross_workspace_write(monkeypatch):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
+
+
+def test_research_save_schema_normalizes_text_and_rejects_blank_or_oversized_facts():
+    import pytest
+    from pydantic import ValidationError
+    from app.api.research_routes import ResearchProspectSaveInput
+
+    payload = {
+        "workspace_id": "workspace-a",
+        "name": "  Example Prospect  ",
+        "company": " Example Company ",
+        "website_url": "https://example.com",
+        "evidence_url": "https://example.com/services",
+        "fit_reason": " Reviewed source confirms relevant service. ",
+        "verified_facts": [" Offers the target service. ", "Offers the target service."],
+        "human_reviewed": True,
+    }
+    cleaned = ResearchProspectSaveInput(**payload)
+    assert cleaned.name == "Example Prospect"
+    assert cleaned.company == "Example Company"
+    assert cleaned.verified_facts == ["Offers the target service."]
+    with pytest.raises(ValidationError):
+        ResearchProspectSaveInput(**{**payload, "name": "   "})
+    with pytest.raises(ValidationError):
+        ResearchProspectSaveInput(**{**payload, "verified_facts": ["x" * 1001]})
+    with pytest.raises(ValidationError):
+        ResearchProspectSaveInput(**{**payload, "verified_facts": ["   "]})
