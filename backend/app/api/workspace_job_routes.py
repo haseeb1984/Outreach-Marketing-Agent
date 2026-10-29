@@ -149,12 +149,10 @@ async def enqueue_website_growth_scan(
             pass
         raise HTTPException(status_code=422, detail="invalid_website_growth_job") from None
     except Exception:
-        try:
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-            )
-        except Exception:
-            pass
+        # The queue write may have committed before a connection/response failure.
+        # Do not release quota on an ambiguous outcome: a persisted job must retain
+        # its reservation, and a client retry with the same idempotency key can
+        # safely discover the existing job or enqueue it if no row was committed.
         raise HTTPException(status_code=503, detail="website_growth_job_unavailable") from None
     if reservation.get("status") == "reserved":
         try:
