@@ -305,7 +305,8 @@ async def process_pending_whatsapp_events(
                                                updated_at=now()
                                            WHERE workspace_id=$1 AND account_id=$2
                                              AND provider_message_id=$5
-                                             AND status IN ('processing','uncertain','sent','delivered','read')
+                                             AND status IN ('processing','uncertain','sent','delivered','read','failed')
+                                             AND ($3 <> 'failed' OR status IN ('processing','uncertain','sent','failed'))
                                              AND CASE status
                                                WHEN 'processing' THEN 0
                                                WHEN 'uncertain' THEN 0
