@@ -105,14 +105,43 @@ class WorkspaceGrowthScheduleRunner:
                     "requested_by": str(schedule["created_by"]),
                     "usage_reservation_id": str(reservation["reservation_id"]),
                 }
-                job = await self._queue.enqueue(
-                    workspace_id=str(schedule["workspace_id"]),
-                    job_type="website_growth_scan",
-                    payload=payload,
-                    idempotency_key=idempotency_key,
-                    max_attempts=3,
-                    run_after=current,
-                )
+                try:
+                    job = await self._queue.enqueue(
+                        workspace_id=str(schedule["workspace_id"]),
+                        job_type="website_growth_scan",
+                        payload=payload,
+                        idempotency_key=idempotency_key,
+                        max_attempts=3,
+                        run_after=current,
+                    )
+                except ValueError as exc:
+                    # Deterministic queue rejection must not pin this schedule to
+                    # the same due slot forever. An idempotency conflict may refer
+                    # to a job already using this reservation, so never release it.
+                    conflict = str(exc) == "idempotency_key_conflict"
+                    if not conflict and reservation.get("status") == "reserved":
+                        await self._subscriptions.finish_reservation(
+                            workspace_id=str(schedule["workspace_id"]),
+                            reservation_id=reservation["reservation_id"],
+                            outcome="released",
+                        )
+                    error_code = (
+                        "schedule_idempotency_conflict" if conflict
+                        else "schedule_job_invalid"
+                    )
+                    await conn.execute(
+                        """UPDATE workspace_growth_schedules
+                           SET next_run_at=$2, last_attempted_at=$3,
+                               last_error_code=$4, updated_at=$3
+                           WHERE id=$1 AND status='active'""",
+                        schedule_id, next_run_at, current, error_code,
+                    )
+                    return {
+                        "schedule_id": str(schedule_id),
+                        "job_id": "",
+                        "workspace_id": str(schedule["workspace_id"]),
+                        "outcome": "enqueue_rejected",
+                    }
                 if reservation.get("status") == "reserved":
                     finished = await self._subscriptions.finish_reservation(
                         workspace_id=str(schedule["workspace_id"]),

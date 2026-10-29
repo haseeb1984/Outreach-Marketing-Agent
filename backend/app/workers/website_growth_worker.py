@@ -188,6 +188,13 @@ async def process_claimed_job(
                     job_id=job["id"], worker_id=worker_id, error_code="website_growth_scan_failed"
                 )
         finally:
+            # Also stop work if the worker task itself is cancelled during shutdown.
+            if not scan_task.done():
+                scan_task.cancel()
+            try:
+                await scan_task
+            except (asyncio.CancelledError, Exception):
+                pass
             lost_task.cancel()
             try:
                 await lost_task

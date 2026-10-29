@@ -17,8 +17,9 @@ class _Transaction:
 
 
 class _Connection:
-    def __init__(self, schedule):
+    def __init__(self, schedule, enqueue_error=None):
         self.schedule = schedule
+        self.enqueue_error = enqueue_error
         self.queue_insert_args = None
         self.schedule_update_args = None
 
@@ -29,6 +30,8 @@ class _Connection:
         if "FROM workspace_growth_schedules" in query:
             return self.schedule
         if query.lstrip().startswith("INSERT INTO workspace_jobs"):
+            if self.enqueue_error is not None:
+                raise self.enqueue_error
             self.queue_insert_args = args
             return {
                 "id": uuid4(),
@@ -173,3 +176,44 @@ def test_invalid_persisted_schedule_releases_reservation_and_skips_slot(bad_payl
         "reservation_id": subscriptions.reservation["reservation_id"],
         "outcome": "released",
     }]
+
+
+
+def test_schedule_advances_and_releases_quota_after_deterministic_enqueue_rejection():
+    schedule_id = uuid4()
+    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+    now = slot + timedelta(hours=2)
+    connection = _Connection(_schedule(schedule_id, slot), enqueue_error=ValueError("invalid_payload"))
+    subscriptions = _Subscriptions()
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
+
+    result = asyncio.run(runner.enqueue_one_due(now=now))
+
+    assert result["outcome"] == "enqueue_rejected"
+    assert result["job_id"] == ""
+    assert connection.schedule_update_args[1] == slot + timedelta(hours=24)
+    assert connection.schedule_update_args[3] == "schedule_job_invalid"
+    assert subscriptions.finished == [{
+        "workspace_id": "workspace-a",
+        "reservation_id": subscriptions.reservation["reservation_id"],
+        "outcome": "released",
+    }]
+
+
+def test_schedule_idempotency_conflict_advances_without_releasing_possibly_shared_reservation():
+    schedule_id = uuid4()
+    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+    now = slot + timedelta(hours=2)
+    connection = _Connection(
+        _schedule(schedule_id, slot),
+        enqueue_error=ValueError("idempotency_key_conflict"),
+    )
+    subscriptions = _Subscriptions()
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
+
+    result = asyncio.run(runner.enqueue_one_due(now=now))
+
+    assert result["outcome"] == "enqueue_rejected"
+    assert connection.schedule_update_args[1] == slot + timedelta(hours=24)
+    assert connection.schedule_update_args[3] == "schedule_idempotency_conflict"
+    assert subscriptions.finished == []
