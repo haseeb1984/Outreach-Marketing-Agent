@@ -25,6 +25,30 @@ from app.services.billing_lifecycle_store import VerifiedBillingEvent
 router = APIRouter(prefix="/api/v1/billing/paddle", tags=["billing"])
 
 
+REQUIRED_ENTITLEMENT_KEYS = frozenset({
+    "ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends",
+})
+
+
+def _valid_entitlements(value: Any, *, require_all_features: bool = True) -> bool:
+    """Validate server-owned quota policies; booleans are not integer quotas."""
+    if not isinstance(value, dict) or not value:
+        return False
+    if require_all_features and not REQUIRED_ENTITLEMENT_KEYS.issubset(value):
+        return False
+    for key, policy in value.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(policy, dict):
+            return False
+        if not isinstance(policy.get("enabled"), bool) or "monthly_limit" not in policy:
+            return False
+        limit = policy["monthly_limit"]
+        if limit is not None and (
+            not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+        ):
+            return False
+    return True
+
+
 class CheckoutRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=200)
     plan_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
@@ -48,7 +72,8 @@ def _plans() -> dict[str, Any]:
                 or not isinstance(price_id, str)
                 or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", price_id)
                 or price_id in seen_price_ids
-                or not isinstance(plan.get("entitlements"), dict)):
+                or not isinstance(plan.get("entitlements"), dict)
+                or (plan.get("entitlements") and not _valid_entitlements(plan["entitlements"]))):
             raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
         seen_price_ids.add(price_id)
     return value
@@ -82,7 +107,10 @@ async def _effective_plans(request: Request, *, include_inactive: bool = False) 
                 value = json.loads(value)
             except (TypeError, json.JSONDecodeError):
                 raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid") from None
-        if not isinstance(value, dict) or not isinstance(item.get("price_id"), str) or not item["price_id"].startswith("pri_"):
+        if (not isinstance(value, dict)
+                or (value and not _valid_entitlements(value))
+                or not isinstance(item.get("price_id"), str)
+                or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", item["price_id"])):
             raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
         item["entitlements"] = value
         result[item["slug"]] = item
@@ -117,7 +145,11 @@ async def list_public_plans(request: Request):
             "display_price": display_price[:80] if isinstance(display_price, str) else None,
             "currency": currency[:8] if isinstance(currency, str) else None,
             "billing_interval": interval[:40] if isinstance(interval, str) else None,
-            "checkout_available": bool(settings.paddle_api_key and settings.paddle_webhook_secret) and (settings.paddle_environment != "production" or settings.paddle_live_checkout_enabled),
+            "checkout_available": (
+                _valid_entitlements(plan.get("entitlements"))
+                and bool(settings.paddle_api_key and settings.paddle_webhook_secret)
+                and (settings.paddle_environment != "production" or settings.paddle_live_checkout_enabled)
+            ),
         })
     return {"items": items, "configured": bool(items)}
 
@@ -142,11 +174,8 @@ async def create_checkout(body: CheckoutRequest, request: Request):
     plan = (await _effective_plans(request)).get(body.plan_id)
     if plan is None:
         raise HTTPException(status_code=422, detail="unknown_billing_plan")
-    # Never accept payment for a plan that cannot grant any product capability.
-    # This applies to Sandbox too: sandbox subscriptions exercise the same entitlement
-    # snapshot path and empty entitlements would lock out the paying workspace.
-    entitlements = plan.get("entitlements")
-    if not isinstance(entitlements, dict) or not entitlements:
+
+    if not _valid_entitlements(plan.get("entitlements")):
         raise HTTPException(status_code=503, detail="billing_plan_entitlements_not_configured")
 
     payload = {
@@ -307,6 +336,8 @@ async def paddle_webhook(request: Request):
         matched_slug, plan = _resolve_subscription_plan(custom_data, price_ids, plans)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    if not _valid_entitlements(plan.get("entitlements")):
+        raise HTTPException(status_code=422, detail="subscription_plan_entitlements_invalid")
     provider_subscription_id = data.get("id")
     provider_event_id = payload.get("event_id")
     if (not isinstance(provider_subscription_id, str) or not provider_subscription_id.strip()
