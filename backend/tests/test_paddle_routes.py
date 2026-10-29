@@ -164,7 +164,12 @@ def test_paddle_public_plans_never_expose_provider_price_ids_or_entitlements(mon
                 "display_price": "$19",
                 "currency": "USD",
                 "billing_interval": "month",
-                "entitlements": {"email_outreach": {"enabled": True, "monthly_limit": 100}},
+                "entitlements": {
+                    "ai_draft_generations": {"enabled": True, "monthly_limit": 250},
+                    "email_sends": {"enabled": True, "monthly_limit": 1000},
+                    "website_audits": {"enabled": True, "monthly_limit": 25},
+                    "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+                },
             }
         }),
     )
