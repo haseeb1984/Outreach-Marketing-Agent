@@ -47,3 +47,23 @@ def test_public_search_result_urls_reject_non_public_or_unsafe_shapes():
         "javascript:alert(1)",
     ):
         assert _public_https_url(url) is None
+
+
+
+def test_research_save_requires_explicit_human_review_and_rejects_extra_fields():
+    import pytest
+    from pydantic import ValidationError
+    from app.api.research_routes import ResearchProspectSaveInput
+
+    payload = {
+        "workspace_id": "workspace-a",
+        "name": "Example Prospect",
+        "company": "Example Company",
+        "website_url": "https://example.com",
+        "evidence_url": "https://example.com/services",
+        "fit_reason": "Reviewed source confirms relevant service.",
+        "human_reviewed": True,
+    }
+    assert ResearchProspectSaveInput(**payload).human_reviewed is True
+    with pytest.raises(ValidationError):
+        ResearchProspectSaveInput(**{**payload, "human_reviewed": False, "send_now": True})
