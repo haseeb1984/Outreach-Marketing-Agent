@@ -39,6 +39,10 @@ def test_public_search_result_urls_reject_non_public_or_unsafe_shapes():
         "https://localhost/admin",
         "https://app.internal",
         "https://127.0.0.1/private",
+        "https://[::1]/private",
+        "https://[fe80::1]/private",
+        "https://192.168.1.1/private",
+        "https://2130706433/private",
         "https://example.com:8443/path",
         "javascript:alert(1)",
     ):
