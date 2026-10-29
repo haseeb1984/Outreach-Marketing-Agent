@@ -197,3 +197,48 @@ def test_invitation_revocation_locks_and_rechecks_actor_membership(monkeypatch):
     update_index = next(i for i, call in enumerate(connection.calls) if call[0] == "execute")
     assert membership_index < update_index
     assert "workspace_invitations" in connection.calls[update_index][1]
+
+
+def test_invitation_revocation_rejects_actor_after_role_downgrade(monkeypatch):
+    from app.api import workspace_invitation_routes
+
+    class _RevokedActorConnection:
+        def __init__(self):
+            self.calls = []
+
+        def transaction(self):
+            return _Transaction()
+
+        async def fetchval(self, query, *args):
+            self.calls.append(("fetchval", query, args))
+            return "member"
+
+        async def execute(self, query, *args):
+            self.calls.append(("execute", query, args))
+            return "UPDATE 1"
+
+    async def authenticate(request):
+        return None, None, {
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "email": "member@example.test",
+        }
+
+    async def authorize(request, workspace_id, session):
+        # Simulate stale authorization cache: DB recheck must still deny the write.
+        return None
+
+    monkeypatch.setattr(workspace_invitation_routes, "_authenticated", authenticate)
+    monkeypatch.setattr(workspace_invitation_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(workspace_invitation_routes, "_authorize_admin", authorize)
+    connection = _RevokedActorConnection()
+
+    with TestClient(app) as client:
+        app.state.db_pool = _Pool(connection)
+        response = client.delete(
+            "/api/v1/workspaces/invitations/00000000-0000-0000-0000-000000000002?workspace_id=workspace-test",
+            headers={"Origin": "https://app.example.test"},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "workspace_not_found"
+    assert not any(call[0] == "execute" and "workspace_invitations" in call[1] for call in connection.calls)
