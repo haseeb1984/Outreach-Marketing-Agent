@@ -300,9 +300,17 @@ async def paddle_webhook(request: Request):
     secret = settings.paddle_webhook_secret
     if not secret:
         raise HTTPException(status_code=503, detail="paddle_webhook_not_configured")
-    raw_body = await request.body()
-    if len(raw_body) > 1_000_000:
-        raise HTTPException(status_code=413, detail="webhook_payload_too_large")
+    # Stream with a hard cap instead of request.body(), which buffers the entire
+    # attacker-controlled payload before the size check can run.
+    max_payload_bytes = 1_000_000
+    chunks: list[bytes] = []
+    body_size = 0
+    async for chunk in request.stream():
+        body_size += len(chunk)
+        if body_size > max_payload_bytes:
+            raise HTTPException(status_code=413, detail="webhook_payload_too_large")
+        chunks.append(chunk)
+    raw_body = b"".join(chunks)
     if not _verify_signature(raw_body, request.headers.get("Paddle-Signature"), secret):
         raise HTTPException(status_code=401, detail="invalid_paddle_signature")
     try:
