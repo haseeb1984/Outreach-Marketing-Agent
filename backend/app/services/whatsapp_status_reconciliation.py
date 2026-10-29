@@ -56,6 +56,19 @@ async def reconcile_whatsapp_delivery_statuses(
                        WHERE d.workspace_id=e.workspace_id
                          AND d.account_id=e.account_id
                          AND d.provider_message_id=e.provider_message_id
+                         AND (
+                           (e.status='sent' AND d.status IN ('processing','uncertain','failed'))
+                           OR (e.status='delivered' AND d.status IN ('processing','uncertain','sent','failed'))
+                           OR (e.status='read' AND d.status IN ('processing','uncertain','sent','delivered','failed'))
+                           OR (e.status='failed' AND d.status IN ('processing','uncertain','sent')
+                               AND NOT EXISTS (
+                                 SELECT 1 FROM whatsapp_delivery_status_events positive
+                                 WHERE positive.workspace_id=e.workspace_id
+                                   AND positive.account_id=e.account_id
+                                   AND positive.provider_message_id=e.provider_message_id
+                                   AND positive.status IN ('delivered','read')
+                               ))
+                         )
                      )
                    ORDER BY e.received_at DESC, e.id DESC
                    LIMIT $1
@@ -92,17 +105,6 @@ async def reconcile_whatsapp_delivery_statuses(
                            AND newer.account_id=l.account_id
                            AND newer.provider_message_id=l.provider_message_id
                            AND newer.status IN ('delivered','read')
-                           AND (newer.provider_timestamp > l.provider_timestamp
-                                OR (newer.provider_timestamp = l.provider_timestamp
-                                    AND newer.received_at > (
-                                      SELECT e2.received_at FROM whatsapp_delivery_status_events e2
-                                      WHERE e2.workspace_id=l.workspace_id
-                                        AND e2.account_id=l.account_id
-                                        AND e2.provider_message_id=l.provider_message_id
-                                        AND e2.status=l.status
-                                      ORDER BY e2.provider_timestamp DESC NULLS LAST,
-                                               e2.received_at DESC, e2.id DESC LIMIT 1
-                                    )))
                        ))
                  )
                RETURNING d.id""",
