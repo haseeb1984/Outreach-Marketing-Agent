@@ -47,6 +47,7 @@ def test_provider_status_requires_auth_and_never_returns_secrets(monkeypatch):
     monkeypatch.setattr(config.settings, "smtp_password", "never-return-this")
     monkeypatch.setattr(config.settings, "smtp_from_email", "noreply@example.test")
     monkeypatch.setattr(config.settings, "smtp_starttls", True)
+    monkeypatch.setattr(config.settings, "smtp_port", 587)
 
     with _client(monkeypatch) as client:
         response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
@@ -102,3 +103,23 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
     assert accepted.json()["email_sent"] is False
     assert "no email was sent" in accepted.json()["message"].lower()
     assert calls == ["tested"]
+
+
+
+def test_provider_status_marks_nonstandard_smtp_port_incomplete(monkeypatch):
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "smtp_host", "smtp.example.test")
+    monkeypatch.setattr(config.settings, "smtp_username", "mailer")
+    monkeypatch.setattr(config.settings, "smtp_password", "never-return-this")
+    monkeypatch.setattr(config.settings, "smtp_from_email", "noreply@example.test")
+    monkeypatch.setattr(config.settings, "smtp_starttls", True)
+    monkeypatch.setattr(config.settings, "smtp_port", 2525)
+
+    with _client(monkeypatch) as client:
+        response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["email"]["configuration_complete"] is False
+    assert "smtp_port_587_required" in payload["email"]["missing_fields"]
