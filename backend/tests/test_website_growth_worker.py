@@ -238,3 +238,41 @@ def test_worker_cancels_scan_when_lease_is_lost(monkeypatch):
     assert outcome == "lease_lost"
     assert queue.completed is None
     assert queue.failed is None
+
+
+def test_worker_marks_deterministic_payload_rejection_non_retryable():
+    queue = FakeQueue()
+    subscriptions = FakeSubscriptions()
+
+    outcome = asyncio.run(process_claimed_job(
+        queue=queue,
+        domain_store=object(),
+        job={"id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1", "workspace_id": "workspace-a", "payload": {"start_url": "http://example.com", "business_type": "Retail", "target_market": "Pakistan"}},
+        worker_id="worker-1",
+        subscription_store=subscriptions,
+    ))
+
+    assert outcome == "failed"
+    assert queue.failed["error_code"] == "invalid_start_url"
+    assert queue.failed["retry"] is False
+
+
+def test_worker_marks_scan_rejection_non_retryable():
+    queue = FakeQueue()
+    subscriptions = FakeSubscriptions()
+
+    async def runner(url, **kwargs):
+        raise ValueError("verified_domain_not_authorized")
+
+    outcome = asyncio.run(process_claimed_job(
+        queue=queue,
+        domain_store=object(),
+        job={"id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1", "workspace_id": "workspace-a", "payload": {"start_url": "https://example.com", "business_type": "Retail", "target_market": "Pakistan"}},
+        worker_id="worker-1",
+        scan_runner=runner,
+        subscription_store=subscriptions,
+    ))
+
+    assert outcome == "failed"
+    assert queue.failed["error_code"] == "website_scan_rejected"
+    assert queue.failed["retry"] is False

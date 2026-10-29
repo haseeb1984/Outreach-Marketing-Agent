@@ -119,7 +119,7 @@ async def process_claimed_job(
         except ValueError as exc:
             # These codes are authored by validate_scan_payload, never external exception text.
             return await queue.fail(
-                job_id=job["id"], worker_id=worker_id, error_code=str(exc)[:100]
+                job_id=job["id"], worker_id=worker_id, error_code=str(exc)[:100], retry=False
             )
         if subscription_store is None:
             return await queue.fail(
@@ -149,7 +149,7 @@ async def process_claimed_job(
                 "quota_exhausted", "subscription_missing", "reservation_period_expired",
                 "reservation_not_active", "reservation_feature_mismatch", "reservation_invalid",
             } else "website_growth_entitlement_denied"
-            return await queue.fail(job_id=job["id"], worker_id=worker_id, error_code=code)
+            return await queue.fail(job_id=job["id"], worker_id=worker_id, error_code=code, retry=False)
         scan_task = asyncio.create_task(scan_runner(
             payload["start_url"],
             workspace_id=str(job["workspace_id"]),
@@ -180,7 +180,7 @@ async def process_claimed_job(
             except ValueError:
                 # Avoid persisting potentially sensitive exception details in job metadata.
                 return await queue.fail(
-                    job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
+                    job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected", retry=False
                 )
             except Exception:
                 logger.warning("website growth job failed; recording a generic failure code")
@@ -204,7 +204,7 @@ async def process_claimed_job(
             completed = await queue.complete(job_id=job["id"], worker_id=worker_id, result=report)
         except ValueError:
             return await queue.fail(
-                job_id=job["id"], worker_id=worker_id, error_code="website_scan_result_invalid"
+                job_id=job["id"], worker_id=worker_id, error_code="website_scan_result_invalid", retry=False
             )
         return "succeeded" if completed else "lease_lost"
     finally:
