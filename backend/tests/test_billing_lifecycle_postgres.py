@@ -118,6 +118,33 @@ async def _exercise_billing_lifecycle() -> None:
                 conflict.provider, conflict.event_id,
             ) == 0
 
+        # A subscription cannot silently migrate to a different provider customer.
+        customer_conflict = make_event(
+            "evt_customer_conflict_" + uuid4().hex,
+            NOW + timedelta(minutes=11),
+            provider_customer_id="cus_unrelated",
+        )
+        with pytest.raises(ValueError, match="billing_subscription_identity_conflict"):
+            await store.apply_verified_event(customer_conflict)
+        async with pool.acquire() as conn:
+            assert await conn.fetchval(
+                """SELECT provider_customer_id FROM workspace_subscriptions WHERE workspace_id=$1""",
+                workspace_id,
+            ) == "cus_integration"
+
+        # Missing customer IDs in later snapshots must not erase an established link.
+        no_customer = make_event(
+            "evt_no_customer_" + uuid4().hex,
+            NOW + timedelta(minutes=12),
+            provider_customer_id=None,
+        )
+        assert await store.apply_verified_event(no_customer) == {"outcome": "applied"}
+        async with pool.acquire() as conn:
+            assert await conn.fetchval(
+                """SELECT provider_customer_id FROM workspace_subscriptions WHERE workspace_id=$1""",
+                workspace_id,
+            ) == "cus_integration"
+
         # Two first-time subscriptions racing for the same workspace must never be
         # silently reported as stale. Exactly one identity wins; the other transaction
         # rolls back its event-ledger row and reports an explicit identity conflict.
