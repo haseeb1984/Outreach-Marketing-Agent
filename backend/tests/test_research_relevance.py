@@ -304,9 +304,9 @@ def test_search_route_consumes_reservation_on_unexpected_provider_processing_err
     from app.api.research_routes import search_public_prospects
 
     source = inspect.getsource(search_public_prospects)
-    generic_handlers = [index for index in range(len(source)) if source.startswith("except Exception:", index)]
-    assert len(generic_handlers) >= 1
-    handler = source[generic_handlers[-1]:]
+    provider_call = source.index("async with httpx.AsyncClient")
+    outer_handler = source.index("except Exception:", provider_call)
+    handler = source[outer_handler:]
     assert 'outcome="consumed"' in handler
     assert 'detail="search_provider_unavailable"' in handler
     assert "reservation_id=reservation_id" in handler
