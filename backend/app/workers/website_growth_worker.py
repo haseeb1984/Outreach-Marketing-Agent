@@ -150,29 +150,49 @@ async def process_claimed_job(
                 "reservation_not_active", "reservation_feature_mismatch", "reservation_invalid",
             } else "website_growth_entitlement_denied"
             return await queue.fail(job_id=job["id"], worker_id=worker_id, error_code=code)
+        scan_task = asyncio.create_task(scan_runner(
+            payload["start_url"],
+            workspace_id=str(job["workspace_id"]),
+            domain_store=domain_store,
+            business_type=payload["business_type"],
+            target_market=payload["target_market"],
+            target_queries=payload["target_queries"],
+            max_pages=payload["max_pages"],
+            max_depth=payload["max_depth"],
+        ))
+        lost_task = asyncio.create_task(lost.wait())
         try:
-            report = await scan_runner(
-                payload["start_url"],
-                workspace_id=str(job["workspace_id"]),
-                domain_store=domain_store,
-                business_type=payload["business_type"],
-                target_market=payload["target_market"],
-                target_queries=payload["target_queries"],
-                max_pages=payload["max_pages"],
-                max_depth=payload["max_depth"],
+            done, _ = await asyncio.wait(
+                {scan_task, lost_task}, return_when=asyncio.FIRST_COMPLETED
             )
-        except ValueError:
-            # Avoid persisting potentially sensitive exception details in job metadata.
-            return await queue.fail(
-                job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
-            )
-        except Exception:
-            logger.warning("website growth job failed; recording a generic failure code")
-            return await queue.fail(
-                job_id=job["id"], worker_id=worker_id, error_code="website_growth_scan_failed"
-            )
-        if lost.is_set():
-            return "lease_lost"
+            # A worker whose lease has been fenced must stop the scan immediately;
+            # otherwise a stale worker can keep consuming resources and persist a
+            # report even though it no longer owns the durable job.
+            if lost_task in done and lost.is_set():
+                scan_task.cancel()
+                try:
+                    await scan_task
+                except asyncio.CancelledError:
+                    pass
+                return "lease_lost"
+            try:
+                report = await scan_task
+            except ValueError:
+                # Avoid persisting potentially sensitive exception details in job metadata.
+                return await queue.fail(
+                    job_id=job["id"], worker_id=worker_id, error_code="website_scan_rejected"
+                )
+            except Exception:
+                logger.warning("website growth job failed; recording a generic failure code")
+                return await queue.fail(
+                    job_id=job["id"], worker_id=worker_id, error_code="website_growth_scan_failed"
+                )
+        finally:
+            lost_task.cancel()
+            try:
+                await lost_task
+            except asyncio.CancelledError:
+                pass
         try:
             completed = await queue.complete(job_id=job["id"], worker_id=worker_id, result=report)
         except ValueError:

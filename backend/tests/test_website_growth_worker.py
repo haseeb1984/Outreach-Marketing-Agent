@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+import app.workers.website_growth_worker as worker_module
 from app.workers.website_growth_worker import process_claimed_job, validate_scan_payload
 
 
@@ -191,3 +192,49 @@ def test_process_claimed_job_fails_closed_when_quota_reservation_is_invalid():
     assert outcome == "failed"
     assert queue.failed["error_code"] == "website_growth_quota_unavailable"
     assert called is False
+
+
+
+def test_worker_cancels_scan_when_lease_is_lost(monkeypatch):
+    monkeypatch.setattr(worker_module, "HEARTBEAT_SECONDS", 0.01)
+
+    class LostLeaseQueue(FakeQueue):
+        async def extend_lease(self, **kwargs):
+            return False
+
+    queue = LostLeaseQueue()
+    subscriptions = FakeSubscriptions()
+    scan_started = asyncio.Event()
+    scan_cancelled = asyncio.Event()
+
+    async def runner(url, **kwargs):
+        scan_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            scan_cancelled.set()
+            raise
+
+    outcome = asyncio.run(process_claimed_job(
+        queue=queue,
+        domain_store=object(),
+        job={
+            "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            "workspace_id": "trusted-db-workspace",
+            "payload": {
+                "start_url": "https://example.com",
+                "business_type": "Retail",
+                "target_market": "Pakistan",
+                "usage_reservation_id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            },
+        },
+        worker_id="worker-stale",
+        scan_runner=runner,
+        subscription_store=subscriptions,
+    ))
+
+    assert scan_started.is_set()
+    assert scan_cancelled.is_set()
+    assert outcome == "lease_lost"
+    assert queue.completed is None
+    assert queue.failed is None
