@@ -988,7 +988,10 @@ export default function DashboardPage() {
         method: "POST", body: JSON.stringify({ workspace_id: workspaceId, plan_id: selectedPlan }),
       });
       const checkoutUrl = new URL(result.checkout_url);
-      if (checkoutUrl.protocol !== "https:") throw new Error("The billing provider returned an unsafe checkout URL.");
+      const allowedCheckoutHosts = new Set(["sandbox-checkout.paddle.com", "checkout.paddle.com"]);
+      if (checkoutUrl.protocol !== "https:" || checkoutUrl.username || checkoutUrl.password || checkoutUrl.port || !allowedCheckoutHosts.has(checkoutUrl.hostname)) {
+        throw new Error("The billing provider returned an unsafe checkout URL.");
+      }
       window.location.assign(checkoutUrl.toString());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checkout could not be started.");
@@ -1005,7 +1008,8 @@ export default function DashboardPage() {
         { method: "POST", body: "{}" },
       );
       const portalUrl = new URL(result.portal_url);
-      if (portalUrl.protocol !== "https:" || !(portalUrl.hostname.endsWith(".paddle.com") || portalUrl.hostname.endsWith(".paddle.io"))) {
+      const allowedPortalHosts = new Set(["customer-portal.sandbox.paddle.com", "customer-portal.paddle.com"]);
+      if (portalUrl.protocol !== "https:" || portalUrl.username || portalUrl.password || portalUrl.port || !allowedPortalHosts.has(portalUrl.hostname)) {
         throw new Error("The billing provider returned an unsafe portal URL.");
       }
       window.location.assign(portalUrl.toString());
