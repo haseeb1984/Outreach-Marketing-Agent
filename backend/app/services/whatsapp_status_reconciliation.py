@@ -42,10 +42,10 @@ async def reconcile_whatsapp_delivery_statuses(
                    SELECT e.workspace_id, e.account_id, e.provider_message_id,
                           e.status, e.provider_timestamp, e.received_at,
                           CASE e.status
+                            WHEN 'failed' THEN 1
                             WHEN 'sent' THEN 1
                             WHEN 'delivered' THEN 2
                             WHEN 'read' THEN 3
-                            WHEN 'failed' THEN 0
                             ELSE -1
                           END AS status_rank
                    FROM whatsapp_delivery_status_events e
@@ -82,9 +82,9 @@ async def reconcile_whatsapp_delivery_statuses(
                  AND d.account_id=l.account_id
                  AND d.provider_message_id=l.provider_message_id
                  AND (
-                   (l.status='sent' AND d.status IN ('processing','uncertain','sent'))
-                   OR (l.status='delivered' AND d.status IN ('processing','uncertain','sent','delivered'))
-                   OR (l.status='read' AND d.status IN ('processing','uncertain','sent','delivered','read'))
+                   (l.status='sent' AND d.status IN ('processing','uncertain','sent','failed'))
+                   OR (l.status='delivered' AND d.status IN ('processing','uncertain','sent','delivered','failed'))
+                   OR (l.status='read' AND d.status IN ('processing','uncertain','sent','delivered','read','failed'))
                    OR (l.status='failed' AND d.status IN ('processing','uncertain','sent','failed')
                        AND NOT EXISTS (
                          SELECT 1 FROM whatsapp_delivery_status_events newer

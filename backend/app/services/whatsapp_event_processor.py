@@ -311,15 +311,15 @@ async def process_pending_whatsapp_events(
                                                WHEN 'processing' THEN 0
                                                WHEN 'uncertain' THEN 0
                                                WHEN 'sent' THEN 1
+                                               WHEN 'failed' THEN 1
                                                WHEN 'delivered' THEN 2
                                                WHEN 'read' THEN 3
-                                               WHEN 'failed' THEN 4
                                                ELSE 5 END
                                              <= CASE $3
                                                WHEN 'sent' THEN 1
+                                               WHEN 'failed' THEN 1
                                                WHEN 'delivered' THEN 2
                                                WHEN 'read' THEN 3
-                                               WHEN 'failed' THEN 4
                                                ELSE 5 END""",
                                         workspace_id, account_id, target_status,
                                         _timestamp(status.get("timestamp")), provider_id,
