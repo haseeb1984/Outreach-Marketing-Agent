@@ -21,6 +21,8 @@ class _Connection:
 
     async def fetchrow(self, query, *args):
         self.calls.append(("fetchrow", query, args))
+        if "workspace_memberships" in query:
+            return {"role": "owner", "status": "active"}
         return {"id": args[0], "name": args[1], "created_at": "2026-10-28T00:00:00Z"}
 
     async def execute(self, query, *args):
@@ -66,8 +68,12 @@ def test_workspace_settings_update_audits_change(monkeypatch):
     result = asyncio.run(workspace_settings_routes.update_workspace_settings(payload, request))
 
     assert result["name"] == "Updated workspace"
-    assert len(connection.calls) == 2
+    assert len(connection.calls) == 3
     assert connection.calls[0][0] == "fetchrow"
-    assert connection.calls[1][0] == "execute"
-    assert "workspace.settings.updated" in connection.calls[1][1]
-    assert '"changed_fields": ["name"]' in connection.calls[1][2][2]
+    assert "workspace_memberships" in connection.calls[0][1]
+    assert "FOR UPDATE" in connection.calls[0][1]
+    assert connection.calls[1][0] == "fetchrow"
+    assert "UPDATE workspaces SET name" in connection.calls[1][1]
+    assert connection.calls[2][0] == "execute"
+    assert "workspace.settings.updated" in connection.calls[2][1]
+    assert '"changed_fields": ["name"]' in connection.calls[2][2][2]
