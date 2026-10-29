@@ -133,20 +133,43 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
         "Paddle plan catalog has valid JSON, unique price IDs, and entitlement objects" if plans_ok
         else "PADDLE_PLANS_JSON must be a non-empty JSON object with valid plan slugs, unique pri_ price IDs, and entitlements objects")
 
-    # Empty entitlements are acceptable for sandbox wiring, but never for live checkout.
-    live_entitlements_ok = True
-    if live_checkout:
+    # Validate the entitlement contract for every configured catalog, including sandbox.
+    # This prevents a successful sandbox purchase from persisting a subscription that grants
+    # no quota-controlled features, and catches malformed quota values before release.
+    required_features = {
+        "ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends",
+    }
+    catalog_entitlements_ok = True
+    if plans_raw:
         try:
-            live_catalog = json.loads(plans_raw)
-            live_entitlements_ok = bool(live_catalog) and all(
-                isinstance(plan, dict) and bool(plan.get("entitlements"))
-                for plan in live_catalog.values()
+            catalog_for_entitlements = json.loads(plans_raw)
+            catalog_entitlements_ok = bool(catalog_for_entitlements) and all(
+                isinstance(plan, dict)
+                and isinstance(plan.get("entitlements"), dict)
+                and required_features.issubset(plan["entitlements"])
+                and all(
+                    isinstance(policy, dict)
+                    and isinstance(policy.get("enabled"), bool)
+                    and "monthly_limit" in policy
+                    and (
+                        policy["monthly_limit"] is None
+                        or (
+                            isinstance(policy["monthly_limit"], int)
+                            and not isinstance(policy["monthly_limit"], bool)
+                            and policy["monthly_limit"] >= 0
+                        )
+                    )
+                    for policy in plan["entitlements"].values()
+                    if isinstance(policy, dict)
+                )
+                and all(isinstance(policy, dict) for policy in plan["entitlements"].values())
+                for plan in catalog_for_entitlements.values()
             )
         except (TypeError, json.JSONDecodeError):
-            live_entitlements_ok = False
-    add("paddle_live_entitlements", live_entitlements_ok,
-        "every live plan grants explicit server-side entitlements" if live_entitlements_ok
-        else "live checkout requires non-empty server-side entitlements for every plan")
+            catalog_entitlements_ok = False
+    add("paddle_live_entitlements", catalog_entitlements_ok,
+        "every configured plan defines valid quotas for all protected features" if catalog_entitlements_ok
+        else "every configured plan (sandbox included) must define ai_draft_generations, email_sends, website_audits, and whatsapp_sends with enabled:boolean and monthly_limit: non-negative integer or null")
 
     meta_fields = ("META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_APP_SECRET",
                    "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID",

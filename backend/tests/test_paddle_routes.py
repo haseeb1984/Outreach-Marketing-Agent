@@ -164,7 +164,12 @@ def test_paddle_public_plans_never_expose_provider_price_ids_or_entitlements(mon
                 "display_price": "$19",
                 "currency": "USD",
                 "billing_interval": "month",
-                "entitlements": {"email_outreach": {"enabled": True, "monthly_limit": 100}},
+                "entitlements": {
+                    "ai_draft_generations": {"enabled": True, "monthly_limit": 250},
+                    "email_sends": {"enabled": True, "monthly_limit": 1000},
+                    "website_audits": {"enabled": True, "monthly_limit": 25},
+                    "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+                },
             }
         }),
     )
@@ -230,3 +235,21 @@ def test_checkout_rejects_plan_with_empty_entitlements_before_provider_call(monk
         )
     assert response.status_code == 503
     assert response.json()["detail"] == "billing_plan_entitlements_not_configured"
+
+def test_entitlement_validator_rejects_malformed_or_missing_required_policies():
+    from app.api.paddle_routes import _valid_entitlements
+
+    assert not _valid_entitlements({})
+    assert not _valid_entitlements({"email_sends": {"enabled": True, "monthly_limit": 10}})
+    assert not _valid_entitlements({
+        "ai_draft_generations": {"enabled": True, "monthly_limit": True},
+        "email_sends": {"enabled": True, "monthly_limit": 10},
+        "website_audits": {"enabled": True, "monthly_limit": 10},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+    })
+    assert _valid_entitlements({
+        "ai_draft_generations": {"enabled": True, "monthly_limit": 10},
+        "email_sends": {"enabled": True, "monthly_limit": 10},
+        "website_audits": {"enabled": True, "monthly_limit": None},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+    })
