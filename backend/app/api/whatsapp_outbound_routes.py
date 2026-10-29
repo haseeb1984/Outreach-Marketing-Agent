@@ -157,12 +157,9 @@ async def queue_whatsapp_draft(
             )
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except Exception:
-        if reservation.get("reason") == "reserved":
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id,
-                reservation_id=reservation["reservation_id"],
-                outcome="released",
-            )
+        # A database connection can fail after the insert commits but before its
+        # result reaches this request. Keep quota reserved in that ambiguous case;
+        # retry can replay the queue row and reconciliation handles true orphans.
         raise HTTPException(status_code=503, detail="whatsapp_queue_unavailable") from None
 
     return {
