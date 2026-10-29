@@ -76,7 +76,11 @@ class WorkspaceGrowthScheduleRunner:
                     payload = json.loads(payload)
                 if not isinstance(payload, dict):
                     raise ValueError("schedule_payload_invalid")
-                payload = {**payload, "requested_by": str(schedule["created_by"])}
+                payload = {
+                    **payload,
+                    "requested_by": str(schedule["created_by"]),
+                    "usage_reservation_id": str(reservation["reservation_id"]),
+                }
                 job = await self._queue.enqueue(
                     workspace_id=str(schedule["workspace_id"]),
                     job_type="website_growth_scan",
