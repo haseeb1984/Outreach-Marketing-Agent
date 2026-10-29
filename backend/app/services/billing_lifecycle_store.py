@@ -102,7 +102,7 @@ class BillingLifecycleStore:
                     # that SELECT; re-check after ON CONFLICT has waited for its winner.
                     # Without this second check, that identity conflict was mislabeled stale.
                     current_after_conflict = await conn.fetchrow(
-                        """SELECT provider,provider_subscription_id
+                        """SELECT provider,provider_subscription_id,provider_customer_id
                            FROM workspace_subscriptions WHERE workspace_id=$1 FOR UPDATE""",
                         event.workspace_id,
                     )
