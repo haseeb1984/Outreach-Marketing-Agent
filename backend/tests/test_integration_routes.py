@@ -105,14 +105,16 @@ def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
 
 
 def test_provider_status_marks_nonstandard_smtp_port_incomplete(monkeypatch):
-    from app.core import config
+    from app.api import integration_routes
 
-    monkeypatch.setattr(config.settings, "smtp_host", "smtp.example.test")
-    monkeypatch.setattr(config.settings, "smtp_username", "mailer")
-    monkeypatch.setattr(config.settings, "smtp_password", "never-return-this")
-    monkeypatch.setattr(config.settings, "smtp_from_email", "noreply@example.test")
-    monkeypatch.setattr(config.settings, "smtp_starttls", True)
-    monkeypatch.setattr(config.settings, "smtp_port", 2525)
+    # Patch the exact settings object consumed by the endpoint so this regression
+    # test cannot accidentally pass/fail based on a separately imported config alias.
+    monkeypatch.setattr(integration_routes.settings, "smtp_host", "smtp.example.test")
+    monkeypatch.setattr(integration_routes.settings, "smtp_username", "mailer")
+    monkeypatch.setattr(integration_routes.settings, "smtp_password", "never-return-this")
+    monkeypatch.setattr(integration_routes.settings, "smtp_from_email", "noreply@example.test")
+    monkeypatch.setattr(integration_routes.settings, "smtp_starttls", True)
+    monkeypatch.setattr(integration_routes.settings, "smtp_port", 2525)
 
     with _client(monkeypatch) as client:
         response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
