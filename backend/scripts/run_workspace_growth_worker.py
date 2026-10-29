@@ -123,12 +123,14 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
         async with pool.acquire() as conn:
             saved = await conn.fetchrow(
                 """INSERT INTO website_audit_reports
-                   (workspace_id,start_url,status,report,requested_by)
-                   VALUES ($1,$2,$3,$4::jsonb,$5::uuid)
+                   (workspace_id,start_url,status,report,requested_by,job_id)
+                   VALUES ($1,$2,$3,$4::jsonb,$5::uuid,$6::uuid)
+                   ON CONFLICT (job_id) WHERE job_id IS NOT NULL
+                   DO UPDATE SET job_id=EXCLUDED.job_id
                    RETURNING id,created_at""",
                 workspace_id, report["start_url"], status,
                 json.dumps(report, ensure_ascii=False, allow_nan=False),
-                payload["requested_by"],
+                payload["requested_by"], job["id"],
             )
         completed = await queue.complete(
             job_id=job["id"], worker_id=worker_id,
@@ -136,8 +138,8 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
                     "created_at": saved["created_at"].isoformat()},
         )
         if not completed:
-            # A lease lost after persistence is safe: the unique job/report link is not
-            # assumed; a retry may create another report but cannot send messages.
+            # The report is keyed by job_id, so a retry after lease loss reuses the
+            # already-persisted report instead of creating a duplicate audit record.
             raise RuntimeError("job_lease_lost_after_persist")
         return True
     except GrowthJobEntitlementDenied:
