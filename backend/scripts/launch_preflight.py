@@ -137,7 +137,7 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     # This prevents a successful sandbox purchase from persisting a subscription that grants
     # no quota-controlled features, and catches malformed quota values before release.
     required_features = {
-        "ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends",
+        "ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends", "prospect_research",
     }
     catalog_entitlements_ok = True
     if plans_raw:
@@ -169,7 +169,7 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
             catalog_entitlements_ok = False
     add("paddle_live_entitlements", catalog_entitlements_ok,
         "every configured plan defines valid quotas for all protected features" if catalog_entitlements_ok
-        else "every configured plan (sandbox included) must define ai_draft_generations, email_sends, website_audits, and whatsapp_sends with enabled:boolean and monthly_limit: non-negative integer or null")
+        else "every configured plan (sandbox included) must define ai_draft_generations, email_sends, website_audits, whatsapp_sends, and prospect_research with enabled:boolean and monthly_limit: non-negative integer or null")
 
     meta_fields = ("META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_APP_SECRET",
                    "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID",
