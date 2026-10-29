@@ -30,9 +30,25 @@ def validate_scan_payload(payload: Any) -> dict[str, Any]:
     """Normalize the intentionally small, bounded schema accepted by the worker."""
     if not isinstance(payload, dict):
         raise ValueError("payload_must_be_object")
-    allowed = {"start_url", "business_type", "target_market", "target_queries", "max_pages", "max_depth"}
+    allowed = {
+        "start_url", "business_type", "target_market", "target_queries", "max_pages", "max_depth",
+        # The enqueue API attaches trusted operational metadata alongside the scan input.
+        # Validate its shape, then deliberately omit it from the runner input below.
+        "requested_by", "usage_reservation_id",
+    }
     if set(payload) - allowed:
         raise ValueError("payload_has_unsupported_fields")
+    if "requested_by" in payload and (
+        not isinstance(payload["requested_by"], str) or not payload["requested_by"].strip()
+        or len(payload["requested_by"]) > 200
+    ):
+        raise ValueError("invalid_requested_by")
+    if "usage_reservation_id" in payload:
+        from uuid import UUID
+        try:
+            UUID(str(payload["usage_reservation_id"]))
+        except (TypeError, ValueError, AttributeError):
+            raise ValueError("invalid_usage_reservation_id") from None
     start_url = payload.get("start_url")
     if not isinstance(start_url, str) or len(start_url) > 2048:
         raise ValueError("invalid_start_url")
