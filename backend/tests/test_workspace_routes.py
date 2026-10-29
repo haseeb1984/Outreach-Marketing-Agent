@@ -149,3 +149,51 @@ def test_workspace_creation_rejects_missing_account_row(monkeypatch):
     assert response.status_code == 401
     assert response.json()["detail"] == "account_unavailable"
     assert not any(call[0] == "execute" and "INSERT INTO workspaces" in call[1] for call in connection.calls)
+
+
+def test_invitation_revocation_locks_and_rechecks_actor_membership(monkeypatch):
+    from app.api import workspace_invitation_routes
+
+    class _RevokeConnection:
+        def __init__(self):
+            self.calls = []
+
+        def transaction(self):
+            return _Transaction()
+
+        async def fetchval(self, query, *args):
+            self.calls.append(("fetchval", query, args))
+            assert "FOR UPDATE" in query
+            assert "status='active'" in query
+            return "owner"
+
+        async def execute(self, query, *args):
+            self.calls.append(("execute", query, args))
+            return "UPDATE 1"
+
+    async def authenticate(request):
+        return None, None, {
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "email": "owner@example.test",
+        }
+
+    async def authorize(request, workspace_id, session):
+        return None
+
+    monkeypatch.setattr(workspace_invitation_routes, "_authenticated", authenticate)
+    monkeypatch.setattr(workspace_invitation_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(workspace_invitation_routes, "_authorize_admin", authorize)
+    connection = _RevokeConnection()
+
+    with TestClient(app) as client:
+        app.state.db_pool = _Pool(connection)
+        response = client.delete(
+            "/api/v1/workspaces/invitations/00000000-0000-0000-0000-000000000002?workspace_id=workspace-test",
+            headers={"Origin": "https://app.example.test"},
+        )
+
+    assert response.status_code == 200
+    membership_index = next(i for i, call in enumerate(connection.calls) if call[0] == "fetchval")
+    update_index = next(i for i, call in enumerate(connection.calls) if call[0] == "execute")
+    assert membership_index < update_index
+    assert "workspace_invitations" in connection.calls[update_index][1]
