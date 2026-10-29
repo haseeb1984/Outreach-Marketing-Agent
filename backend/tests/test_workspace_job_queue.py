@@ -222,3 +222,54 @@ def test_cancel_queued_job_releases_its_quota_reservation_in_same_transaction():
     assert connection.transaction_count == 1
     assert any("FOR UPDATE" in query for query, _ in connection.queries)
     assert any("status IN ('reserved','consumed')" in query for query, _ in connection.queries)
+
+
+class _TerminalFailureConnection:
+    def __init__(self, reservation_id):
+        self.reservation_id = reservation_id
+        self.queries = []
+
+    def transaction(self):
+        return _FakeTransaction()
+
+    async def fetchrow(self, query, *args):
+        self.queries.append((query, args))
+        if "SELECT attempt_count, max_attempts, workspace_id, payload" in query:
+            return {
+                "attempt_count": 3,
+                "max_attempts": 3,
+                "workspace_id": "workspace-a",
+                "payload": {"usage_reservation_id": self.reservation_id},
+            }
+        raise AssertionError(f"Unexpected query: {query}")
+
+    async def execute(self, query, *args):
+        self.queries.append((query, args))
+        if "UPDATE workspace_jobs SET status='failed'" in query:
+            return "UPDATE 1"
+        if "UPDATE feature_usage_reservations" in query:
+            return "UPDATE 1"
+        raise AssertionError(f"Unexpected query: {query}")
+
+
+def test_terminal_job_failure_releases_consumed_quota_reservation():
+    reservation_id = str(uuid4())
+    connection = _TerminalFailureConnection(reservation_id)
+    queue = WorkspaceJobQueue(_FakePool(connection))
+
+    result = asyncio.run(queue.fail(
+        job_id=uuid4(),
+        worker_id="worker-test",
+        error_code="growth_scan_failed",
+        retry=True,
+    ))
+
+    assert result == "failed"
+    assert any("UPDATE feature_usage_reservations" in query for query, _ in connection.queries)
+    release_query, release_args = next(
+        (query, args) for query, args in connection.queries
+        if "UPDATE feature_usage_reservations" in query
+    )
+    assert "status IN ('reserved','consumed')" in release_query
+    assert str(release_args[0]) == reservation_id
+    assert release_args[1] == "workspace-a"
