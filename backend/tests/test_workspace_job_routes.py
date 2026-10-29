@@ -256,3 +256,53 @@ def test_growth_job_idempotent_retry_returns_existing_job_after_quota_consumed(m
     assert result["id"] == existing_job_id
     assert result["status"] == "queued"
     assert subscriptions.finished == []
+
+
+def test_growth_job_preserves_reservation_when_enqueue_outcome_is_ambiguous(monkeypatch):
+    reservation_id = str(uuid4())
+    subscriptions = _SubscriptionStore({
+        "allowed": True,
+        "reason": "reserved",
+        "status": "reserved",
+        "reservation_id": reservation_id,
+    })
+    request = _request_with_state(
+        domain_authorization_store=_DomainStore(),
+        subscription_store=subscriptions,
+        db_pool=object(),
+    )
+
+    async def authenticated(_request):
+        return None, None, {"user_id": str(uuid4())}
+
+    async def authorize(*args, **kwargs):
+        return None
+
+    class _AmbiguousQueue:
+        def __init__(self, _pool):
+            pass
+
+        async def enqueue(self, **kwargs):
+            # Simulate a database commit followed by a lost response.
+            raise RuntimeError("connection lost after commit")
+
+    monkeypatch.setattr(workspace_job_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(workspace_job_routes, "_check_csrf", lambda *_args: None)
+    monkeypatch.setattr(workspace_job_routes, "_authorize", authorize)
+    monkeypatch.setattr(workspace_job_routes, "WorkspaceJobQueue", _AmbiguousQueue)
+
+    payload = WebsiteGrowthScanRequest(
+        workspace_id="workspace-a",
+        start_url="https://example.com/",
+        business_type="SaaS",
+        target_market="US",
+    )
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(workspace_job_routes.enqueue_website_growth_scan(
+            payload, request, idempotency_key="test-scan-ambiguous-001"
+        ))
+
+    assert error.value.status_code == 503
+    assert error.value.detail == "website_growth_job_unavailable"
+    # Releasing here could orphan a job that committed despite the lost response.
+    assert subscriptions.finished == []
