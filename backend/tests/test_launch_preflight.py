@@ -134,7 +134,7 @@ def test_preflight_accepts_complete_paddle_setup_for_live_checkout(tmp_path: Pat
         "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
         "PADDLE_API_KEY": "pdl_live_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": "{\"starter\":{\"price_id\":\"pri_starter\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":250},\"email_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":25},\"whatsapp_sends\":{\"enabled\":false,\"monthly_limit\":0}}}}",
+        "PADDLE_PLANS_JSON": "{\"starter\":{\"price_id\":\"pri_starter\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":250},\"email_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":25},\"whatsapp_sends\":{\"enabled\":false,\"monthly_limit\":0},\"prospect_research\":{\"enabled\":true,\"monthly_limit\":100}}}}",
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
@@ -167,7 +167,7 @@ def test_preflight_accepts_valid_unique_sandbox_plan_catalog(tmp_path: Path):
     env.update({
         "PADDLE_API_KEY": "pdl_sandbox_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": "{\"starter\":{\"price_id\":\"pri_starter\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":250},\"email_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":25},\"whatsapp_sends\":{\"enabled\":false,\"monthly_limit\":0}}},\"growth\":{\"price_id\":\"pri_growth\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":1000},\"email_sends\":{\"enabled\":true,\"monthly_limit\":5000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":100},\"whatsapp_sends\":{\"enabled\":true,\"monthly_limit\":1000}}},\"agency\":{\"price_id\":\"pri_agency\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":5000},\"email_sends\":{\"enabled\":true,\"monthly_limit\":25000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":500},\"whatsapp_sends\":{\"enabled\":true,\"monthly_limit\":10000}}}}",
+        "PADDLE_PLANS_JSON": "{\"starter\":{\"price_id\":\"pri_starter\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":250},\"email_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":25},\"whatsapp_sends\":{\"enabled\":false,\"monthly_limit\":0},\"prospect_research\":{\"enabled\":true,\"monthly_limit\":100}}},\"growth\":{\"price_id\":\"pri_growth\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":1000},\"email_sends\":{\"enabled\":true,\"monthly_limit\":5000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":100},\"whatsapp_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"prospect_research\":{\"enabled\":true,\"monthly_limit\":500}}},\"agency\":{\"price_id\":\"pri_agency\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":5000},\"email_sends\":{\"enabled\":true,\"monthly_limit\":25000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":500},\"whatsapp_sends\":{\"enabled\":true,\"monthly_limit\":10000},\"prospect_research\":{\"enabled\":true,\"monthly_limit\":2000}}}}",
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_credentials_and_catalog"] == "pass"
@@ -225,6 +225,7 @@ def _complete_policy(drafts=250, emails=1000, audits=25, whatsapp=0, whatsapp_en
         "email_sends": {"enabled": True, "monthly_limit": emails},
         "website_audits": {"enabled": True, "monthly_limit": audits},
         "whatsapp_sends": {"enabled": whatsapp_enabled, "monthly_limit": whatsapp},
+        "prospect_research": {"enabled": True, "monthly_limit": 100},
     }
 
 
