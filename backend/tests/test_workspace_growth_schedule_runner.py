@@ -149,3 +149,27 @@ def test_scheduler_requires_timezone_aware_clock():
 
     with pytest.raises(ValueError, match="timezone-aware"):
         asyncio.run(runner.enqueue_one_due(now=datetime(2026, 10, 28)))
+
+
+@pytest.mark.parametrize("bad_payload", ["not-json", "[]", "null"])
+def test_invalid_persisted_schedule_releases_reservation_and_skips_slot(bad_payload):
+    schedule_id = uuid4()
+    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+    now = slot + timedelta(hours=2)
+    schedule = _schedule(schedule_id, slot)
+    schedule["payload"] = bad_payload
+    connection = _Connection(schedule)
+    subscriptions = _Subscriptions()
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
+
+    result = asyncio.run(runner.enqueue_one_due(now=now))
+
+    assert result["outcome"] == "invalid_payload"
+    assert connection.queue_insert_args is None
+    assert connection.schedule_update_args[1] == slot + timedelta(hours=24)
+    assert connection.schedule_update_args[3] == "schedule_payload_invalid"
+    assert subscriptions.finished == [{
+        "workspace_id": "workspace-a",
+        "reservation_id": subscriptions.reservation["reservation_id"],
+        "outcome": "released",
+    }]

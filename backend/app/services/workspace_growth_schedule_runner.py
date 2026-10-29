@@ -72,10 +72,34 @@ class WorkspaceGrowthScheduleRunner:
                     }
 
                 payload = schedule["payload"]
-                if isinstance(payload, str):
-                    payload = json.loads(payload)
+                try:
+                    if isinstance(payload, str):
+                        payload = json.loads(payload)
+                except (TypeError, json.JSONDecodeError):
+                    payload = None
                 if not isinstance(payload, dict):
-                    raise ValueError("schedule_payload_invalid")
+                    # A corrupted persisted schedule must not hold quota forever or
+                    # monopolize every scheduler poll. Release only an unconsumed
+                    # reservation, record the deterministic error, and skip this slot.
+                    if reservation.get("status") == "reserved":
+                        await self._subscriptions.finish_reservation(
+                            workspace_id=str(schedule["workspace_id"]),
+                            reservation_id=reservation["reservation_id"],
+                            outcome="released",
+                        )
+                    await conn.execute(
+                        """UPDATE workspace_growth_schedules
+                           SET next_run_at=$2, last_attempted_at=$3,
+                               last_error_code=$4, updated_at=$3
+                           WHERE id=$1 AND status='active'""",
+                        schedule_id, next_run_at, current, "schedule_payload_invalid",
+                    )
+                    return {
+                        "schedule_id": str(schedule_id),
+                        "job_id": "",
+                        "workspace_id": str(schedule["workspace_id"]),
+                        "outcome": "invalid_payload",
+                    }
                 payload = {
                     **payload,
                     "requested_by": str(schedule["created_by"]),
