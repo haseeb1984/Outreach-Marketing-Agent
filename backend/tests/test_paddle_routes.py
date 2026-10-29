@@ -222,8 +222,8 @@ def test_checkout_rejects_plan_with_empty_entitlements_before_provider_call(monk
 
     monkeypatch.setattr(paddle_routes, "_authenticated", fake_authenticated)
     monkeypatch.setattr(paddle_routes, "_check_csrf", lambda request, session: None)
-    app.state.auth_store = AuthStore()
     with TestClient(app) as client:
+        app.state.auth_store = AuthStore()
         response = client.post(
             "/api/v1/billing/paddle/checkout",
             json={"workspace_id": "workspace-1", "plan_id": "starter"},
