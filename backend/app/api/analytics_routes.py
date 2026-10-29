@@ -129,15 +129,19 @@ async def campaign_performance_analytics(
             rows = await connection.fetch(
                 """SELECT c.id, c.name, c.status, c.created_at, c.updated_at,
                     (SELECT count(DISTINCT d.prospect_id) FROM outreach_drafts d
-                     WHERE d.workspace_id=c.workspace_id AND d.campaign_id=c.id) AS prospects_in_campaign,
+                     WHERE d.workspace_id=c.workspace_id AND d.campaign_id=c.id
+                       AND d.created_at >= now() - ($2::int * interval '1 day')) AS prospects_in_campaign,
                     (SELECT count(*) FROM outreach_drafts d
                      WHERE d.workspace_id=c.workspace_id AND d.campaign_id=c.id
+                       AND d.created_at >= now() - ($2::int * interval '1 day')
                        AND d.status='pending_approval') AS drafts_pending_approval,
                     (SELECT count(*) FROM outreach_drafts d
                      WHERE d.workspace_id=c.workspace_id AND d.campaign_id=c.id
+                       AND d.created_at >= now() - ($2::int * interval '1 day')
                        AND d.status='approved') AS drafts_approved,
                     (SELECT count(*) FROM outreach_drafts d
                      WHERE d.workspace_id=c.workspace_id AND d.campaign_id=c.id
+                       AND d.created_at >= now() - ($2::int * interval '1 day')
                        AND d.status='rejected') AS drafts_rejected,
                     (SELECT count(*) FROM outreach_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
@@ -197,6 +201,7 @@ async def campaign_performance_analytics(
                     (SELECT count(DISTINCT p.id) FROM crm_prospects p
                      JOIN outreach_drafts d ON d.prospect_id=p.id AND d.workspace_id=p.workspace_id
                      WHERE p.workspace_id=c.workspace_id AND d.campaign_id=c.id
+                       AND d.created_at >= now() - ($2::int * interval '1 day')
                        AND p.archived_at IS NULL AND p.stage='converted') AS converted_stage_prospects
                    FROM outreach_campaigns c
                    WHERE c.workspace_id=$1 AND c.status <> 'archived'

@@ -1237,15 +1237,20 @@ export default function DashboardPage() {
                 ["Pending review", "drafts_pending_approval"],
                 ["Approved", "drafts_approved"],
                 ["Email sent", "email_sent_marked"],
+                ["Email pending", "email_pending"],
                 ["Email failed", "email_failed"],
                 ["Email uncertain", "email_uncertain"],
+                ["WhatsApp sent or confirmed", "whatsapp_sent_or_confirmed"],
+                ["WhatsApp pending", "whatsapp_pending"],
                 ["WhatsApp delivered", "whatsapp_delivered"],
                 ["WhatsApp read", "whatsapp_read"],
+                ["WhatsApp failed", "whatsapp_failed"],
+                ["WhatsApp uncertain", "whatsapp_uncertain"],
                 ["Prospect replies", "replies_from_campaign_prospects"],
                 ["Converted stage", "converted_stage_prospects"],
               ].map(([label, key]) => <div className="metric" key={key}><strong>{item.counts[key] ?? 0}</strong><span>{label}</span></div>)}
             </div>
-            <p className="fine">Replies are associated with prospects that have drafts in this campaign; this does not prove the campaign caused a reply. Converted stage is a CRM label, not verified sales revenue.</p>
+            <p className="fine">Prospects and draft statuses are based on drafts created during the selected period; delivery and reply counts use their recorded event times. Converted stage is the current CRM label for prospects linked to drafts created during the period, not verified sales revenue.</p>
           </article>) : <article className="card"><p>No campaign performance records are available. Refresh after creating campaigns and recording draft or delivery activity.</p></article>}</div>
         </section>
         <section className="section" aria-labelledby="growth-schedules-title">
@@ -1355,7 +1360,7 @@ export default function DashboardPage() {
         <section className="section"><h2>Draft review queue</h2><p className="fine">Approving a draft does not send it. Sending remains a separate explicit action.</p><div className="cards">{drafts.length ? drafts.map(d=><article className="card" key={d.id}><p className="eyebrow">{d.channel || "Outreach"} · {d.status}</p><h3>{d.subject || d.prospect_name || "Outreach draft"}</h3><p>{d.body || "Draft content is not available."}</p>{d.status === "approved" && d.channel === "email" && <div className="actions"><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => queueDraft(d)}>Queue email</button></div>}{d.status === "pending_approval" && <><details><summary>Edit draft before approval</summary><form onSubmit={event=>saveDraftEdits(event,d)}><div className="field"><label htmlFor={"draft-subject-"+d.id}>Email subject (email only)</label><input id={"draft-subject-"+d.id} name="subject" maxLength={300} required={d.channel==="email"} disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} defaultValue={d.subject || ""} /></div><div className="field"><label htmlFor={"draft-body-"+d.id}>Message body</label><textarea id={"draft-body-"+d.id} name="body" required maxLength={10000} rows={6} disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} defaultValue={d.body || ""} /></div><button className="button secondary" type="submit" disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Save draft edits</button></form></details><div className="actions"><button type="button" className="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"approved")}>Approve draft</button><button type="button" className="button secondary" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => reviewDraft(d,"rejected")}>Reject</button></div></>}</article>) : <article className="card"><p>No drafts yet. Draft generation requires configured paid entitlements and eligible prospect evidence.</p></article>}</div></section>
         <section className="section" aria-labelledby="integrations-title"><h2 id="integrations-title">Provider connections</h2>
           <article className="card">
-            <p className="fine">Current email support uses deployment-level SMTP settings. It does not yet connect multiple personal mailboxes per workspace. Provider diagnostics never return credentials.</p>
+            <p className="fine">Workspace SMTP accounts are encrypted at rest, tested before activation, and selectable for queued sends. Deployment-level SMTP is an optional fallback when no workspace account is selected. The global SMTP test is available only in staging or production; use each workspace account’s Test connection action to validate a connected account. Provider diagnostics never return credentials.</p>
             <div className="actions">
               <button className="button secondary" type="button" onClick={refreshIntegrationStatus} disabled={integrationBusy || !workspaceId || !csrf}>Refresh status</button>
               <button className="button" type="button" onClick={testSmtpConnection} disabled={integrationBusy || !workspaceId || !csrf || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Test SMTP (no email sent)</button>

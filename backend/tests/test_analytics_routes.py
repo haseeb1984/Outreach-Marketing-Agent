@@ -130,3 +130,58 @@ def test_analytics_summary_returns_persisted_counts_without_claiming_roi(monkeyp
     assert result["period_days"] == 7
     assert "ROI" in result["unavailable_metrics"]
     assert "not proof of inbox delivery" in result["definitions"]["emails_marked_sent"]
+
+def test_campaign_analytics_scopes_draft_counts_to_selected_period(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import app.api.analytics_routes as analytics
+
+    class AuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class Connection:
+        query = ""
+
+        async def fetch(self, query, workspace_id, since_days, limit):
+            self.query = query
+            assert workspace_id == "workspace-1"
+            assert since_days == 7
+            assert limit == 20
+            return []
+
+    connection = Connection()
+
+    class Acquire:
+        async def __aenter__(self):
+            return connection
+
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(auth_store=AuthStore(), db_pool=Pool())
+        )
+    )
+
+    async def authenticated(_request):
+        return AuthStore(), "session", {"user_id": "user-1"}
+
+    monkeypatch.setattr(analytics, "_authenticated", authenticated)
+    result = asyncio.run(
+        analytics.campaign_performance_analytics(
+            request, workspace_id="workspace-1", since_days=7, limit=20
+        )
+    )
+
+    assert result["items"] == []
+    query = connection.query
+    assert query.count("d.created_at >= now() - ($2::int * interval '1 day')") >= 5
+    assert "q.sent_at >= now() - ($2::int * interval '1 day')" in query
+    assert "m.occurred_at >= now() - ($2::int * interval '1 day')" in query
