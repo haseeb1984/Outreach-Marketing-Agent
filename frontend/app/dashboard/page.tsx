@@ -1245,7 +1245,7 @@ export default function DashboardPage() {
                 ["Converted stage", "converted_stage_prospects"],
               ].map(([label, key]) => <div className="metric" key={key}><strong>{item.counts[key] ?? 0}</strong><span>{label}</span></div>)}
             </div>
-            <p className="fine">Replies are associated with prospects that have drafts in this campaign; this does not prove the campaign caused a reply. Converted stage is a CRM label, not verified sales revenue.</p>
+            <p className="fine">Prospects and draft statuses are based on drafts created during the selected period; delivery and reply counts use their recorded event times. Converted stage is the current CRM label for prospects linked to drafts created during the period, not verified sales revenue.</p>
           </article>) : <article className="card"><p>No campaign performance records are available. Refresh after creating campaigns and recording draft or delivery activity.</p></article>}</div>
         </section>
         <section className="section" aria-labelledby="growth-schedules-title">
