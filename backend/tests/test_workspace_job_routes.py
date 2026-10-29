@@ -306,3 +306,51 @@ def test_growth_job_preserves_reservation_when_enqueue_outcome_is_ambiguous(monk
     assert error.value.detail == "website_growth_job_unavailable"
     # Releasing here could orphan a job that committed despite the lost response.
     assert subscriptions.finished == []
+
+
+def test_growth_job_returns_conflict_for_reused_idempotency_key_with_different_payload(monkeypatch):
+    reservation_id = str(uuid4())
+    subscriptions = _SubscriptionStore({
+        "allowed": True,
+        "reason": "idempotent_replay",
+        "status": "reserved",
+        "reservation_id": reservation_id,
+    })
+    request = _request_with_state(
+        domain_authorization_store=_DomainStore(),
+        subscription_store=subscriptions,
+        db_pool=object(),
+    )
+
+    async def authenticated(_request):
+        return None, None, {"user_id": str(uuid4())}
+
+    async def authorize(*args, **kwargs):
+        return None
+
+    class _ConflictingQueue:
+        def __init__(self, _pool):
+            pass
+
+        async def enqueue(self, **kwargs):
+            raise ValueError("idempotency_key_conflict")
+
+    monkeypatch.setattr(workspace_job_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(workspace_job_routes, "_check_csrf", lambda *_args: None)
+    monkeypatch.setattr(workspace_job_routes, "_authorize", authorize)
+    monkeypatch.setattr(workspace_job_routes, "WorkspaceJobQueue", _ConflictingQueue)
+
+    payload = WebsiteGrowthScanRequest(
+        workspace_id="workspace-a",
+        start_url="https://example.com/changed",
+        business_type="SaaS",
+        target_market="US",
+    )
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(workspace_job_routes.enqueue_website_growth_scan(
+            payload, request, idempotency_key="test-scan-conflict-001"
+        ))
+
+    assert error.value.status_code == 409
+    assert error.value.detail == "idempotency_key_conflict"
+    assert subscriptions.finished == []

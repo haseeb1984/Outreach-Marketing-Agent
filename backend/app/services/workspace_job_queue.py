@@ -91,6 +91,13 @@ class WorkspaceJobQueue:
                                WHERE workspace_id=$1 AND job_type=$2 AND idempotency_key=$3""",
                             str(workspace_id), job_type, idempotency_key,
                         )
+                        if row is None:
+                            raise RuntimeError("idempotent_job_disappeared")
+                        existing_payload = row["payload"]
+                        if isinstance(existing_payload, str):
+                            existing_payload = json.loads(existing_payload)
+                        if existing_payload != payload:
+                            raise ValueError("idempotency_key_conflict")
         result = dict(row)
         if isinstance(result.get("payload"), str):
             result["payload"] = json.loads(result["payload"])

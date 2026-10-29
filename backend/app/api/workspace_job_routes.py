@@ -140,7 +140,10 @@ async def enqueue_website_growth_scan(
             idempotency_key=idempotency_key,
             max_attempts=3,
         )
-    except ValueError:
+    except ValueError as exc:
+        if str(exc) == "idempotency_key_conflict":
+            # The existing job may still depend on this reservation; never release it.
+            raise HTTPException(status_code=409, detail="idempotency_key_conflict") from None
         try:
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
