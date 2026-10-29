@@ -241,13 +241,24 @@ async def revoke_invitation(
     await _authorize_admin(request, workspace_id, session)
     try:
         async with _pool(request).acquire() as conn:
-            result = await conn.execute(
-                """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND status='pending'""",
-                invitation_id, workspace_id,
-            )
+            async with conn.transaction():
+                actor_id = UUID(str(session["user_id"]))
+                actor_role = await conn.fetchval(
+                    """SELECT role FROM workspace_memberships
+                       WHERE workspace_id=$1 AND user_id=$2 AND status='active' FOR UPDATE""",
+                    workspace_id, actor_id,
+                )
+                if actor_role not in {"owner", "admin"}:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                result = await conn.execute(
+                    """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status='pending'""",
+                    invitation_id, workspace_id,
+                )
+                if not result.endswith(" 1"):
+                    raise HTTPException(status_code=404, detail="pending_invitation_not_found")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="invitation_revoke_unavailable") from None
-    if not result.endswith(" 1"):
-        raise HTTPException(status_code=404, detail="pending_invitation_not_found")
     return {"revoked": True}
