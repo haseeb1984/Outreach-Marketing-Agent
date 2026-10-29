@@ -116,6 +116,17 @@ async def _exercise_usage_reservation_lifecycle() -> None:
         )
         assert released_replay == {"allowed": False, "reason": "reservation_released"}
 
+        # Invalid reservation identifiers must fail closed without surfacing a
+        # PostgreSQL UUID-cast exception to the API caller.
+        assert await store.finish_reservation(
+            workspace_id=other_workspace_id,
+            reservation_id="not-a-uuid", outcome="consumed",
+        ) is False
+        assert await store.finish_reservation(
+            workspace_id=" ", reservation_id=replay_first["reservation_id"],
+            outcome="consumed",
+        ) is False
+
         # Consuming is terminal too; a second finish cannot rewrite billing history.
         active_key = "consumed-reservation-key"
         active = await store.reserve_usage(

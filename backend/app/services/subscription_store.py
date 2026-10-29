@@ -213,12 +213,18 @@ class SubscriptionStore:
         """Move a reservation to consumed or released once; no silent double-finish."""
         if outcome not in {"consumed", "released"}:
             raise ValueError("invalid_reservation_outcome")
+        try:
+            reservation_uuid = UUID(str(reservation_id))
+        except (ValueError, TypeError, AttributeError):
+            return False
+        if not isinstance(workspace_id, str) or not workspace_id.strip():
+            return False
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """UPDATE feature_usage_reservations SET status=$3,updated_at=now()
                    WHERE id=$1::uuid AND workspace_id=$2 AND status='reserved'
                    RETURNING id""",
-                reservation_id, workspace_id, outcome,
+                reservation_uuid, workspace_id, outcome,
             )
         return row is not None
 
