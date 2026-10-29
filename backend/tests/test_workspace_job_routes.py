@@ -195,3 +195,64 @@ def test_growth_job_consumes_quota_after_queue_acceptance(monkeypatch):
         "reservation_id": reservation_id,
         "outcome": "consumed",
     }]
+
+
+
+def test_growth_job_idempotent_retry_returns_existing_job_after_quota_consumed(monkeypatch):
+    reservation_id = str(uuid4())
+    subscriptions = _SubscriptionStore({
+        "allowed": True,
+        "reason": "idempotent_replay",
+        "status": "consumed",
+        "reservation_id": reservation_id,
+    })
+    request = _request_with_state(
+        domain_authorization_store=_DomainStore(),
+        subscription_store=subscriptions,
+        db_pool=object(),
+    )
+
+    async def authenticated(_request):
+        return None, None, {"user_id": str(uuid4())}
+
+    async def authorize(*args, **kwargs):
+        return None
+
+    existing_job_id = str(uuid4())
+
+    class _Queue:
+        def __init__(self, _pool):
+            pass
+
+        async def enqueue(self, **kwargs):
+            assert kwargs["idempotency_key"] == "test-scan-key-003"
+            assert kwargs["payload"]["usage_reservation_id"] == reservation_id
+            return {
+                "id": existing_job_id,
+                "workspace_id": kwargs["workspace_id"],
+                "job_type": kwargs["job_type"],
+                "status": "queued",
+                "attempt_count": 0,
+                "max_attempts": 3,
+                "run_after": datetime.now(timezone.utc),
+                "created_at": datetime.now(timezone.utc),
+            }
+
+    monkeypatch.setattr(workspace_job_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(workspace_job_routes, "_check_csrf", lambda *_args: None)
+    monkeypatch.setattr(workspace_job_routes, "_authorize", authorize)
+    monkeypatch.setattr(workspace_job_routes, "WorkspaceJobQueue", _Queue)
+
+    payload = WebsiteGrowthScanRequest(
+        workspace_id="workspace-a",
+        start_url="https://example.com/",
+        business_type="SaaS",
+        target_market="US",
+    )
+    result = asyncio.run(workspace_job_routes.enqueue_website_growth_scan(
+        payload, request, idempotency_key="test-scan-key-003"
+    ))
+
+    assert result["id"] == existing_job_id
+    assert result["status"] == "queued"
+    assert subscriptions.finished == []
