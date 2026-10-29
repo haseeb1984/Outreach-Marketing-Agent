@@ -53,6 +53,17 @@ class BillingLifecycleStore:
                     event.provider_subscription_id, event.event_created_at,
                 )
                 if inserted is None:
+                    # Provider event IDs are the idempotency key. Do not silently
+                    # acknowledge an ID collision that points at a different tenant,
+                    # subscription, or event timestamp.
+                    prior_event = await conn.fetchrow(
+                        """SELECT workspace_id,provider_subscription_id,event_created_at
+                           FROM billing_provider_events
+                           WHERE provider=$1 AND provider_event_id=$2 FOR UPDATE""",
+                        event.provider, event.event_id,
+                    )
+                    if prior_event is None or not self._same_event_identity(prior_event, event):
+                        raise ValueError("billing_event_identity_conflict")
                     return {"outcome": "duplicate"}
 
                 current = await conn.fetchrow(
@@ -124,6 +135,14 @@ class BillingLifecycleStore:
                     event.provider, event.event_id,
                 )
                 return {"outcome": "applied"}
+
+    @staticmethod
+    def _same_event_identity(prior: Mapping[str, Any], event: VerifiedBillingEvent) -> bool:
+        return (
+            prior["workspace_id"] == event.workspace_id
+            and prior["provider_subscription_id"] == event.provider_subscription_id
+            and prior["event_created_at"] == event.event_created_at
+        )
 
     @staticmethod
     def _validate(event: VerifiedBillingEvent) -> None:
