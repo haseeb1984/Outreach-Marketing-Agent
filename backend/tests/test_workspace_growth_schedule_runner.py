@@ -217,3 +217,29 @@ def test_schedule_idempotency_conflict_advances_without_releasing_possibly_share
     assert connection.schedule_update_args[1] == slot + timedelta(hours=24)
     assert connection.schedule_update_args[3] == "schedule_idempotency_conflict"
     assert subscriptions.finished == []
+
+
+@pytest.mark.parametrize("payload", [
+    {},
+    {"start_url": "http://example.com", "business_type": "SaaS", "target_market": "US"},
+    {"start_url": "https://example.com:444", "business_type": "SaaS", "target_market": "US"},
+    {"start_url": "https://example.com", "business_type": "", "target_market": "US"},
+    {"start_url": "https://example.com", "business_type": "SaaS", "target_market": "US", "max_pages": True},
+    {"start_url": "https://example.com", "business_type": "SaaS", "target_market": "US", "extra": "unexpected"},
+])
+def test_malformed_object_schedule_payload_is_released_and_skipped(payload):
+    schedule_id = uuid4()
+    slot = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+    now = slot + timedelta(hours=2)
+    schedule = _schedule(schedule_id, slot)
+    schedule["payload"] = payload
+    connection = _Connection(schedule)
+    subscriptions = _Subscriptions()
+    runner = WorkspaceGrowthScheduleRunner(_Pool(connection), subscriptions)
+
+    result = asyncio.run(runner.enqueue_one_due(now=now))
+
+    assert result["outcome"] == "invalid_payload"
+    assert connection.queue_insert_args is None
+    assert connection.schedule_update_args[3] == "schedule_payload_invalid"
+    assert subscriptions.finished[0]["outcome"] == "released"

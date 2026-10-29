@@ -5,9 +5,45 @@ import json
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from app.services.workspace_job_queue import WorkspaceJobQueue
+
+
+def _valid_schedule_payload(payload: Any) -> bool:
+    """Reject malformed persisted scan inputs before spending quota or enqueueing."""
+    if not isinstance(payload, dict):
+        return False
+    allowed = {"start_url", "business_type", "target_market", "target_queries", "max_pages", "max_depth"}
+    if set(payload) - allowed:
+        return False
+    url = payload.get("start_url")
+    if not isinstance(url, str) or not url.strip() or len(url) > 2048:
+        return False
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except (TypeError, ValueError):
+        return False
+    if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password or port not in (None, 443):
+        return False
+    for key in ("business_type", "target_market"):
+        value = payload.get(key)
+        if not isinstance(value, str) or not value.strip() or len(value) > 160:
+            return False
+    queries = payload.get("target_queries", [])
+    if not isinstance(queries, list) or len(queries) > 20:
+        return False
+    if any(not isinstance(q, str) or not q.strip() or len(q) > 200 for q in queries):
+        return False
+    pages = payload.get("max_pages", 10)
+    depth = payload.get("max_depth", 2)
+    if isinstance(pages, bool) or not isinstance(pages, int) or not 1 <= pages <= 10:
+        return False
+    if isinstance(depth, bool) or not isinstance(depth, int) or not 0 <= depth <= 2:
+        return False
+    return True
 
 
 class WorkspaceGrowthScheduleRunner:
@@ -77,7 +113,7 @@ class WorkspaceGrowthScheduleRunner:
                         payload = json.loads(payload)
                 except (TypeError, json.JSONDecodeError):
                     payload = None
-                if not isinstance(payload, dict):
+                if not _valid_schedule_payload(payload):
                     # A corrupted persisted schedule must not hold quota forever or
                     # monopolize every scheduler poll. Release only an unconsumed
                     # reservation, record the deterministic error, and skip this slot.
