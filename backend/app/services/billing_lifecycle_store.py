@@ -56,13 +56,18 @@ class BillingLifecycleStore:
                     return {"outcome": "duplicate"}
 
                 current = await conn.fetchrow(
-                    """SELECT provider,provider_subscription_id
+                    """SELECT provider,provider_subscription_id,provider_customer_id
                        FROM workspace_subscriptions WHERE workspace_id=$1 FOR UPDATE""",
                     event.workspace_id,
                 )
                 if current is not None and (
                     current["provider"] != event.provider
                     or current["provider_subscription_id"] != event.provider_subscription_id
+                    or (
+                        current["provider_customer_id"] is not None
+                        and event.provider_customer_id is not None
+                        and current["provider_customer_id"] != event.provider_customer_id
+                    )
                 ):
                     raise ValueError("billing_subscription_identity_conflict")
 
@@ -73,7 +78,7 @@ class BillingLifecycleStore:
                         provider_event_created_at,updated_at)
                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,now())
                        ON CONFLICT (workspace_id) DO UPDATE SET
-                         provider_customer_id=EXCLUDED.provider_customer_id,
+                         provider_customer_id=COALESCE(EXCLUDED.provider_customer_id,workspace_subscriptions.provider_customer_id),
                          plan_slug=EXCLUDED.plan_slug,
                          status=EXCLUDED.status,
                          billing_period_starts_at=EXCLUDED.billing_period_starts_at,
@@ -104,6 +109,11 @@ class BillingLifecycleStore:
                     if current_after_conflict is not None and (
                         current_after_conflict["provider"] != event.provider
                         or current_after_conflict["provider_subscription_id"] != event.provider_subscription_id
+                        or (
+                            current_after_conflict["provider_customer_id"] is not None
+                            and event.provider_customer_id is not None
+                            and current_after_conflict["provider_customer_id"] != event.provider_customer_id
+                        )
                     ):
                         raise ValueError("billing_subscription_identity_conflict")
                     # Event remains in the ledger as stale; a retry cannot replay it.
