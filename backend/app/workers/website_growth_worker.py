@@ -16,6 +16,7 @@ import asyncpg
 from app.core.config import settings
 from app.services.domain_authorization_store import DomainAuthorizationStore
 from app.services.persisted_website_growth_pipeline import discover_persisted_workspace_site
+from app.services.subscription_store import SubscriptionStore
 from app.services.workspace_job_queue import WorkspaceJobQueue
 
 logger = logging.getLogger("outreach.worker")
@@ -107,6 +108,7 @@ async def process_claimed_job(
     job: dict[str, Any],
     worker_id: str,
     scan_runner: Callable[..., Awaitable[dict[str, Any]]] = discover_persisted_workspace_site,
+    subscription_store: Any = None,
 ) -> str:
     """Execute one claimed job, fencing stale workers and hiding exception details."""
     lost = asyncio.Event()
@@ -119,6 +121,35 @@ async def process_claimed_job(
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code=str(exc)[:100]
             )
+        if subscription_store is None:
+            return await queue.fail(
+                job_id=job["id"], worker_id=worker_id, error_code="billing_service_unavailable"
+            )
+        try:
+            reservation_id = job.get("payload", {}).get("usage_reservation_id")
+            if reservation_id:
+                decision = await subscription_store.validate_job_reservation(
+                    workspace_id=str(job["workspace_id"]),
+                    reservation_id=str(reservation_id),
+                    feature="website_audits",
+                )
+            else:
+                # Compatibility for older persisted jobs; current enqueues always carry a reservation.
+                decision = await subscription_store.check_feature_enabled(
+                    workspace_id=str(job["workspace_id"]), feature="website_audits"
+                )
+        except Exception:
+            logger.warning("website growth quota revalidation unavailable")
+            return await queue.fail(
+                job_id=job["id"], worker_id=worker_id, error_code="billing_status_unavailable"
+            )
+        if not decision.get("allowed"):
+            reason = str(decision.get("reason", "entitlement_denied"))
+            code = "website_growth_quota_unavailable" if reason in {
+                "quota_exhausted", "subscription_missing", "reservation_period_expired",
+                "reservation_not_active", "reservation_feature_mismatch", "reservation_invalid",
+            } else "website_growth_entitlement_denied"
+            return await queue.fail(job_id=job["id"], worker_id=worker_id, error_code=code)
         try:
             report = await scan_runner(
                 payload["start_url"],
@@ -169,6 +200,7 @@ async def run_worker(*, poll_seconds: float = POLL_SECONDS) -> None:
     worker_id = "website-growth-" + secrets.token_hex(12)
     queue = WorkspaceJobQueue(pool)
     domain_store = DomainAuthorizationStore(pool)
+    subscription_store = SubscriptionStore(pool)
     logger.info("website growth worker started")
     try:
         while True:
@@ -178,7 +210,8 @@ async def run_worker(*, poll_seconds: float = POLL_SECONDS) -> None:
                     await asyncio.sleep(poll_seconds)
                     continue
                 outcome = await process_claimed_job(
-                    queue=queue, domain_store=domain_store, job=job, worker_id=worker_id
+                    queue=queue, domain_store=domain_store, job=job, worker_id=worker_id,
+                    subscription_store=subscription_store,
                 )
                 logger.info("website growth job finished with outcome=%s", outcome)
             except asyncio.CancelledError:
