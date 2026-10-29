@@ -253,3 +253,16 @@ def test_entitlement_validator_rejects_malformed_or_missing_required_policies():
         "website_audits": {"enabled": True, "monthly_limit": None},
         "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
     })
+
+
+def test_paddle_customer_id_validation_rejects_path_and_query_injection():
+    from app.api.paddle_routes import _valid_customer_id
+
+    assert _valid_customer_id("ctm_01h123ABCxyz")
+    assert not _valid_customer_id("ctm_")
+    assert not _valid_customer_id("ctm_abc/../subscriptions")
+    assert not _valid_customer_id("ctm_abc?include=secret")
+    assert not _valid_customer_id("ctm_abc#fragment")
+    assert not _valid_customer_id("ctm_abc:443")
+    assert not _valid_customer_id("ctm_" + "a" * 101)
+    assert not _valid_customer_id(None)
