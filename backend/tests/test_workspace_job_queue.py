@@ -85,3 +85,97 @@ def test_growth_worker_rejects_non_uuid_requester():
             "max_pages": 10,
             "max_depth": 2,
         })
+
+
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from app.services.workspace_job_queue import WorkspaceJobQueue
+
+
+class _FakeTransaction:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
+
+class _IdempotencyConnection:
+    def __init__(self, existing_payload):
+        self.existing_payload = existing_payload
+        self.inserted_payload = None
+
+    def transaction(self):
+        return _FakeTransaction()
+
+    async def fetchrow(self, query, *args):
+        if "INSERT INTO workspace_jobs" in query:
+            self.inserted_payload = args[2]
+            return None
+        if "SELECT id, workspace_id, job_type, status, payload" in query:
+            return {
+                "id": uuid4(),
+                "workspace_id": args[0],
+                "job_type": args[1],
+                "status": "queued",
+                "payload": self.existing_payload,
+                "attempt_count": 0,
+                "max_attempts": 3,
+                "run_after": datetime.now(timezone.utc),
+                "created_at": datetime.now(timezone.utc),
+            }
+        raise AssertionError(f"Unexpected SQL in queue test: {query}")
+
+
+class _AcquireConnection:
+    def __init__(self, connection):
+        self.connection = connection
+
+    async def __aenter__(self):
+        return self.connection
+
+    async def __aexit__(self, *_args):
+        return False
+
+
+class _FakePool:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def acquire(self):
+        return _AcquireConnection(self.connection)
+
+
+def test_enqueue_idempotency_replay_returns_existing_job_when_payload_matches():
+    payload = {"start_url": "https://example.com/", "max_pages": 5}
+    connection = _IdempotencyConnection(existing_payload=payload)
+    queue = WorkspaceJobQueue(_FakePool(connection))
+
+    result = asyncio.run(queue.enqueue(
+        workspace_id="workspace-a",
+        job_type="website_growth_scan",
+        payload=payload,
+        idempotency_key="same-request-key",
+    ))
+
+    assert result["payload"] == payload
+    assert result["status"] == "queued"
+    assert connection.inserted_payload == '{"start_url":"https://example.com/","max_pages":5}'
+
+
+def test_enqueue_rejects_idempotency_key_reused_with_different_payload():
+    connection = _IdempotencyConnection(existing_payload={
+        "start_url": "https://example.com/original",
+        "max_pages": 5,
+    })
+    queue = WorkspaceJobQueue(_FakePool(connection))
+
+    with pytest.raises(ValueError, match="idempotency_key_conflict"):
+        asyncio.run(queue.enqueue(
+            workspace_id="workspace-a",
+            job_type="website_growth_scan",
+            payload={"start_url": "https://example.com/changed", "max_pages": 5},
+            idempotency_key="same-request-key",
+        ))
