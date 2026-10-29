@@ -6,6 +6,7 @@ not lead-conversion predictions. The provider credential is read from server env
 """
 from __future__ import annotations
 
+import ipaddress
 import re
 from urllib.parse import urlsplit
 
@@ -39,7 +40,15 @@ def _public_https_url(value: object) -> str | None:
         host = parsed.hostname.lower().rstrip(".")
         if host in {"localhost", "localhost.localdomain"} or host.endswith(".local") or host.endswith(".internal"):
             return None
-        if host.replace(".", "").isdigit():
+        # Reject IP literals (including IPv6) as prospect evidence; do not
+        # rely only on dotted-decimal IPv4 string matching.
+        try:
+            ipaddress.ip_address(host.strip("[]"))
+        except ValueError:
+            pass
+        else:
+            return None
+        if not host or "." not in host or host.replace(".", "").isdigit():
             return None
         return value
     except ValueError:
