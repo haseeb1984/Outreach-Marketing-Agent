@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.services.workspace_job_queue import (
