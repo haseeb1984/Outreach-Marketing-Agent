@@ -28,6 +28,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "036_growth_schedule_quota_status.sql",
     "037_whatsapp_outbound_template_persistence.sql",
     "038_whatsapp_outbound_queue_leases.sql",
+    "039_website_audit_job_idempotency.sql",
 )
 
 
