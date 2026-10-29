@@ -277,10 +277,16 @@ def test_preflight_rejects_catalog_missing_a_quota_controlled_feature(tmp_path: 
 
 def test_preflight_rejects_boolean_quota_and_malformed_policy(tmp_path: Path):
     env = _env()
+    policy = {
+        "ai_draft_generations": {"enabled": True, "monthly_limit": 250},
+        "email_sends": {"enabled": True, "monthly_limit": True},
+        "website_audits": {"enabled": True, "monthly_limit": 25},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+    }
     env.update({
         "PADDLE_API_KEY": "pdl_sandbox_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": json.dumps({"starter": {"price_id": "pri_starter", "entitlements": {**{"ai_draft_generations":{"enabled":true,"monthly_limit":250},"email_sends":{"enabled":true,"monthly_limit":1000},"website_audits":{"enabled":true,"monthly_limit":25},"whatsapp_sends":{"enabled":false,"monthly_limit":0}}, "email_sends": {"enabled": True, "monthly_limit": True}}}}),
+        "PADDLE_PLANS_JSON": json.dumps({"starter": {"price_id": "pri_starter", "entitlements": policy}}),
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_live_entitlements"] == "fail"
