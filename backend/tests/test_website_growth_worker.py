@@ -26,7 +26,7 @@ def test_worker_accepts_and_strips_enqueue_operational_metadata():
         "requested_by": "user-123",
         "usage_reservation_id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
     })
-    assert payload["start_url"] == "https://example.com"
+    assert payload["start_url"] == "https://example.com/"
     assert "requested_by" not in payload
     assert "usage_reservation_id" not in payload
 
