@@ -199,3 +199,51 @@ def test_paddle_sandbox_plan_catalog_maps_owner_supplied_price_ids(monkeypatch):
     assert plans["growth"]["price_id"] == "pri_01m61y1n4enqgf0qbtbm67tkx2"
     assert plans["agency"]["price_id"] == "pri_01m61y66jhcs5qf0cf9n20a3xf"
     assert len({plan["price_id"] for plan in plans.values()}) == 3
+
+def test_public_plans_remain_visible_but_checkout_disabled_for_empty_entitlements(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    monkeypatch.setattr(
+        paddle_routes.settings,
+        "paddle_plans_json",
+        json.dumps({
+            "starter": {
+                "name": "Starter",
+                "price_id": "pri_starter",
+                "display_price": "$29",
+                "entitlements": {},
+            }
+        }),
+    )
+    monkeypatch.setattr(paddle_routes.settings, "paddle_api_key", "sandbox-key")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", "sandbox-secret")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "sandbox")
+    with TestClient(app) as client:
+        response = client.get("/api/v1/billing/paddle/plans")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["configured"] is True
+    assert payload["items"][0]["name"] == "Starter"
+    assert payload["items"][0]["checkout_available"] is False
+
+
+def test_entitlement_validator_rejects_malformed_or_missing_required_policies():
+    from app.api.paddle_routes import _valid_entitlements
+
+    assert not _valid_entitlements({})
+    assert not _valid_entitlements({"email_sends": {"enabled": True, "monthly_limit": 10}})
+    assert not _valid_entitlements({
+        "ai_draft_generations": {"enabled": True, "monthly_limit": True},
+        "email_sends": {"enabled": True, "monthly_limit": 10},
+        "website_audits": {"enabled": True, "monthly_limit": 10},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+    })
+    assert _valid_entitlements({
+        "ai_draft_generations": {"enabled": True, "monthly_limit": 10},
+        "email_sends": {"enabled": True, "monthly_limit": 10},
+        "website_audits": {"enabled": True, "monthly_limit": None},
+        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+    })
+
