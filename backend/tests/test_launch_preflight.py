@@ -219,6 +219,15 @@ def test_preflight_uses_safe_json_statuses_for_remote_gates(tmp_path: Path):
     assert "postgresql://app:secret@localhost/app" not in str(result)
 
 
+def _complete_policy(drafts=250, emails=1000, audits=25, whatsapp=0, whatsapp_enabled=False):
+    return {
+        "ai_draft_generations": {"enabled": True, "monthly_limit": drafts},
+        "email_sends": {"enabled": True, "monthly_limit": emails},
+        "website_audits": {"enabled": True, "monthly_limit": audits},
+        "whatsapp_sends": {"enabled": whatsapp_enabled, "monthly_limit": whatsapp},
+    }
+
+
 def test_live_checkout_rejects_empty_entitlements_even_with_valid_price_ids(tmp_path: Path):
     env = _env()
     env.update({
@@ -226,10 +235,10 @@ def test_live_checkout_rejects_empty_entitlements_even_with_valid_price_ids(tmp_
         "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
         "PADDLE_API_KEY": "pdl_live_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": (
-            '{"starter":{"price_id":"pri_starter","entitlements":{}},'
-            '"growth":{"price_id":"pri_growth","entitlements":{}}}'
-        ),
+        "PADDLE_PLANS_JSON": json.dumps({
+            "starter": {"price_id": "pri_starter", "entitlements": {}},
+            "growth": {"price_id": "pri_growth", "entitlements": {}},
+        }),
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_plan_catalog_shape"] == "pass"
@@ -244,7 +253,10 @@ def test_live_checkout_requires_entitlements_for_every_plan(tmp_path: Path):
         "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
         "PADDLE_API_KEY": "pdl_live_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": "{\"starter\":{\"price_id\":\"pri_starter\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":250},\"email_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":25},\"whatsapp_sends\":{\"enabled\":false,\"monthly_limit\":0}}},\"growth\":{\"price_id\":\"pri_growth\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":1000},\"email_sends\":{\"enabled\":true,\"monthly_limit\":5000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":100},\"whatsapp_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"campaigns\":true}}}",
+        "PADDLE_PLANS_JSON": json.dumps({
+            "starter": {"price_id": "pri_starter", "entitlements": _complete_policy()},
+            "growth": {"price_id": "pri_growth", "entitlements": {}},
+        }),
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_live_entitlements"] == "fail"
@@ -257,7 +269,10 @@ def test_live_checkout_accepts_explicit_entitlements_for_every_plan(tmp_path: Pa
         "PADDLE_LIVE_CHECKOUT_ENABLED": "true",
         "PADDLE_API_KEY": "pdl_live_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": "{\"starter\":{\"price_id\":\"pri_starter\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":250},\"email_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":25},\"whatsapp_sends\":{\"enabled\":false,\"monthly_limit\":0},\"campaigns\":true}},\"growth\":{\"price_id\":\"pri_growth\",\"entitlements\":{\"ai_draft_generations\":{\"enabled\":true,\"monthly_limit\":1000},\"email_sends\":{\"enabled\":true,\"monthly_limit\":5000},\"website_audits\":{\"enabled\":true,\"monthly_limit\":100},\"whatsapp_sends\":{\"enabled\":true,\"monthly_limit\":1000},\"campaigns\":true,\"team_members\":5}}}",
+        "PADDLE_PLANS_JSON": json.dumps({
+            "starter": {"price_id": "pri_starter", "entitlements": _complete_policy()},
+            "growth": {"price_id": "pri_growth", "entitlements": _complete_policy(1000, 5000, 100, 1000, True)},
+        }),
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_live_entitlements"] == "pass"
@@ -268,7 +283,11 @@ def test_preflight_rejects_catalog_missing_a_quota_controlled_feature(tmp_path: 
     env.update({
         "PADDLE_API_KEY": "pdl_sandbox_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": json.dumps({"starter": {"price_id": "pri_starter", "entitlements": {"email_sends": {"enabled": True, "monthly_limit": 100}}}}),
+        "PADDLE_PLANS_JSON": json.dumps({
+            "starter": {"price_id": "pri_starter", "entitlements": {
+                "email_sends": {"enabled": True, "monthly_limit": 100}
+            }}
+        }),
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_live_entitlements"] == "fail"
@@ -277,16 +296,14 @@ def test_preflight_rejects_catalog_missing_a_quota_controlled_feature(tmp_path: 
 
 def test_preflight_rejects_boolean_quota_and_malformed_policy(tmp_path: Path):
     env = _env()
-    policy = {
-        "ai_draft_generations": {"enabled": True, "monthly_limit": 250},
-        "email_sends": {"enabled": True, "monthly_limit": True},
-        "website_audits": {"enabled": True, "monthly_limit": 25},
-        "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
-    }
+    policy = _complete_policy()
+    policy["email_sends"]["monthly_limit"] = True
     env.update({
         "PADDLE_API_KEY": "pdl_sandbox_key",
         "PADDLE_WEBHOOK_SECRET": "webhook-secret",
-        "PADDLE_PLANS_JSON": json.dumps({"starter": {"price_id": "pri_starter", "entitlements": policy}}),
+        "PADDLE_PLANS_JSON": json.dumps({
+            "starter": {"price_id": "pri_starter", "entitlements": policy}
+        }),
     })
     result = evaluate_config(env, tmp_path)
     assert _statuses(result)["paddle_live_entitlements"] == "fail"
