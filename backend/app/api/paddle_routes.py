@@ -274,6 +274,24 @@ def _verify_signature(raw_body: bytes, header: str | None, secret: str) -> bool:
     )
 
 
+def _subscription_price_ids(items: Any) -> set[str]:
+    """Accept only the single configured base-plan item this product currently supports.
+
+    Silently selecting a known price from a multi-item subscription could grant a
+    base plan while ignoring unknown add-ons or conflicting quantities.
+    """
+    if not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict):
+        raise ValueError("subscription_items_unsupported")
+    item = items[0]
+    price = item.get("price")
+    price_id = price.get("id") if isinstance(price, dict) else None
+    quantity = item.get("quantity")
+    if (not isinstance(price_id, str) or not re.fullmatch(r"pri_[A-Za-z0-9_-]+", price_id)
+            or isinstance(quantity, bool) or not isinstance(quantity, int) or quantity != 1):
+        raise ValueError("subscription_items_unsupported")
+    return {price_id}
+
+
 def _resolve_subscription_plan(custom_data: Any, price_ids: set[Any], plans: dict[str, Any]) -> tuple[str, Any]:
     """Require provider price and our signed custom metadata to identify one same plan."""
     if not isinstance(custom_data, dict):
@@ -342,11 +360,8 @@ async def paddle_webhook(request: Request):
 
     plans = await _effective_plans(request, include_inactive=True)
     items = data.get("items")
-    price_ids = {
-        item.get("price", {}).get("id")
-        for item in items if isinstance(item, dict) and isinstance(item.get("price"), dict)
-    } if isinstance(items, list) else set()
     try:
+        price_ids = _subscription_price_ids(items)
         matched_slug, plan = _resolve_subscription_plan(custom_data, price_ids, plans)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None

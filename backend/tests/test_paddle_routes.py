@@ -336,3 +336,25 @@ def test_database_billing_catalog_rejects_duplicate_provider_price_ids(monkeypat
     assert exc.value.status_code == 503
     assert exc.value.detail == "billing_plan_catalog_invalid"
 
+
+
+
+def test_subscription_items_require_exactly_one_configured_base_plan():
+    import pytest
+    from app.api.paddle_routes import _subscription_price_ids
+
+    assert _subscription_price_ids([
+        {"price": {"id": "pri_starter"}, "quantity": 1}
+    ]) == {"pri_starter"}
+    for items in (
+        None,
+        [],
+        [{"price": {"id": "pri_starter"}, "quantity": 1},
+         {"price": {"id": "pri_addon"}, "quantity": 1}],
+        [{"price": {"id": "pri_starter"}, "quantity": 2}],
+        [{"price": {"id": "pri_starter"}, "quantity": True}],
+        [{"price": {"id": "invalid"}, "quantity": 1}],
+        [{"price": {}, "quantity": 1}],
+    ):
+        with pytest.raises(ValueError, match="subscription_items_unsupported"):
+            _subscription_price_ids(items)
