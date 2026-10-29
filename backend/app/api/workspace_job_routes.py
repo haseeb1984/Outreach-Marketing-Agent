@@ -119,8 +119,8 @@ async def enqueue_website_growth_scan(
     if not reservation.get("allowed"):
         reason = reservation.get("reason", "entitlement_denied")
         raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
-    if reservation.get("status") == "consumed":
-        raise HTTPException(status_code=409, detail="growth_job_key_already_used")
+    # A consumed reservation means this idempotency key was already accepted.
+    # Re-enqueueing with the same key returns the existing durable job without charging twice.
     reservation_id = reservation["reservation_id"]
 
     try:
