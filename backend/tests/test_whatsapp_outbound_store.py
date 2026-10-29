@@ -93,6 +93,46 @@ def test_find_by_idempotency_key_is_workspace_scoped_and_serializes_record():
     assert args == ("workspace-test", "queue-key-123")
 
 
+def test_queue_replay_rejects_a_different_quota_reservation():
+    draft_id, prospect_id, account_id, queue_id = uuid4(), uuid4(), uuid4(), uuid4()
+    existing_reservation_id = uuid4()
+    pool = FakePool([
+        {
+            "id": draft_id, "prospect_id": prospect_id, "status": "approved",
+            "channel": "whatsapp", "campaign_status": "active", "stage": "new",
+            "archived_at": None, "active_account_id": account_id,
+            "contact_phone_e164": "+14155550123",
+            "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+            "whatsapp_account_id": account_id,
+        },
+        None,
+        {
+            "id": queue_id, "account_id": account_id, "draft_id": draft_id,
+            "status": "queued", "idempotency_key": "queue-key-123",
+            "usage_reservation_id": existing_reservation_id,
+            "template_name": None, "language_code": None,
+        },
+    ])
+    with pytest.raises(ValueError, match="whatsapp_reservation_conflict"):
+        asyncio.run(WhatsAppOutboundStore(pool).enqueue(
+            workspace_id="workspace-test", account_id=account_id, draft_id=draft_id,
+            actor_id=uuid4(), idempotency_key="queue-key-123",
+            usage_reservation_id=uuid4(),
+        ))
+
+
+def test_queue_rejects_invalid_reservation_uuid_before_database_access():
+    pool = FakePool([])
+    with pytest.raises(ValueError, match="whatsapp_identity_uuid_invalid"):
+        asyncio.run(WhatsAppOutboundStore(pool).enqueue(
+            workspace_id="workspace-test", account_id=uuid4(), draft_id=uuid4(),
+            actor_id=uuid4(), idempotency_key="queue-key-123",
+            usage_reservation_id="not-a-uuid",
+        ))
+    assert pool.connection.queries == []
+
+
 def test_queue_persists_only_after_database_gate_checks():
     draft_id, prospect_id, account_id, queue_id = uuid4(), uuid4(), uuid4(), uuid4()
     pool = FakePool([

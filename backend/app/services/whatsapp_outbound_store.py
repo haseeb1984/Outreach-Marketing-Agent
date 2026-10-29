@@ -18,6 +18,11 @@ class WhatsAppOutboundStore:
             raise ValueError("workspace_id_invalid")
         if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 200:
             raise ValueError("idempotency_key_invalid")
+        try:
+            reservation_uuid = UUID(str(usage_reservation_id))
+            actor_uuid = UUID(str(actor_id))
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError("whatsapp_identity_uuid_invalid") from None
         if (template_name is None) != (language_code is None):
             raise ValueError("whatsapp_template_metadata_pair_required")
         if template_name is not None:
@@ -92,6 +97,8 @@ class WhatsAppOutboundStore:
                         raise ValueError("whatsapp_idempotency_conflict")
                     if existing["account_id"] != account_id:
                         raise ValueError("whatsapp_account_conflict")
+                    if existing["usage_reservation_id"] != reservation_uuid:
+                        raise ValueError("whatsapp_reservation_conflict")
                     if (existing["template_name"], existing["language_code"]) != (template_name, language_code):
                         raise ValueError("whatsapp_template_metadata_conflict")
                     return {
@@ -109,14 +116,14 @@ class WhatsAppOutboundStore:
                        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
                        RETURNING id,status,queued_at""",
                     workspace_id, account_id, draft_id, draft["prospect_id"],
-                    idempotency_key, UUID(str(usage_reservation_id)), UUID(str(actor_id)),
+                    idempotency_key, reservation_uuid, actor_uuid,
                     template_name, language_code,
                 )
                 return {
                     "id": str(row["id"]),
                     "status": row["status"],
                     "queued_at": row["queued_at"].isoformat(),
-                    "usage_reservation_id": str(UUID(str(usage_reservation_id))),
+                    "usage_reservation_id": str(reservation_uuid),
                     "template_name": template_name,
                     "language_code": language_code,
                     "replayed": False,
