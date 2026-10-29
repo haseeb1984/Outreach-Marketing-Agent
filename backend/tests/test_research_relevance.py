@@ -221,3 +221,79 @@ def test_research_save_schema_normalizes_text_and_rejects_blank_or_oversized_fac
         ResearchProspectSaveInput(**{**payload, "verified_facts": ["x" * 1001]})
     with pytest.raises(ValidationError):
         ResearchProspectSaveInput(**{**payload, "verified_facts": ["   "]})
+
+
+def test_research_save_maps_duplicate_evidence_to_conflict(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class UniqueViolationError(Exception):
+        pass
+
+    class DuplicateProspectStore:
+        async def create_prospect(self, **kwargs):
+            raise UniqueViolationError("duplicate evidence")
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    payload = {
+        "workspace_id": "workspace-a",
+        "name": "Example Prospect",
+        "company": "Example Company",
+        "website_url": "https://example.com",
+        "evidence_url": "https://example.com/services",
+        "fit_reason": "Reviewed source confirms relevant service.",
+        "human_reviewed": True,
+    }
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = DuplicateProspectStore()
+        response = client.post("/api/v1/research/prospects/save", json=payload)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "prospect_evidence_already_exists"
+
+
+def test_research_save_hides_unexpected_persistence_errors(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class BrokenProspectStore:
+        async def create_prospect(self, **kwargs):
+            raise RuntimeError("private database details must not leak")
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    payload = {
+        "workspace_id": "workspace-a",
+        "name": "Example Prospect",
+        "company": "Example Company",
+        "website_url": "https://example.com",
+        "evidence_url": "https://example.com/services",
+        "fit_reason": "Reviewed source confirms relevant service.",
+        "human_reviewed": True,
+    }
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = BrokenProspectStore()
+        response = client.post("/api/v1/research/prospects/save", json=payload)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "prospect_save_unavailable"
+    assert "private database details" not in response.text
