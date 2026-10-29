@@ -441,7 +441,7 @@ async def create_customer_portal(request: Request, workspace_id: str):
             )
     except Exception:
         raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
-    if not isinstance(customer_id, str) or not customer_id.startswith("ctm_"):
+    if not _valid_customer_id(customer_id):
         raise HTTPException(status_code=404, detail="paddle_customer_not_found")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -467,6 +467,11 @@ async def create_customer_portal(request: Request, workspace_id: str):
         raise
     except Exception:
         raise HTTPException(status_code=502, detail="paddle_portal_unavailable") from None
+
+
+def _valid_customer_id(value: Any) -> bool:
+    """Accept only a Paddle customer identifier before interpolating it into an API path."""
+    return isinstance(value, str) and len(value) <= 100 and re.fullmatch(r"ctm_[A-Za-z0-9]+", value) is not None
 
 
 def _trusted_portal_url(value: Any) -> bool:
