@@ -76,6 +76,15 @@ async def update_workspace_settings(payload: WorkspaceSettingsUpdate, request: R
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
+                membership = await conn.fetchrow(
+                    """SELECT role,status FROM workspace_memberships
+                       WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
+                    payload.workspace_id, actor_id,
+                )
+                if membership is None or membership["status"] != "active":
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                if membership["role"] not in {"owner", "admin"}:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 row = await conn.fetchrow(
                     "UPDATE workspaces SET name=$2 WHERE id=$1 RETURNING id,name,created_at",
                     payload.workspace_id, payload.name,
