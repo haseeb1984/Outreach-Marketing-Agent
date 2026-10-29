@@ -142,6 +142,12 @@ async def create_checkout(body: CheckoutRequest, request: Request):
     plan = (await _effective_plans(request)).get(body.plan_id)
     if plan is None:
         raise HTTPException(status_code=422, detail="unknown_billing_plan")
+    # Never accept payment for a plan that cannot grant any product capability.
+    # This applies to Sandbox too: sandbox subscriptions exercise the same entitlement
+    # snapshot path and empty entitlements would lock out the paying workspace.
+    entitlements = plan.get("entitlements")
+    if not isinstance(entitlements, dict) or not entitlements:
+        raise HTTPException(status_code=503, detail="billing_plan_entitlements_not_configured")
 
     payload = {
         "items": [{"price_id": plan["price_id"], "quantity": 1}],
