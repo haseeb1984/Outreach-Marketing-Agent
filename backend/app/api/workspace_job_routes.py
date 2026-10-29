@@ -256,3 +256,30 @@ async def get_workspace_job(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="workspace_job_unavailable") from None
+
+
+@router.post("/{job_id}/cancel")
+async def cancel_workspace_job(job_id: str, request: Request) -> dict:
+    """Cancel a queued scan and return its quota reservation when no work has started."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    workspace_id = request.query_params.get("workspace_id", "").strip()
+    if not workspace_id or len(workspace_id) > 200:
+        raise HTTPException(status_code=422, detail="workspace_id_required")
+    await _authorize(request, workspace_id, "member", session)
+    from uuid import UUID
+    try:
+        parsed_job_id = UUID(job_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="workspace_job_not_found") from None
+    try:
+        cancelled = await WorkspaceJobQueue(_pool(request)).cancel(
+            workspace_id=workspace_id, job_id=parsed_job_id
+        )
+        if not cancelled:
+            raise HTTPException(status_code=409, detail="workspace_job_not_cancellable")
+        return {"id": str(parsed_job_id), "status": "cancelled"}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="workspace_job_cancel_unavailable") from None

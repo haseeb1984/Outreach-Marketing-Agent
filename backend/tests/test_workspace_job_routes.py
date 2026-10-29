@@ -354,3 +354,63 @@ def test_growth_job_returns_conflict_for_reused_idempotency_key_with_different_p
     assert error.value.status_code == 409
     assert error.value.detail == "idempotency_key_conflict"
     assert subscriptions.finished == []
+
+
+def test_cancel_workspace_job_requires_member_auth_and_returns_cancelled_result(monkeypatch):
+    job_id = str(uuid4())
+    request = _request_with_state(db_pool=object())
+
+    async def authenticated(_request):
+        return None, None, {"user_id": str(uuid4())}
+
+    async def authorize(*args, **kwargs):
+        assert args[1] == "workspace-a"
+        assert args[2] == "member"
+
+    class _Queue:
+        def __init__(self, _pool):
+            pass
+
+        async def cancel(self, **kwargs):
+            assert kwargs["workspace_id"] == "workspace-a"
+            assert str(kwargs["job_id"]) == job_id
+            return True
+
+    request.scope["query_string"] = b"workspace_id=workspace-a"
+    monkeypatch.setattr(workspace_job_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(workspace_job_routes, "_check_csrf", lambda *_args: None)
+    monkeypatch.setattr(workspace_job_routes, "_authorize", authorize)
+    monkeypatch.setattr(workspace_job_routes, "WorkspaceJobQueue", _Queue)
+
+    result = asyncio.run(workspace_job_routes.cancel_workspace_job(job_id, request))
+
+    assert result == {"id": job_id, "status": "cancelled"}
+
+
+def test_cancel_workspace_job_rejects_running_or_missing_job(monkeypatch):
+    request = _request_with_state(db_pool=object())
+
+    async def authenticated(_request):
+        return None, None, {"user_id": str(uuid4())}
+
+    async def authorize(*args, **kwargs):
+        return None
+
+    class _Queue:
+        def __init__(self, _pool):
+            pass
+
+        async def cancel(self, **kwargs):
+            return False
+
+    request.scope["query_string"] = b"workspace_id=workspace-a"
+    monkeypatch.setattr(workspace_job_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(workspace_job_routes, "_check_csrf", lambda *_args: None)
+    monkeypatch.setattr(workspace_job_routes, "_authorize", authorize)
+    monkeypatch.setattr(workspace_job_routes, "WorkspaceJobQueue", _Queue)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(workspace_job_routes.cancel_workspace_job(str(uuid4()), request))
+
+    assert error.value.status_code == 409
+    assert error.value.detail == "workspace_job_not_cancellable"

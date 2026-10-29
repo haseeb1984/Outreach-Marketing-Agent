@@ -181,3 +181,44 @@ def test_enqueue_rejects_idempotency_key_reused_with_different_payload():
             payload={"start_url": "https://example.com/changed", "max_pages": 5},
             idempotency_key="same-request-key",
         ))
+
+
+class _CancelConnection:
+    def __init__(self, payload):
+        self.payload = payload
+        self.queries = []
+        self.transaction_count = 0
+
+    def transaction(self):
+        self.transaction_count += 1
+        return _FakeTransaction()
+
+    async def fetchrow(self, query, *args):
+        self.queries.append((query, args))
+        if "SELECT payload FROM workspace_jobs" in query:
+            return {"payload": self.payload}
+        raise AssertionError(f"Unexpected query: {query}")
+
+    async def execute(self, query, *args):
+        self.queries.append((query, args))
+        if "UPDATE workspace_jobs" in query:
+            return "UPDATE 1"
+        if "UPDATE feature_usage_reservations" in query:
+            return "UPDATE 1"
+        raise AssertionError(f"Unexpected query: {query}")
+
+
+def test_cancel_queued_job_releases_its_quota_reservation_in_same_transaction():
+    from uuid import uuid4
+    reservation_id = str(uuid4())
+    connection = _CancelConnection({"usage_reservation_id": reservation_id})
+    queue = WorkspaceJobQueue(_FakePool(connection))
+
+    result = asyncio.run(queue.cancel(
+        workspace_id="workspace-a", job_id=uuid4()
+    ))
+
+    assert result is True
+    assert connection.transaction_count == 1
+    assert any("FOR UPDATE" in query for query, _ in connection.queries)
+    assert any("status IN ('reserved','consumed')" in query for query, _ in connection.queries)

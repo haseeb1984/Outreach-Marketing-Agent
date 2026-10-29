@@ -250,14 +250,48 @@ class WorkspaceJobQueue:
         return result
 
     async def cancel(self, *, workspace_id: str, job_id: str | UUID) -> bool:
-        """Cancel queued jobs only; running workers must finish or lose their lease."""
+        """Cancel a queued job and release its quota atomically; running jobs cannot be cancelled."""
         now = datetime.now(timezone.utc)
         async with self._pool.acquire() as connection:
-            status = await connection.execute(
-                """UPDATE workspace_jobs
-                   SET status='cancelled', finished_at=$3, updated_at=$3
-                   WHERE id=$1 AND workspace_id=$2 AND status='queued'""",
-                UUID(str(job_id)), str(workspace_id), now,
-            )
-        return status.endswith(" 1")
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """SELECT payload FROM workspace_jobs
+                       WHERE id=$1 AND workspace_id=$2 AND status='queued'
+                       FOR UPDATE""",
+                    UUID(str(job_id)), str(workspace_id),
+                )
+                if row is None:
+                    return False
+                payload = row["payload"]
+                if isinstance(payload, str):
+                    try:
+                        payload = json.loads(payload)
+                    except (TypeError, json.JSONDecodeError):
+                        payload = None
+                status = await connection.execute(
+                    """UPDATE workspace_jobs
+                       SET status='cancelled', finished_at=$3, updated_at=$3
+                       WHERE id=$1 AND workspace_id=$2 AND status='queued'""",
+                    UUID(str(job_id)), str(workspace_id), now,
+                )
+                if not status.endswith(" 1"):
+                    return False
+                reservation_id = payload.get("usage_reservation_id") if isinstance(payload, dict) else None
+                if reservation_id:
+                    try:
+                        reservation_uuid = UUID(str(reservation_id))
+                    except (ValueError, TypeError, AttributeError):
+                        reservation_uuid = None
+                    if reservation_uuid is not None:
+                        # A queued job has not started billable work. Refund its quota in
+                        # the same transaction as cancellation so worker-claim races cannot
+                        # cancel a running job or leave a cancelled job charged.
+                        await connection.execute(
+                            """UPDATE feature_usage_reservations
+                               SET status='released', updated_at=$3
+                               WHERE id=$1 AND workspace_id=$2
+                                 AND status IN ('reserved','consumed')""",
+                            reservation_uuid, str(workspace_id), now,
+                        )
+                return True
 
