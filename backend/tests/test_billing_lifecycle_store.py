@@ -98,6 +98,8 @@ def test_duplicate_event_identity_must_match_tenant_subscription_and_timestamp()
     assert not BillingLifecycleStore._same_event_identity(
         {**prior, "provider_subscription_id": "sub_other"}, event()
     )
-    assert not BillingLifecycleStore._same_event_identity(
+    # Duplicate delivery can contain changed payload data; the original event ID
+    # remains idempotent when its tenant/subscription binding is unchanged.
+    assert BillingLifecycleStore._same_event_identity(
         {**prior, "event_created_at": NOW + timedelta(seconds=1)}, event()
     )

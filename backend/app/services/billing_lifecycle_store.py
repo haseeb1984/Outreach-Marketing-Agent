@@ -141,7 +141,6 @@ class BillingLifecycleStore:
         return (
             prior["workspace_id"] == event.workspace_id
             and prior["provider_subscription_id"] == event.provider_subscription_id
-            and prior["event_created_at"] == event.event_created_at
         )
 
     @staticmethod
