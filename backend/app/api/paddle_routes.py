@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1/billing/paddle", tags=["billing"])
 
 
 REQUIRED_ENTITLEMENT_KEYS = frozenset({
-    "ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends",
+    "ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends", "prospect_research",
 })
 
 
