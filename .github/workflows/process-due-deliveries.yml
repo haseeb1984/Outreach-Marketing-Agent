@@ -1,0 +1,33 @@
+name: Process due campaign deliveries
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: process-due-campaign-deliveries
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Dispatch due email deliveries
+        env:
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKEND_BASE_URL" || { echo "BACKEND_BASE_URL secret is required"; exit 1; }
+          test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is required"; exit 1; }
+          case "$BACKEND_BASE_URL" in https://*) ;; *) echo "BACKEND_BASE_URL must use HTTPS"; exit 1 ;; esac
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json" \
+            "$BACKEND_BASE_URL/api/v1/deliveries/process-due?limit=25"
