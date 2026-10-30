@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     paddle_live_checkout_enabled: bool = False
     paddle_plans_json: str | None = None
     outreach_webhook_secret: str | None = None
+    cron_secret: str | None = None
     meta_whatsapp_access_token: str | None = None
     meta_whatsapp_app_secret: str | None = None
     meta_whatsapp_webhook_verify_token: str | None = None
