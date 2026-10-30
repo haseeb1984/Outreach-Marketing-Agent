@@ -26,6 +26,16 @@ class ConversationStore:
                 await c.execute("""UPDATE crm_prospects SET stage='replied',updated_at=now()
                     WHERE id=$1 AND workspace_id=$2 AND stage NOT IN ('do_not_contact','disqualified')""",
                     prospect_id,workspace_id)
+                # A reply ends the active outreach cycle. Cancel every not-yet-claimed
+                # email delivery in this transaction; the send worker rechecks stage
+                # while claiming to close the race with concurrent sends.
+                await c.execute("""UPDATE outreach_deliveries
+                    SET status='cancelled',error_code='prospect_replied',updated_at=now()
+                    WHERE workspace_id=$1 AND status='queued'
+                      AND draft_id IN (
+                        SELECT id FROM outreach_drafts
+                        WHERE workspace_id=$1 AND prospect_id=$2
+                      )""", workspace_id, prospect_id)
                 result=dict(row)
                 for k in ("id","prospect_id"): result[k]=str(result[k])
                 return {"duplicate":False,"message":result}
