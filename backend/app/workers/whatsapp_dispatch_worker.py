@@ -166,6 +166,7 @@ async def process_claimed_delivery(
             draft_id=UUID(str(delivery["draft_id"])),
             template_name=delivery.get("template_name"),
             language_code=delivery.get("language_code"),
+            template_parameters=delivery.get("template_parameters") or {},
         )
         if not decision.get("allowed"):
             reason = str(decision.get("reason", "whatsapp_policy_denied"))[:100]
@@ -220,6 +221,7 @@ async def process_claimed_delivery(
                 **kwargs,
                 template_name=approved_name,
                 language_code=approved_language,
+                template_parameters=decision.get("template_parameters") or {},
             )
         else:
             result = await provider.send(**kwargs, body=str(content["body"]))
