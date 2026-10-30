@@ -23,7 +23,7 @@ type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
 type WhatsAppConversation = { id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
-type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; provider_timestamp?: string | null; received_at: string };
+type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; provider_timestamp?: string | null; received_at: string };
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
@@ -1797,6 +1797,7 @@ export default function DashboardPage() {
                 {selectedWhatsAppConversation ? (whatsappMessages.length ? <ol>
                   {whatsappMessages.map(message => <li key={message.id} style={{marginBottom:"0.75rem"}}>
                     <p>{message.text_body || ("[" + message.message_type + " message]")}</p>
+                    {message.media_metadata && Object.keys(message.media_metadata).length > 0 && <pre className="fine" style={{whiteSpace:"pre-wrap"}}>{JSON.stringify(message.media_metadata, null, 2)}</pre>}
                     <p className="fine">{message.provider_timestamp ? new Date(message.provider_timestamp).toLocaleString() : new Date(message.received_at).toLocaleString()}</p>
                   </li>)}
                 </ol> : <p className="fine">No messages in this conversation.</p>) : <p className="fine">Select a conversation to view its inbound messages.</p>}
