@@ -5,12 +5,22 @@ Only verified server-side billing lifecycle handlers may write subscription snap
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 import json
 
 from app.services.entitlements import EntitlementDecision, evaluate_entitlement
+
+
+@asynccontextmanager
+async def _connection_scope(pool: Any, connection: Any | None):
+    if connection is not None:
+        yield connection
+        return
+    async with pool.acquire() as acquired:
+        yield acquired
 
 
 class SubscriptionStore:
@@ -131,7 +141,7 @@ class SubscriptionStore:
 
     async def reserve_usage(
         self, *, workspace_id: str, feature: str, idempotency_key: str,
-        now: datetime | None = None,
+        now: datetime | None = None, connection: Any | None = None,
     ) -> dict[str, Any]:
         """Atomically reserve one quota unit and return a stable reservation.
 
@@ -147,7 +157,7 @@ class SubscriptionStore:
         if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 200:
             raise ValueError("invalid_idempotency_key")
         current = now or datetime.now(timezone.utc)
-        async with self._pool.acquire() as conn:
+        async with _connection_scope(self._pool, connection) as conn:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """SELECT workspace_id,status,billing_period_starts_at,
@@ -209,6 +219,7 @@ class SubscriptionStore:
 
     async def finish_reservation(
         self, *, workspace_id: str, reservation_id: str, outcome: str,
+        connection: Any | None = None,
     ) -> bool:
         """Move a reservation to consumed or released once; no silent double-finish."""
         if outcome not in {"consumed", "released"}:
@@ -219,7 +230,7 @@ class SubscriptionStore:
             return False
         if not isinstance(workspace_id, str) or not workspace_id.strip():
             return False
-        async with self._pool.acquire() as conn:
+        async with _connection_scope(self._pool, connection) as conn:
             row = await conn.fetchrow(
                 """UPDATE feature_usage_reservations SET status=$3,updated_at=now()
                    WHERE id=$1::uuid AND workspace_id=$2 AND status='reserved'

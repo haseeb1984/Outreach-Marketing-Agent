@@ -6,6 +6,7 @@ The public enqueue route separately enforces session/CSRF, workspace membership,
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -35,6 +36,15 @@ def validate_job_request(*, job_type: str, payload: dict[str, Any], idempotency_
     return encoded
 
 
+@asynccontextmanager
+async def _connection_scope(pool: Any, connection: Any | None):
+    if connection is not None:
+        yield connection
+        return
+    async with pool.acquire() as acquired:
+        yield acquired
+
+
 class WorkspaceJobQueue:
     """Durable queue with idempotency, lease-based claiming, and stale-worker fencing."""
 
@@ -50,6 +60,7 @@ class WorkspaceJobQueue:
         idempotency_key: str | None = None,
         max_attempts: int = 3,
         run_after: datetime | None = None,
+        db_connection: Any | None = None,
     ) -> dict[str, Any]:
         if not str(workspace_id).strip() or len(str(workspace_id)) > 200:
             raise ValueError("A valid trusted workspace identifier is required")
@@ -61,7 +72,7 @@ class WorkspaceJobQueue:
         schedule = run_after or datetime.now(timezone.utc)
         if schedule.tzinfo is None or schedule.utcoffset() is None:
             raise ValueError("run_after must be timezone-aware")
-        async with self._pool.acquire() as connection:
+        async with _connection_scope(self._pool, db_connection) as connection:
             if idempotency_key is None:
                 row = await connection.fetchrow(
                     """INSERT INTO workspace_jobs

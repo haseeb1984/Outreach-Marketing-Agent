@@ -90,6 +90,7 @@ class WorkspaceGrowthScheduleRunner:
                     feature="website_audits",
                     idempotency_key=usage_key,
                     now=current,
+                    connection=conn,
                 )
                 if not reservation.get("allowed"):
                     reason = str(reservation.get("reason", "entitlement_denied"))[:100]
@@ -122,6 +123,8 @@ class WorkspaceGrowthScheduleRunner:
                             workspace_id=str(schedule["workspace_id"]),
                             reservation_id=reservation["reservation_id"],
                             outcome="released",
+                            connection=conn,
+                            connection=conn,
                         )
                     await conn.execute(
                         """UPDATE workspace_growth_schedules
@@ -149,6 +152,7 @@ class WorkspaceGrowthScheduleRunner:
                         idempotency_key=idempotency_key,
                         max_attempts=3,
                         run_after=current,
+                        db_connection=conn,
                     )
                 except ValueError as exc:
                     # Deterministic queue rejection must not pin this schedule to
@@ -183,6 +187,7 @@ class WorkspaceGrowthScheduleRunner:
                         workspace_id=str(schedule["workspace_id"]),
                         reservation_id=reservation["reservation_id"],
                         outcome="consumed",
+                        connection=conn,
                     )
                     if not finished:
                         raise RuntimeError("growth_schedule_quota_persistence_failed")
