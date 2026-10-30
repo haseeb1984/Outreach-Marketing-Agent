@@ -62,6 +62,12 @@ See [AI discoverability and self-marketing requirements](docs/AI_DISCOVERABILITY
 - AI: provider-agnostic LLM interface, structured outputs, validation, evidence checks, and safe fallbacks.
 - Deployment: frontend on Hostinger Business; FastAPI backend remains on Vercel at `https://outreach-marketing-agent.vercel.app` until a verified backend migration is explicitly approved. Frontend talks to the backend over HTTPS only; it never connects directly to the database. Document Hostinger/Vercel quotas and never commit credentials.
 
+## AI outreach generation
+
+Outreach drafts support an optional OpenAI-compatible Chat Completions provider. Configure `AI_API_KEY`, and optionally `AI_BASE_URL` (HTTPS endpoint; defaults to `https://api.openai.com/v1`) and `AI_MODEL` (defaults to `gpt-4o-mini`) in the backend environment. When configured, the API generates personalized copy using only workspace campaign details and verified prospect evidence; provider errors fail closed and release the draft-generation quota reservation. Without a key, the existing evidence-grounded template generator remains available. In both modes, drafts require human approval and generation never sends messages. Provider readiness is visible under dashboard integration status.
+
+Draft editing, approval/rejection notes, and a workspace-authorized activity timeline are available in the review queue. WhatsApp sending remains separately gated by official Meta onboarding and dispatch controls.
+
 ## Background worker operations
 
 - [Durable website-growth worker runbook](docs/WORKER_OPERATIONS.md). One-off and recurring growth scans require a continuously supervised worker process; merging code alone does not run queued jobs.
