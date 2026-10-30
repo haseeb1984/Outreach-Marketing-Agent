@@ -165,6 +165,10 @@ class SMTPEmailDelivery:
         message["To"] = recipient
         if delivery_id is not None:
             message["X-OMA-Delivery-ID"] = delivery_id
+            sender_domain = str(self._settings.smtp_from_email).rsplit("@", 1)[-1].strip().lower()
+            if not sender_domain or len(sender_domain) > 253:
+                raise EmailDeliveryNotConfigured("smtp_sender_domain_invalid")
+            message["Message-ID"] = "<" + delivery_id + "@" + sender_domain + ">"
             if not workspace_id or not prospect_id:
                 raise ValueError("delivery_context_required")
             secret = (settings.outreach_webhook_secret or "").strip()
