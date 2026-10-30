@@ -124,7 +124,6 @@ class WorkspaceGrowthScheduleRunner:
                             reservation_id=reservation["reservation_id"],
                             outcome="released",
                             connection=conn,
-                            connection=conn,
                         )
                     await conn.execute(
                         """UPDATE workspace_growth_schedules
@@ -164,6 +163,7 @@ class WorkspaceGrowthScheduleRunner:
                             workspace_id=str(schedule["workspace_id"]),
                             reservation_id=reservation["reservation_id"],
                             outcome="released",
+                            connection=conn,
                         )
                     error_code = (
                         "schedule_idempotency_conflict" if conflict
