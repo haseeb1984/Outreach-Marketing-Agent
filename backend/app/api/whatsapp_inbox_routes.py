@@ -9,11 +9,23 @@ import hmac
 import json
 from uuid import UUID
 
+from pydantic import BaseModel, Field
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
+
+class WhatsAppConversationUpdate(BaseModel):
+    assigned_to_user_id: str | None = Field(default=None, min_length=1, max_length=200)
+    inbox_status: str | None = Field(default=None, pattern="^(open|pending|resolved)$")
+    priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
+
+
+class WhatsAppInternalNoteCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
 
 router = APIRouter(prefix="/api/v1/integrations/whatsapp/inbox", tags=["WhatsApp inbox"])
 
@@ -408,3 +420,140 @@ async def delete_whatsapp_inbound_media(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_media_delete_unavailable") from None
+
+
+@router.patch("/conversations/{conversation_id}")
+async def update_whatsapp_conversation(
+    conversation_id: UUID,
+    payload: WhatsAppConversationUpdate,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Assign, prioritize, and change lifecycle state for one workspace conversation."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, "admin")
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=422, detail="whatsapp_conversation_update_empty")
+    assignee = changes.get("assigned_to_user_id")
+    try:
+        if "assigned_to_user_id" in changes and assignee is not None:
+            auth = getattr(request.app.state, "auth_store", None)
+            if auth is None or not await auth.authorize_workspace(
+                user_id=assignee, workspace_id=workspace_id, minimum_role="viewer"
+            ):
+                raise HTTPException(status_code=422, detail="whatsapp_assignee_not_workspace_member")
+        assignments, args = [], [conversation_id, workspace_id]
+        if "assigned_to_user_id" in changes:
+            args.append(assignee)
+            assignments.append(f"assigned_to_user_id=${len(args)}")
+            assignments.append("assigned_at=CASE WHEN $" + str(len(args)) + " IS NULL THEN NULL ELSE now() END")
+        if "inbox_status" in changes:
+            args.append(changes["inbox_status"])
+            assignments.append(f"inbox_status=${len(args)}")
+            assignments.append("closed_at=CASE WHEN $" + str(len(args)) + "='resolved' THEN now() ELSE NULL END")
+        if "priority" in changes:
+            args.append(changes["priority"])
+            assignments.append(f"priority=${len(args)}")
+        assignments.append("updated_at=now()")
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                "UPDATE whatsapp_conversations SET " + ",".join(assignments) +
+                " WHERE id=$1 AND workspace_id=$2 RETURNING id,assigned_to_user_id,inbox_status,priority,assigned_at,closed_at,updated_at",
+                *args,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
+        return _serialize(dict(row))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_conversation_update_unavailable") from None
+
+
+@router.get("/conversations/{conversation_id}/notes")
+async def list_whatsapp_conversation_notes(
+    conversation_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, "viewer")
+    try:
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT n.id,n.conversation_id,n.author_user_id,n.body,n.created_at,n.updated_at
+                   FROM whatsapp_conversation_notes n
+                   JOIN whatsapp_conversations c ON c.id=n.conversation_id
+                     AND c.workspace_id=n.workspace_id
+                   WHERE n.workspace_id=$1 AND n.conversation_id=$2
+                   ORDER BY n.created_at DESC,n.id DESC LIMIT $3""",
+                workspace_id, conversation_id, limit,
+            )
+        return {"items": [_serialize(dict(row)) for row in rows], "limit": limit}
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_conversation_notes_unavailable") from None
+
+
+@router.post("/conversations/{conversation_id}/notes")
+async def create_whatsapp_conversation_note(
+    conversation_id: UUID,
+    payload: WhatsAppInternalNoteCreate,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Create an internal-only note; note text is never sent to Meta or the contact."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, "member")
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="whatsapp_internal_note_empty")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO whatsapp_conversation_notes
+                   (workspace_id,conversation_id,author_user_id,body)
+                   SELECT $1,c.id,$3,$4 FROM whatsapp_conversations c
+                   WHERE c.id=$2 AND c.workspace_id=$1
+                   RETURNING id,conversation_id,author_user_id,body,created_at,updated_at""",
+                workspace_id, conversation_id, session["user_id"], body,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
+        return _serialize(dict(row))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_internal_note_create_unavailable") from None
+
+
+@router.delete("/conversations/{conversation_id}/notes/{note_id}")
+async def delete_whatsapp_conversation_note(
+    conversation_id: UUID,
+    note_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, "admin")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """DELETE FROM whatsapp_conversation_notes n
+                   USING whatsapp_conversations c
+                   WHERE n.id=$1 AND n.conversation_id=$2 AND n.workspace_id=$3
+                     AND c.id=n.conversation_id AND c.workspace_id=n.workspace_id
+                   RETURNING n.id""",
+                note_id, conversation_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="whatsapp_internal_note_not_found")
+        return {"note_id": str(row["id"]), "deleted": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_internal_note_delete_unavailable") from None
