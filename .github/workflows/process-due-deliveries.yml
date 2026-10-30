@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: process-due-campaign-deliveries
+  group: process-outreach-deliveries
   cancel-in-progress: false
 
 jobs:
@@ -31,3 +31,26 @@ jobs:
             --header "Authorization: Bearer $CRON_SECRET" \
             --header "Content-Type: application/json" \
             "$BACKEND_BASE_URL/api/v1/deliveries/process-due?limit=25"
+
+      - name: Process verified Meta WhatsApp webhook events
+        env:
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json" \
+            "$BACKEND_BASE_URL/api/v1/integrations/whatsapp/inbox/webhook-events/process-pending-system?batch_size=50"
+      - name: Dispatch approved WhatsApp queue (only when explicitly enabled server-side)
+        env:
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json" \
+            "$BACKEND_BASE_URL/api/v1/integrations/whatsapp/outbound/process-queued?limit=10"
