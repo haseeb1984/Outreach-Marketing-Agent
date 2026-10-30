@@ -6,10 +6,12 @@ persisted delivery, never trusted from the callback body.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
+from uuid import UUID
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -95,3 +97,38 @@ async def ingest_email_provider_event(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="email_provider_event_unavailable") from None
+
+
+@router.post("/unsubscribe", status_code=200)
+async def one_click_unsubscribe(request: Request):
+    """RFC 8058 one-click unsubscribe using a signed, recipient-specific opaque token."""
+    secret = (settings.outreach_webhook_secret or "").strip()
+    token = request.query_params.get("token", "")
+    if len(secret.encode("utf-8")) < 32 or len(token) > 4096 or "." not in token:
+        raise HTTPException(status_code=400, detail="unsubscribe_token_invalid")
+    encoded, supplied_signature = token.rsplit(".", 1)
+    try:
+        payload = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, supplied_signature):
+            raise ValueError
+        workspace_id, prospect_raw, email = payload.decode("utf-8").split("\\n", 2)
+        prospect_id = UUID(prospect_raw)
+        if not workspace_id or len(workspace_id) > 200 or not email or len(email) > 320:
+            raise ValueError
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="unsubscribe_token_invalid") from None
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="email_unsubscribe_unavailable")
+    try:
+        return await EmailProviderEventStore(pool).unsubscribe(
+            workspace_id=workspace_id,
+            prospect_id=prospect_id,
+            email=email,
+            occurred_at=datetime.now(timezone.utc),
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="unsubscribe_contact_not_found") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="email_unsubscribe_unavailable") from None
