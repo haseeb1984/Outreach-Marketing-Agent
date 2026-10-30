@@ -76,7 +76,9 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
     """Cron entry point for approved, due deliveries; protected by a dedicated secret."""
     expected = os.getenv("CRON_SECRET", "").strip()
     supplied = request.headers.get("authorization", "")
-    if not expected or not hmac.compare_digest(supplied, "Bearer " + expected):
+    if len(expected.encode("utf-8")) < 32:
+        raise HTTPException(status_code=503, detail="scheduler_secret_not_configured")
+    if not hmac.compare_digest(supplied, "Bearer " + expected):
         raise HTTPException(status_code=401, detail="scheduler_unauthorized")
     store = _store(request)
     subscriptions = getattr(request.app.state, "subscription_store", None)
