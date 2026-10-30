@@ -5,11 +5,13 @@ documented opt-in, approved templates, account verification, and workspace entit
 """
 from __future__ import annotations
 
+import hmac
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.auth_routes import _authenticated, _check_csrf
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/integrations/whatsapp/inbox", tags=["WhatsApp inbox"])
 
@@ -266,3 +268,26 @@ async def process_pending_whatsapp_events_for_workspace(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_event_processing_unavailable") from None
+
+
+
+@router.post("/webhook-events/process-pending-system")
+async def process_pending_whatsapp_events_system(
+    request: Request, batch_size: int = Query(default=50, ge=1, le=100),
+) -> dict:
+    """Scheduler-only global inbound event processor for all active mapped accounts."""
+    configured = (settings.cron_secret or "").strip()
+    if len(configured.encode("utf-8")) < 32:
+        raise HTTPException(status_code=503, detail="whatsapp_worker_secret_not_configured")
+    supplied = request.headers.get("authorization", "")
+    scheme, _, token = supplied.partition(" ")
+    if scheme.lower() != "bearer" or not token or not hmac.compare_digest(configured, token):
+        raise HTTPException(status_code=401, detail="invalid_scheduler_authorization")
+    try:
+        from app.services.whatsapp_event_processor import process_pending_whatsapp_events
+        result = await process_pending_whatsapp_events(_pool(request), batch_size=batch_size)
+        return {"accepted": True, **result}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_inbound_processing_unavailable") from None
