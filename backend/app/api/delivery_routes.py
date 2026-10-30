@@ -7,6 +7,7 @@ from pydantic import BaseModel,ConfigDict,Field
 from app.api.auth_routes import _authenticated,_check_csrf
 from app.services.email_delivery import EmailDeliveryFailed,EmailDeliveryNotConfigured,SMTPEmailDelivery
 from app.services.smtp_account_store import CredentialDecryptionFailed, CredentialEncryptionNotConfigured, SMTPAccountStore
+from app.services.email_provider_event_store import EmailProviderEventStore
 from app.core.config import settings
 router=APIRouter(prefix="/api/v1",tags=["outbound-delivery"])
 
@@ -102,6 +103,29 @@ async def reconcile_stale_deliveries(
 async def list_deliveries(request: Request,workspace_id: str=Query(min_length=1,max_length=200),limit: int=Query(default=50,ge=1,le=100),offset: int=Query(default=0,ge=0,le=100000)):
  _,_,s=await _authenticated(request); await _authorize(request,workspace_id,"viewer",s)
  return {"items":await _store(request).list_deliveries(workspace_id=workspace_id,limit=limit,offset=offset),"limit":limit,"offset":offset}
+@router.get("/deliveries/{delivery_id}/provider-events")
+async def list_email_provider_events(
+    delivery_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="email_event_store_not_configured")
+    try:
+        items = await EmailProviderEventStore(pool).list_events(
+            workspace_id=workspace_id, delivery_id=delivery_id, limit=limit,
+        )
+        return {"items": items, "limit": limit}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="email_provider_event_history_unavailable") from None
+
+
 @router.post("/deliveries/{delivery_id}/send")
 async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Request):
     _, _, session = await _authenticated(request)
