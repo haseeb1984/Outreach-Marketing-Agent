@@ -143,9 +143,18 @@ async def download_meta_media(*, pool: Any, workspace_id: str, account_id: UUID,
         raise WhatsAppMediaError("whatsapp_media_empty")
     expected_hash = metadata.get("sha256") if isinstance(metadata, dict) else None
     if isinstance(expected_hash, str) and expected_hash:
-        if len(expected_hash) != 64 or not hmac.compare_digest(
-            hashlib.sha256(content).hexdigest().lower(), expected_hash.lower()
-        ):
+        digest = hashlib.sha256(content).digest()
+        valid_hash = False
+        try:
+            decoded_hash = base64.b64decode(
+                expected_hash + "=" * (-len(expected_hash) % 4), validate=True,
+            )
+            valid_hash = len(decoded_hash) == 32 and hmac.compare_digest(digest, decoded_hash)
+        except (ValueError, base64.binascii.Error):
+            valid_hash = len(expected_hash) == 64 and hmac.compare_digest(
+                digest.hex(), expected_hash.lower(),
+            )
+        if not valid_hash:
             raise WhatsAppMediaError("whatsapp_media_checksum_mismatch")
     encrypted = encrypt_media(bytes(content), workspace_id, account_id, message_id)
     filename = metadata.get("filename") if isinstance(metadata, dict) else None
