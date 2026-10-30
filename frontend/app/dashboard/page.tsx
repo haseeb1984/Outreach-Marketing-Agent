@@ -106,6 +106,10 @@ export default function DashboardPage() {
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   const [whatsappNotes, setWhatsappNotes] = useState<WhatsAppInternalNote[]>([]);
   const [whatsappActivity, setWhatsappActivity] = useState<WhatsAppActivity[]>([]);
+  const [whatsappFilterStatus, setWhatsappFilterStatus] = useState("");
+  const [whatsappFilterPriority, setWhatsappFilterPriority] = useState("");
+  const [whatsappFilterSearch, setWhatsappFilterSearch] = useState("");
+  const [whatsappFilterAssignee, setWhatsappFilterAssignee] = useState("all");
   const [whatsappNoteDraft, setWhatsappNoteDraft] = useState("");
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
@@ -1287,6 +1291,57 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function applyWhatsAppInboxFilters() {
+    if (!workspaceId || !csrf) return;
+    setWhatsappInboxBusy(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ workspace_id: workspaceId, limit: "50" });
+      if (whatsappFilterStatus) params.set("inbox_status", whatsappFilterStatus);
+      if (whatsappFilterPriority) params.set("priority", whatsappFilterPriority);
+      if (whatsappFilterSearch.trim()) params.set("search", whatsappFilterSearch.trim());
+      if (whatsappFilterAssignee === "me") params.set("assigned_to_me", "true");
+      if (whatsappFilterAssignee === "unassigned") params.set("unassigned", "true");
+      const result = await api<{ items: WhatsAppConversation[] }>(
+        "/api/v1/integrations/whatsapp/inbox/conversations?" + params.toString(), csrf,
+      );
+      setWhatsappConversations(result.items || []);
+      if (selectedWhatsAppConversation && !(result.items || []).some(item => item.id === selectedWhatsAppConversation)) {
+        setSelectedWhatsAppConversation("");
+        setWhatsappMessages([]);
+        setWhatsappNotes([]);
+        setWhatsappActivity([]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp inbox filters could not be applied.");
+    } finally {
+      setWhatsappInboxBusy(false);
+    }
+  }
+
+  async function clearWhatsAppInboxFilters() {
+    setWhatsappFilterStatus("");
+    setWhatsappFilterPriority("");
+    setWhatsappFilterSearch("");
+    setWhatsappFilterAssignee("all");
+    if (!workspaceId || !csrf) return;
+    setWhatsappInboxBusy(true);
+    try {
+      const result = await api<{ items: WhatsAppConversation[] }>(
+        "/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf,
+      );
+      setWhatsappConversations(result.items || []);
+      setSelectedWhatsAppConversation("");
+      setWhatsappMessages([]);
+      setWhatsappNotes([]);
+      setWhatsappActivity([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp inbox could not be refreshed.");
+    } finally {
+      setWhatsappInboxBusy(false);
+    }
+  }
+
   async function retryWhatsAppDeadLetter(event: WhatsAppWebhookEvent) {
     if (!workspaceId || !csrf || !window.confirm("Requeue this exhausted inbound webhook event for processing? This does not send a WhatsApp message.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -1858,6 +1913,30 @@ export default function DashboardPage() {
             <div className="cards">
               <article className="card">
                 <h4>Conversations ({whatsappConversations.length})</h4>
+                <div className="form-grid" style={{marginBottom:"0.75rem"}}>
+                  <label>Assignment
+                    <select className="input" value={whatsappFilterAssignee} onChange={event=>setWhatsappFilterAssignee(event.target.value)}>
+                      <option value="all">All conversations</option><option value="me">Assigned to me</option><option value="unassigned">Unassigned</option>
+                    </select>
+                  </label>
+                  <label>Status
+                    <select className="input" value={whatsappFilterStatus} onChange={event=>setWhatsappFilterStatus(event.target.value)}>
+                      <option value="">All statuses</option><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option>
+                    </select>
+                  </label>
+                  <label>Priority
+                    <select className="input" value={whatsappFilterPriority} onChange={event=>setWhatsappFilterPriority(event.target.value)}>
+                      <option value="">All priorities</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                    </select>
+                  </label>
+                  <label>Search contact, company or message
+                    <input className="input" value={whatsappFilterSearch} maxLength={200} onChange={event=>setWhatsappFilterSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void applyWhatsAppInboxFilters();}}} placeholder="Name, phone, company or text" />
+                  </label>
+                  <div style={{display:"flex",gap:"0.5rem",alignItems:"end"}}>
+                    <button className="button" type="button" disabled={whatsappInboxBusy} onClick={applyWhatsAppInboxFilters}>Apply filters</button>
+                    <button className="button secondary" type="button" disabled={whatsappInboxBusy} onClick={clearWhatsAppInboxFilters}>Clear</button>
+                  </div>
+                </div>
                 {whatsappConversations.length ? whatsappConversations.map(conversation => <button
                   className={"button " + (selectedWhatsAppConversation === conversation.id ? "" : "secondary")}
                   type="button" key={conversation.id} disabled={whatsappInboxBusy}
