@@ -1,11 +1,11 @@
 """Workspace-authorized provider configuration diagnostics.
 
-Deployment-level SMTP is a fallback; workspace SMTP accounts are managed separately.
-No credential is returned to the browser. The test endpoint performs TLS + authentication only and
-never sends a message. WhatsApp sending remains disabled pending Meta onboarding.
+Deployment-level SMTP is a fallback; workspace SMTP and WhatsApp accounts are managed separately.
+No credential is returned to the browser. Provider configuration is not proof of delivery.
 """
 from __future__ import annotations
 
+import os
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.auth_routes import _authenticated, _check_csrf
@@ -52,13 +52,31 @@ async def integration_status(
         missing_email.append("smtp_port_587_required")
 
     whatsapp_fields = {
-        "access_token": settings.meta_whatsapp_access_token,
         "app_secret": settings.meta_whatsapp_app_secret,
-        "phone_number_id": settings.meta_whatsapp_phone_number_id,
-        "waba_id": settings.meta_whatsapp_waba_id,
+        "webhook_verify_token": settings.meta_whatsapp_webhook_verify_token,
+        "graph_api_version": settings.meta_graph_api_version,
+        "credential_encryption_key": settings.provider_credential_encryption_key,
     }
     missing_whatsapp = [key for key, value in whatsapp_fields.items()
                         if not isinstance(value, str) or not value.strip()]
+    if len((settings.meta_whatsapp_app_secret or "").encode("utf-8")) < 32:
+        missing_whatsapp.append("app_secret_minimum_32_bytes")
+    if len((settings.meta_whatsapp_webhook_verify_token or "").encode("utf-8")) < 32:
+        missing_whatsapp.append("webhook_verify_token_minimum_32_bytes")
+    dispatch_gate_enabled = bool(settings.whatsapp_dispatch_enabled) and os.getenv(
+        "WHATSAPP_DISPATCH_ENABLED", ""
+    ).strip().lower() in {"1", "true"}
+    active_whatsapp_accounts = 0
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is not None:
+        try:
+            async with pool.acquire() as conn:
+                active_whatsapp_accounts = int(await conn.fetchval(
+                    "SELECT count(*) FROM workspace_whatsapp_accounts WHERE workspace_id=$1 AND status='active' AND encrypted_access_token IS NOT NULL",
+                    workspace_id,
+                ) or 0)
+        except Exception:
+            missing_whatsapp.append("workspace_account_status_unavailable")
 
     return {
         "workspace_id": workspace_id,
@@ -70,8 +88,12 @@ async def integration_status(
         "whatsapp": {
             "configuration_complete": not missing_whatsapp,
             "missing_fields": missing_whatsapp,
-            "reason": "Meta onboarding and workspace-specific provider authorization are not yet verified.",
-            "live_send_enabled": False,
+            "active_workspace_accounts": active_whatsapp_accounts,
+            "dispatch_feature_enabled": dispatch_gate_enabled,
+            "webhook_endpoint": "/api/v1/webhooks/meta/whatsapp",
+            "inbound_processing_available": not missing_whatsapp,
+            "live_send_enabled": dispatch_gate_enabled and active_whatsapp_accounts > 0 and not missing_whatsapp,
+            "reason": "Workspace account verification and WABA webhook subscription are performed per account. Meta business review, phone registration, template approval and provider-side setup remain external requirements.",
         },
     }
 
