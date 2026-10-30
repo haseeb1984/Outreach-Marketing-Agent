@@ -11,7 +11,7 @@
 
 ## Required server settings
 
-- `DATABASE_URL`: PostgreSQL database with migrations through `043_whatsapp_inbound_media_storage.sql`.
+- `DATABASE_URL`: PostgreSQL database with migrations through `044_whatsapp_inbox_collaboration.sql`.
 - `PROVIDER_CREDENTIAL_ENCRYPTION_KEY`: stable URL-safe base64-encoded 32-byte key.
 - `META_WHATSAPP_APP_SECRET`: Meta app secret, at least 32 bytes, used for webhook signature validation.
 - `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`: unique random verify token, at least 32 bytes.
@@ -69,3 +69,12 @@ The sender supports plain text inside the 24-hour customer-service window and ap
 - Workspace members with viewer access can retrieve decrypted bytes from `GET /api/v1/integrations/whatsapp/inbox/messages/{message_id}/media?workspace_id=...`. Responses are attachment-only, private/no-store and nosniff. Media is not exposed through public URLs.
 - Workspace admins can permanently remove stored attachment bytes with `DELETE /api/v1/integrations/whatsapp/inbox/messages/{message_id}/media?workspace_id=...`; the inbound message and non-content metadata remain for conversation history. Downloads verify Meta's SHA-256 digest before encryption.
 - Apply migration `043_whatsapp_inbound_media_storage.sql` before using attachment endpoints. Configure the same stable `PROVIDER_CREDENTIAL_ENCRYPTION_KEY` used for account credentials; losing it makes stored media unrecoverable.
+
+
+## Inbox ownership and team collaboration
+
+- Apply migration `044_whatsapp_inbox_collaboration.sql` before using assignment, lifecycle or internal-note endpoints.
+- Workspace admins can assign a conversation to an active workspace member with `PATCH /api/v1/integrations/whatsapp/inbox/conversations/{conversation_id}?workspace_id=...`; send `assigned_to_user_id` (or null to unassign), `inbox_status` (`open|pending|resolved`) and/or `priority` (`low|normal|high|urgent`). Assignee membership is re-authorized against the same workspace.
+- Workspace members and above can add and read internal-only notes using `POST/GET /api/v1/integrations/whatsapp/inbox/conversations/{conversation_id}/notes?workspace_id=...`. Notes are stored separately and are never included in outbound Meta payloads. Workspace admins can delete notes.
+- Conversation lists include current assignee, lifecycle status and priority. Resolved conversations remain available in history and can be reopened by an admin.
+- These collaboration actions do not initiate outbound messages or alter consent state.
