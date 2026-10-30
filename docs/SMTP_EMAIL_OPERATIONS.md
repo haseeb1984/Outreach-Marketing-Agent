@@ -31,3 +31,5 @@ Approved email drafts accept an optional timezone-aware scheduled_at value. The 
 Configure an external scheduler to POST to /api/v1/deliveries/process-due?limit=25 every minute. Authenticate with Authorization: Bearer followed by the CRON_SECRET value configured in the backend environment. CRON_SECRET must be high entropy, stored only in hosting secrets, and never exposed to the browser. The endpoint processes bounded batches and uses idempotent reservations and atomic claims to tolerate overlapping invocations. Quota-denied messages remain queued; definite provider configuration failures are marked failed; ambiguous SMTP outcomes become uncertain and are never automatically retried.
 
 Apply 041_campaign_delivery_scheduling.sql before enabling this scheduler. The dispatcher is an external cron entry point, not an in-process background task.
+
+Queued deliveries can also be rescheduled with the workspace-admin PATCH /api/v1/deliveries/{delivery_id}/schedule endpoint or cancelled with DELETE /api/v1/deliveries/{delivery_id}?workspace_id=... . Both operations apply only while status remains queued; a processing or completed delivery cannot be altered.
