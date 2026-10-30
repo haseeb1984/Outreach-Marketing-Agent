@@ -271,6 +271,40 @@ async def disable_whatsapp_account(
         raise HTTPException(status_code=503, detail="whatsapp_account_disable_unavailable") from None
 
 
+@router.get("/{account_id}/templates")
+async def list_whatsapp_templates(
+    account_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict[str, Any]:
+    """List the synchronized template catalogue without exposing provider credentials."""
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    try:
+        async with _pool(request).acquire() as connection:
+            account = await connection.fetchrow(
+                """SELECT id FROM workspace_whatsapp_accounts
+                   WHERE id=$1 AND workspace_id=$2""",
+                account_id, workspace_id,
+            )
+            if account is None:
+                raise HTTPException(status_code=404, detail="whatsapp_account_not_found")
+            rows = await connection.fetch(
+                """SELECT template_name, language_code, category, status,
+                          provider_status, verified_at, updated_at
+                   FROM whatsapp_message_templates
+                   WHERE workspace_id=$1 AND account_id=$2
+                   ORDER BY template_name, language_code
+                   LIMIT 500""",
+                workspace_id, account_id,
+            )
+        return {"items": [dict(row) for row in rows]}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_template_list_unavailable") from None
+
+
 @router.post("/{account_id}/templates/sync")
 async def sync_whatsapp_templates(
     account_id: UUID,
