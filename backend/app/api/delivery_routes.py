@@ -446,6 +446,8 @@ async def integrations_status(request: Request, workspace_id: str=Query(min_leng
    "inbound_reply_webhook_implemented": True,
    "inbound_reply_webhook_configured": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32),
    "provider_native_signature_verification_required_in_relay": True,
+   "scheduled_campaign_dispatch_secret_configured": bool(os.getenv("CRON_SECRET", "").strip() and len(os.getenv("CRON_SECRET", "").strip().encode("utf-8")) >= 32),
+   "scheduled_campaign_dispatch_endpoint": "/api/v1/deliveries/process-due",
   },
   "whatsapp": {
    "provider": "meta_whatsapp_cloud_api",
