@@ -111,7 +111,7 @@ async def one_click_unsubscribe(request: Request):
         expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, supplied_signature):
             raise ValueError
-        workspace_id, prospect_raw, email = payload.decode("utf-8").split("\\n", 2)
+        workspace_id, prospect_raw, email = payload.decode("utf-8").split("\n", 2)
         prospect_id = UUID(prospect_raw)
         if not workspace_id or len(workspace_id) > 200 or not email or len(email) > 320:
             raise ValueError
