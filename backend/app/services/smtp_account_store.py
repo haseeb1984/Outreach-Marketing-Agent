@@ -45,6 +45,7 @@ class SMTPAccountConfig:
     smtp_from_name: str
     smtp_starttls: bool = True
     public_base_url: str | None = None
+    updated_at: Any = None
 
 
 def _key() -> bytes:
@@ -150,7 +151,7 @@ class SMTPAccountStore:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT id,workspace_id,smtp_host,smtp_port,smtp_username,encrypted_password,
-                          from_email,from_name,starttls,status
+                          from_email,from_name,starttls,status,updated_at
                    FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2""",
                 account_id, workspace_id,
             )
@@ -162,14 +163,15 @@ class SMTPAccountStore:
             smtp_username=row["smtp_username"], smtp_password=password,
             smtp_from_email=row["from_email"], smtp_from_name=row["from_name"],
             smtp_starttls=row["starttls"], public_base_url=settings.public_base_url,
+            updated_at=row["updated_at"],
         )
 
-    async def activate_after_test(self, *, workspace_id: str, account_id: UUID) -> bool:
+    async def activate_after_test(self, *, workspace_id: str, account_id: UUID, expected_updated_at: Any) -> bool:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 """UPDATE workspace_email_accounts SET status='active',updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND status='pending_test'""",
-                account_id, workspace_id,
+                   WHERE id=$1 AND workspace_id=$2 AND status='pending_test' AND updated_at=$3""",
+                account_id, workspace_id, expected_updated_at,
             )
         return result.endswith(" 1")
 
