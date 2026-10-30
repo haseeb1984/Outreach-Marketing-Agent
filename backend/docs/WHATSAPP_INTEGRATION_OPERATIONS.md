@@ -41,13 +41,14 @@ A continuous alternative is `python -m app.workers.whatsapp_dispatch_worker` fro
 
 Application code cannot create or approve the Meta Business Manager, complete business verification, register/verify a production phone number, obtain WhatsApp permissions, pass Meta App Review, or approve message templates on the customer's behalf. The operator must configure the webhook callback and verify token in Meta, subscribe to the `messages` webhook field, grant the required WhatsApp permissions, and complete Meta's live onboarding.
 
-The sender supports plain text inside the 24-hour customer-service window and approved templates outside it. Text variables in BODY and TEXT HEADER components are synced from Meta, persisted per delivery, validated against the approved component schema, and sent as Meta text parameters. Media headers and BUTTONS components are explicitly rejected by policy until their media/button parameter mapping is implemented. Keep those templates out of outbound campaigns.
+The sender supports plain text inside the 24-hour customer-service window and approved templates outside it. Text variables in BODY and TEXT HEADER components and dynamic URL button parameters are synced from Meta, persisted per delivery, validated against the approved component schema, and sent as Meta component parameters. Media headers remain rejected until their upload/handle mapping is implemented. Keep those templates out of outbound campaigns.
 
 ## Template component support
 
-- Supported: BODY text placeholders and TEXT HEADER placeholders, with exact placeholder-count validation against the latest synchronized Meta-approved schema.
-- Not supported: image/video/document headers and button components (including dynamic URL and quick-reply buttons). Policy denies these templates before the provider request and releases the reserved quota.
-- Template parameter values are supplied as a JSON object, for example `{"body":["First name","Company"]}`. The dashboard prompts for this object only when a selected approved template contains placeholders.
+- Supported: BODY and TEXT HEADER text placeholders plus dynamic URL button placeholders, validated against the latest synchronized Meta-approved schema.
+- Dynamic URL button parameters use `{"buttons":[{"index":0,"sub_type":"url","value":"tracking-path"}]}`; indexes are zero-based and must match each approved dynamic URL button.
+- Static quick-reply, phone-number and copy-code buttons need no dynamic parameter. Unsupported button types and media headers fail closed before provider dispatch.
+- Template parameter values are supplied as a JSON object, for example `{"body":["First name","Company"],"buttons":[{"index":0,"sub_type":"url","value":"tracking-path"}]}`. The dashboard prompts for this object only when a selected approved template contains placeholders.
 - Re-sync templates after any Meta edit or approval-state change; stale approvals are revoked before the current catalogue is persisted.
 
 ## Operational safety
@@ -58,3 +59,12 @@ The sender supports plain text inside the 24-hour customer-service window and ap
 - Queue leases that expire become uncertain; no expired in-flight request is sent again automatically.
 - Disabling an account removes its encrypted token and cancels queued deliveries, releasing their reservations.
 - Meta webhook delivery is asynchronous; a successful API response does not prove a message was delivered or read.
+
+
+## Inbound attachment storage
+
+- Inbound image, video, audio, document and sticker metadata is captured from the signed webhook.
+- Workspace admins can trigger a download with `POST /api/v1/integrations/whatsapp/inbox/messages/{message_id}/media/download?workspace_id=...&account_id=...`.
+- The downloader resolves the active account token server-side, fetches only Meta's approved HTTPS media hosts, rejects redirects and unsupported MIME types, caps attachments at 16 MiB, and stores AES-GCM ciphertext in PostgreSQL. Workspace/account/message IDs are authenticated as encryption associated data.
+- Workspace members with viewer access can retrieve decrypted bytes from `GET /api/v1/integrations/whatsapp/inbox/messages/{message_id}/media?workspace_id=...`. Responses are attachment-only, private/no-store and nosniff. Media is not exposed through public URLs.
+- Apply migration `043_whatsapp_inbound_media_storage.sql` before using attachment endpoints. Configure the same stable `PROVIDER_CREDENTIAL_ENCRYPTION_KEY` used for account credentials; losing it makes stored media unrecoverable.
