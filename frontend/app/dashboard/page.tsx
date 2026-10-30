@@ -135,6 +135,9 @@ export default function DashboardPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [prospectSearch, setProspectSearch] = useState("");
   const [prospectStageFilter, setProspectStageFilter] = useState("all");
+  const [crmOffset, setCrmOffset] = useState(0);
+  const [crmTotal, setCrmTotal] = useState(0);
+  const crmPageSize = 50;
   const [researchQuery, setResearchQuery] = useState("");
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
   const [researchBusy, setResearchBusy] = useState(false);
@@ -882,19 +885,23 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
-  async function searchCrmProspects(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function loadCrmPage(nextOffset: number) {
     if (!workspaceId || !csrf) return;
     setBusy(true); setError("");
     try {
-      const params = new URLSearchParams({ workspace_id: workspaceId, limit: "100" });
+      const params = new URLSearchParams({ workspace_id: workspaceId, limit: String(crmPageSize), offset: String(nextOffset) });
       if (prospectSearch.trim()) params.set("search", prospectSearch.trim());
       if (prospectStageFilter !== "all") params.set("stage", prospectStageFilter);
-      const result = await api<ApiResult<Prospect>>("/api/v1/prospects?" + params.toString(), csrf);
-      setProspects(result.items || []);
+      const result = await api<{ items: Prospect[]; total: number; offset: number }>("/api/v1/prospects?" + params.toString(), csrf);
+      setProspects(result.items || []); setCrmOffset(result.offset || 0); setCrmTotal(result.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "CRM search could not be completed.");
     } finally { setBusy(false); }
+  }
+
+  async function searchCrmProspects(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await loadCrmPage(0);
   }
 
   async function saveProspectDetails(event: FormEvent<HTMLFormElement>, prospect: Prospect) {
@@ -1551,8 +1558,9 @@ export default function DashboardPage() {
           <article className="card"><form onSubmit={searchCrmProspects}>
             <div className="field"><label htmlFor="crm-search">Search contacts</label><input id="crm-search" value={prospectSearch} onChange={event=>setProspectSearch(event.target.value)} placeholder="Name, company, email, phone, role or website" maxLength={120}/></div>
             <div className="field"><label htmlFor="crm-stage-filter">Filter by stage</label><select id="crm-stage-filter" value={prospectStageFilter} onChange={event=>setProspectStageFilter(event.target.value)}><option value="all">All stages</option>{["new","qualified","approved","contacted","replied","converted","disqualified","do_not_contact"].map(stage=><option key={stage} value={stage}>{stage.replaceAll("_"," ")}</option>)}</select></div>
-            <div className="actions"><button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Search CRM</button><button className="button secondary" type="button" disabled={busy} onClick={()=>{setProspectSearch("");setProspectStageFilter("all");void refresh(workspaceId,csrf || "");}}>Clear filters</button></div>
-          </form><p className="fine">Showing up to 100 matching active prospects in this workspace.</p></article>
+            <div className="actions"><button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Search CRM</button><button className="button secondary" type="button" disabled={busy} onClick={()=>{setProspectSearch("");setProspectStageFilter("all");void loadCrmPage(0);}}>Clear filters</button></div>
+          </form><p className="fine">Showing {prospects.length ? crmOffset + 1 : 0}–{crmOffset + prospects.length} of {crmTotal} matching active prospects. Pages contain up to 50 records.</p></article>
+          <div className="actions" aria-label="CRM pagination"><button className="button secondary" type="button" disabled={busy || crmOffset===0} onClick={()=>void loadCrmPage(Math.max(0,crmOffset-crmPageSize))}>Previous</button><span className="fine">Page {Math.floor(crmOffset/crmPageSize)+1} of {Math.max(1,Math.ceil(crmTotal/crmPageSize))}</span><button className="button secondary" type="button" disabled={busy || crmOffset+prospects.length>=crmTotal} onClick={()=>void loadCrmPage(crmOffset+crmPageSize)}>Next</button></div>
           <div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p><div className="field"><label htmlFor={"prospect-stage-"+p.id}>CRM stage</label><select id={"prospect-stage-"+p.id} value={p.stage || "new"} disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onChange={event=>updateProspectStage(p,event.target.value)}><option value="new">New</option><option value="qualified">Qualified</option><option value="approved">Approved</option><option value="contacted">Contacted</option><option value="replied">Replied</option><option value="converted">Converted</option><option value="disqualified">Disqualified</option><option value="do_not_contact">Do not contact</option></select></div>{p.contact_email && <p className="fine">Email outreach: {p.email_suppressed ? "Suppressed" : "Not suppressed"}</p>}{p.contact_phone_e164 && <p className="fine">WhatsApp consent: {p.whatsapp_opt_in_documented ? (p.whatsapp_opt_in_account_id ? ("Evidence recorded for " + (whatsappAccounts.find(account=>account.id===p.whatsapp_opt_in_account_id)?.label || "a previously configured account")) : "Evidence recorded, but account scope is missing — reconfirm before use") : "Not documented"}</p>}<p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p><details><summary>Edit contact and evidence details</summary><form onSubmit={event=>saveProspectDetails(event,p)}>
           <div className="field"><label htmlFor={"crm-name-"+p.id}>Contact name</label><input id={"crm-name-"+p.id} name="name" required maxLength={200} defaultValue={p.name}/></div>
           <div className="field"><label htmlFor={"crm-company-"+p.id}>Company</label><input id={"crm-company-"+p.id} name="company" required maxLength={240} defaultValue={p.company}/></div>
