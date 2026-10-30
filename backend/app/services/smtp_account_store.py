@@ -195,24 +195,44 @@ class SMTPAccountStore:
             raise ValueError("invalid_sender_name")
         encrypted = _encrypt_password(smtp_password, workspace_id, account_id)
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """UPDATE workspace_email_accounts SET label=$3,smtp_host=$4,smtp_username=$5,
-                   encrypted_password=$6,from_email=$7,from_name=$8,status='pending_test',updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND status IN ('active','pending_test')
-                   RETURNING id,workspace_id,label,smtp_host,smtp_port,smtp_username,
-                             from_email,from_name,starttls,status,created_at,updated_at""",
-                account_id, workspace_id, label, host, username, encrypted, sender, name,
-            )
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE workspace_email_accounts SET label=$3,smtp_host=$4,smtp_username=$5,
+                       encrypted_password=$6,from_email=$7,from_name=$8,status='pending_test',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status IN ('active','pending_test')
+                       RETURNING id,workspace_id,label,smtp_host,smtp_port,smtp_username,
+                                 from_email,from_name,starttls,status,created_at,updated_at""",
+                    account_id, workspace_id, label, host, username, encrypted, sender, name,
+                )
+                if row is not None:
+                    # Queued messages were approved against the previous sender identity.
+                    # Do not release them automatically after credential rotation and a later retest.
+                    await conn.execute(
+                        """UPDATE outreach_deliveries
+                           SET status='failed',error_code='email_account_credentials_rotated',updated_at=now()
+                           WHERE workspace_id=$1 AND email_account_id=$2 AND status='queued'""",
+                        workspace_id, account_id,
+                    )
         return self._serialize(dict(row)) if row else None
 
     async def disable(self, *, workspace_id: str, account_id: UUID) -> bool:
         async with self._pool.acquire() as conn:
-            result = await conn.execute(
-                """UPDATE workspace_email_accounts SET status='disabled',updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND status IN ('active','pending_test')""",
-                account_id, workspace_id,
-            )
-        return result.endswith(" 1")
+            async with conn.transaction():
+                result = await conn.execute(
+                    """UPDATE workspace_email_accounts SET status='disabled',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status IN ('active','pending_test')""",
+                    account_id, workspace_id,
+                )
+                disabled = result.endswith(" 1")
+                if disabled:
+                    # Disabling an identity must also retire its queued sends atomically.
+                    await conn.execute(
+                        """UPDATE outreach_deliveries
+                           SET status='failed',error_code='email_account_disabled',updated_at=now()
+                           WHERE workspace_id=$1 AND email_account_id=$2 AND status='queued'""",
+                        workspace_id, account_id,
+                    )
+        return disabled
 
     @staticmethod
     def _serialize(row: dict[str, Any]) -> dict[str, Any]:
