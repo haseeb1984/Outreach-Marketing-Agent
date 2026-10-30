@@ -10,6 +10,7 @@ import json
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
 
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
@@ -298,3 +299,78 @@ async def process_pending_whatsapp_events_system(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_inbound_processing_unavailable") from None
+
+
+@router.post("/messages/{message_id}/media/download")
+async def download_whatsapp_inbound_media(
+    message_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    account_id: UUID = Query(),
+) -> dict:
+    """Fetch a Meta attachment once and store it encrypted with workspace/account AAD."""
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, "admin")
+    from app.services.whatsapp_media_store import WhatsAppMediaError, download_meta_media
+    try:
+        return await download_meta_media(
+            pool=_pool(request), workspace_id=workspace_id,
+            account_id=account_id, message_id=message_id,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="whatsapp_media_message_not_found") from None
+    except WhatsAppMediaError as exc:
+        code = str(exc)
+        status = 413 if code == "whatsapp_media_too_large" else 422
+        raise HTTPException(status_code=status, detail=code) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_media_download_unavailable") from None
+
+
+@router.get("/messages/{message_id}/media")
+async def get_whatsapp_inbound_media(
+    message_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> Response:
+    """Return decrypted media only after verifying the conversation's workspace access."""
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, "viewer")
+    from app.services.whatsapp_media_store import WhatsAppMediaError, decrypt_media
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT m.media_ciphertext,m.media_mime_type,m.media_filename,
+                          m.media_size,c.account_id
+                   FROM whatsapp_inbound_messages m
+                   JOIN whatsapp_conversations c ON c.id=m.conversation_id
+                     AND c.workspace_id=m.workspace_id
+                   WHERE m.id=$1 AND m.workspace_id=$2""",
+                message_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="whatsapp_media_message_not_found")
+        if row["media_ciphertext"] is None:
+            raise HTTPException(status_code=404, detail="whatsapp_media_not_downloaded")
+        content = decrypt_media(
+            row["media_ciphertext"], workspace_id, row["account_id"], message_id,
+        )
+        mime = str(row["media_mime_type"] or "application/octet-stream")
+        filename = str(row["media_filename"] or "whatsapp-attachment")
+        filename = "".join(ch for ch in filename if ch.isalnum() or ch in "._-")[:180]
+        return Response(
+            content=content,
+            media_type=mime,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(content)),
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, no-store",
+            },
+        )
+    except HTTPException:
+        raise
+    except WhatsAppMediaError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_media_retrieval_unavailable") from None
