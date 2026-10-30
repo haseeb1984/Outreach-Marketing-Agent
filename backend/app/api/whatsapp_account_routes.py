@@ -269,3 +269,149 @@ async def disable_whatsapp_account(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_account_disable_unavailable") from None
+
+
+@router.post("/{account_id}/templates/sync")
+async def sync_whatsapp_templates(
+    account_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict[str, Any]:
+    """Import the current Meta template catalogue for an active workspace account.
+
+    Meta pagination is followed only on the exact Graph API host and WABA endpoint.
+    Provider credentials never enter query strings, logs, or the response.
+    """
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, "admin", session)
+    version = (settings.meta_graph_api_version or "").strip()
+    if not re.fullmatch(r"v[0-9]{2,3}\\.0", version):
+        raise HTTPException(status_code=503, detail="meta_graph_api_version_not_configured")
+
+    try:
+        async with _pool(request).acquire() as connection:
+            account = await connection.fetchrow(
+                """SELECT waba_id, encrypted_access_token, status
+                   FROM workspace_whatsapp_accounts
+                   WHERE id=$1 AND workspace_id=$2""",
+                account_id, workspace_id,
+            )
+        if account is None:
+            raise HTTPException(status_code=404, detail="whatsapp_account_not_found")
+        if account["status"] != "active" or account["encrypted_access_token"] is None:
+            raise HTTPException(status_code=409, detail="whatsapp_account_not_active")
+        token = _decrypt(account["encrypted_access_token"], workspace_id, account_id)
+        base = "https://graph.facebook.com/" + version
+        endpoint = base + "/" + account["waba_id"] + "/message_templates"
+        headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+        timeout = httpx.Timeout(12.0, connect=4.0)
+        templates: list[dict[str, Any]] = []
+        next_url: str | None = endpoint
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+            for _ in range(20):
+                if next_url is None:
+                    break
+                parsed = httpx.URL(next_url)
+                expected = httpx.URL(endpoint)
+                if (
+                    parsed.scheme != "https"
+                    or parsed.host != "graph.facebook.com"
+                    or parsed.port not in (None, 443)
+                    or parsed.path != expected.path
+                    or parsed.username is not None
+                    or parsed.password is not None
+                    or parsed.fragment
+                ):
+                    raise HTTPException(status_code=502, detail="meta_template_pagination_url_invalid")
+                response = await client.get(
+                    next_url,
+                    params={"fields": "id,name,language,status,category", "limit": "100"} if next_url == endpoint else None,
+                    headers=headers,
+                )
+                if response.status_code != 200:
+                    raise HTTPException(status_code=502, detail="meta_template_sync_unavailable")
+                body = response.json()
+                if not isinstance(body, dict) or not isinstance(body.get("data"), list):
+                    raise HTTPException(status_code=502, detail="meta_template_response_invalid")
+                for item in body["data"]:
+                    if isinstance(item, dict):
+                        templates.append(item)
+                paging = body.get("paging")
+                next_value = paging.get("next") if isinstance(paging, dict) else None
+                if next_value is not None and not isinstance(next_value, str):
+                    raise HTTPException(status_code=502, detail="meta_template_pagination_invalid")
+                next_url = next_value
+            else:
+                if next_url is not None:
+                    raise HTTPException(status_code=502, detail="meta_template_pagination_limit_exceeded")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="meta_template_sync_unavailable") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_template_sync_unavailable") from None
+
+    status_map = {
+        "APPROVED": "approved",
+        "REJECTED": "rejected",
+        "PAUSED": "paused",
+        "PENDING": "pending",
+        "IN_APPEAL": "pending",
+        "PENDING_DELETION": "pending",
+        "DELETED": "pending",
+        "DISABLED": "paused",
+    }
+    synced = 0
+    skipped = 0
+    try:
+        async with _pool(request).acquire() as connection:
+            async with connection.transaction():
+                for item in templates:
+                    provider_id = item.get("id")
+                    name = item.get("name")
+                    language = item.get("language")
+                    provider_status = item.get("status")
+                    category = str(item.get("category") or "").lower()
+                    mapped_status = status_map.get(str(provider_status or "").upper())
+                    if (
+                        not isinstance(provider_id, (str, int))
+                        or not str(provider_id).strip()
+                        or not isinstance(name, str) or not name.strip()
+                        or not isinstance(language, str) or not language.strip()
+                        or category not in {"marketing", "utility", "authentication"}
+                        or mapped_status is None
+                    ):
+                        skipped += 1
+                        continue
+                    await connection.execute(
+                        """INSERT INTO whatsapp_message_templates
+                           (workspace_id, account_id, template_name, language_code, category,
+                            provider_template_id, status, provider_status, verified_at, updated_at)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                                   CASE WHEN $7='approved' THEN now() ELSE NULL END, now())
+                           ON CONFLICT (account_id, template_name, language_code)
+                           DO UPDATE SET
+                             workspace_id=EXCLUDED.workspace_id,
+                             category=EXCLUDED.category,
+                             provider_template_id=EXCLUDED.provider_template_id,
+                             status=EXCLUDED.status,
+                             provider_status=EXCLUDED.provider_status,
+                             verified_at=CASE WHEN EXCLUDED.status='approved'
+                                              THEN now() ELSE NULL END,
+                             updated_at=now()""",
+                        workspace_id, account_id, name.strip(), language.strip(),
+                        category, str(provider_id).strip(), mapped_status,
+                        str(provider_status).upper(),
+                    )
+                    synced += 1
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_template_persistence_unavailable") from None
+
+    return {
+        "account_id": str(account_id),
+        "templates_received": len(templates),
+        "templates_synced": synced,
+        "templates_skipped": skipped,
+        "sending_enabled": False,
+    }
