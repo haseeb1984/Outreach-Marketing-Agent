@@ -1168,6 +1168,8 @@ export default function DashboardPage() {
         body: JSON.stringify({ workspace_id: workspaceId, subject: draft.channel === "email" ? subject : null, body }),
       });
       setNotice("Draft changes saved. The draft remains pending approval and has not been sent.");
+      setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
+      setDraftEvents(current => { const next = { ...current }; delete next[draft.id]; return next; });
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Draft changes could not be saved.");
@@ -1206,7 +1208,8 @@ export default function DashboardPage() {
         }),
       });
       setNotice("Draft regenerated and returned to the same pending review. Nothing was sent.");
-      setDraftEvents(current => ({ ...current, [draft.id]: [] }));
+      setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
+      setDraftEvents(current => { const next = { ...current }; delete next[draft.id]; return next; });
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Draft could not be regenerated.");
@@ -1223,6 +1226,8 @@ export default function DashboardPage() {
         method: "POST", body: JSON.stringify({ workspace_id: workspaceId, decision, note: note.trim() || null }),
       });
       setNotice("Draft " + decision + ". No message was sent.");
+      setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
+      setDraftEvents(current => { const next = { ...current }; delete next[draft.id]; return next; });
       await refresh(workspaceId, csrf);
     } catch (err) { setError(err instanceof Error ? err.message : "Draft review failed."); }
     finally { setBusy(false); }
