@@ -206,6 +206,16 @@ async def verify_whatsapp_account(
                 for item in phone_items
             ):
                 raise HTTPException(status_code=422, detail="meta_phone_not_in_waba")
+            # Meta will not deliver WABA events until this app is subscribed.
+            subscription_response = await client.post(
+                base + "/" + row["waba_id"] + "/subscribed_apps",
+                headers=headers,
+            )
+            if subscription_response.status_code not in (200, 201):
+                raise HTTPException(status_code=422, detail="meta_waba_app_subscription_failed")
+            subscription_data = subscription_response.json()
+            if not isinstance(subscription_data, dict) or subscription_data.get("success") is not True:
+                raise HTTPException(status_code=502, detail="meta_waba_app_subscription_unconfirmed")
     except HTTPException:
         raise
     except (httpx.HTTPError, ValueError):
@@ -225,7 +235,8 @@ async def verify_whatsapp_account(
         "status": "active",
         "display_phone_number": phone_data.get("display_phone_number"),
         "verified_name": phone_data.get("verified_name"),
-        "notice": "Meta account ownership was checked. This does not enable sending; consent, template and delivery safeguards remain required.",
+        "webhooks_subscribed": True,
+        "notice": "Meta phone/WABA ownership was verified and this app was subscribed to WABA webhooks. Sending remains separately gated by dispatch configuration, consent, approved templates and quota.",
     }
 
 
