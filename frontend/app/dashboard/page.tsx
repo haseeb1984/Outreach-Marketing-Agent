@@ -355,6 +355,22 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function transferOwnership(member: WorkspaceMember) {
+    if (!workspaceId || !csrf || workspaces.find(w => w.id === workspaceId)?.role !== "owner") return;
+    if (!window.confirm("Transfer ownership of this workspace to " + member.email + "? You will become an admin and the new owner will control billing and workspace administration.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/workspaces/" + encodeURIComponent(workspaceId) + "/transfer-ownership", csrf, {
+        method: "POST", body: JSON.stringify({ target_user_id: member.user_id }),
+      });
+      setWorkspaces(current => current.map(workspace => workspace.id === workspaceId ? { ...workspace, role: "admin" } : workspace));
+      setNotice("Workspace ownership transferred. Your role is now admin.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Workspace ownership could not be transferred.");
+    } finally { setBusy(false); }
+  }
+
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!csrf || !newWorkspaceName.trim()) return;
@@ -1313,6 +1329,7 @@ export default function DashboardPage() {
           <h3>Current members</h3>
           <div className="cards">{members.length ? members.map(member=><article className="card" key={member.user_id}><h3>{member.email}</h3><p className="fine">{member.status} · {member.role}</p>
             {member.role !== "owner" && <div className="field"><label htmlFor={"role-" + member.user_id}>Role</label><select id={"role-" + member.user_id} value={member.role} disabled={busy || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onChange={e=>changeMemberRole(member,e.target.value)}><option value="viewer">Viewer</option><option value="member">Member</option><option value="admin" disabled={workspaces.find(w=>w.id===workspaceId)?.role !== "owner"}>Admin</option></select></div>}
+            {member.role !== "owner" && workspaces.find(w=>w.id===workspaceId)?.role === "owner" && <button className="button secondary" type="button" disabled={busy} onClick={()=>transferOwnership(member)}>Transfer ownership</button>}
             {member.role !== "owner" && <button className="button secondary" type="button" disabled={busy || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onClick={()=>removeMember(member)}>Remove member</button>}
           </article>) : <article className="card"><p>Member list is unavailable or no active memberships were returned.</p></article>}</div>
           <div className="cards">{invitations.length ? invitations.map(invitation=><article className="card" key={invitation.id}><h3>{invitation.invited_email}</h3><p className="fine">Role: {invitation.role} · Status: {invitation.status}</p><p className="fine">Expires: {new Date(invitation.expires_at).toLocaleString()}</p>{invitation.status === "pending" && <button className="button secondary" type="button" disabled={busy} onClick={() => revokeInvitation(invitation)}>Revoke invitation</button>}</article>) : <article className="card"><p>No invitations available for this workspace, or the invitation service is not yet configured.</p></article>}</div>
