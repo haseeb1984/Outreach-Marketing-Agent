@@ -434,6 +434,32 @@ class AuthStore:
             )
         return result.endswith(" 1")
 
+    async def list_sessions(self, *, user_id: UUID | str, current_session_id: UUID | str) -> list[dict[str, Any]]:
+        """List non-expired sessions for the signed-in account without exposing token material."""
+        now = datetime.now(timezone.utc)
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """SELECT id::text AS id,created_at,last_seen_at,expires_at,user_agent,
+                          (id=$2) AS is_current
+                   FROM auth_sessions
+                   WHERE user_id=$1 AND revoked_at IS NULL AND expires_at>$3
+                   ORDER BY is_current DESC,last_seen_at DESC,created_at DESC
+                   LIMIT 50""",
+                UUID(str(user_id)), UUID(str(current_session_id)), now,
+            )
+        return [dict(row) for row in rows]
+
+    async def revoke_session_by_id(self, *, user_id: UUID | str, session_id: UUID | str) -> bool:
+        """Revoke one session only when it belongs to the authenticated account."""
+        now = datetime.now(timezone.utc)
+        async with self._pool.acquire() as connection:
+            result = await connection.execute(
+                """UPDATE auth_sessions SET revoked_at=$3
+                   WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>$3""",
+                UUID(str(session_id)), UUID(str(user_id)), now,
+            )
+        return result.endswith(" 1")
+
     async def authorize_workspace(
         self, *, user_id: UUID | str, workspace_id: str,
         minimum_role: str = "viewer",
