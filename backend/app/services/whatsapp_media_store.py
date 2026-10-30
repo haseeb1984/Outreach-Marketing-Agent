@@ -144,7 +144,7 @@ async def download_meta_media(*, pool: Any, workspace_id: str, account_id: UUID,
     if not isinstance(filename, str) or not filename.strip():
         extension = mime.split("/")[-1].replace("jpeg", "jpg")
         filename = f"whatsapp-{message_id}.{extension}"
-    filename = "".join(ch for ch in filename if ch.isalnum() or ch in "._-")[:180] or f"whatsapp-{message_id}"
+    filename = "".join(ch for ch in filename if ch.isascii() and (ch.isalnum() or ch in "._-"))[:180] or f"whatsapp-{message_id}"
     async with pool.acquire() as conn:
         saved = await conn.fetchrow(
             """UPDATE whatsapp_inbound_messages m
