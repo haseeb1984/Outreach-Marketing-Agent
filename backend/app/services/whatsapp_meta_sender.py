@@ -70,7 +70,7 @@ def build_text_payload(*, recipient: str, body: str) -> dict[str, Any]:
 
 def build_template_payload(
     *, recipient: str, template_name: str, language_code: str,
-    parameters: dict[str, list[str]] | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized = _normalize_recipient(recipient)
     if not isinstance(template_name, str) or not template_name.strip() or len(template_name) > 512:
@@ -78,17 +78,37 @@ def build_template_payload(
     if not isinstance(language_code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{2,32}", language_code):
         raise ValueError("whatsapp_template_language_invalid")
     components = []
-    for component_type, values in (parameters or {}).items():
-        if component_type not in {"body", "header"} or not isinstance(values, list):
-            raise ValueError("whatsapp_template_component_invalid")
-        if not values or len(values) > 20 or any(
-            not isinstance(value, str) or not value.strip() or len(value) > 1024
-            for value in values
-        ):
+    supplied = parameters or {}
+    if not isinstance(supplied, dict) or set(supplied) - {"body", "header", "buttons"}:
+        raise ValueError("whatsapp_template_component_invalid")
+    for component_type in ("body", "header"):
+        values = supplied.get(component_type, [])
+        if not isinstance(values, list) or len(values) > 20:
             raise ValueError("whatsapp_template_parameter_invalid")
+        if values:
+            if any(not isinstance(value, str) or not value.strip() or len(value) > 1024 for value in values):
+                raise ValueError("whatsapp_template_parameter_invalid")
+            components.append({
+                "type": component_type,
+                "parameters": [{"type": "text", "text": value} for value in values],
+            })
+    buttons = supplied.get("buttons", [])
+    if not isinstance(buttons, list) or len(buttons) > 10:
+        raise ValueError("whatsapp_template_button_parameters_invalid")
+    seen_indexes: set[int] = set()
+    for button in buttons:
+        if not isinstance(button, dict) or set(button) != {"index", "sub_type", "value"}:
+            raise ValueError("whatsapp_template_button_parameters_invalid")
+        index = button.get("index")
+        value = button.get("value")
+        if (isinstance(index, bool) or not isinstance(index, int) or not 0 <= index <= 9
+            or index in seen_indexes or button.get("sub_type") != "url"
+            or not isinstance(value, str) or not value.strip() or len(value) > 2000):
+            raise ValueError("whatsapp_template_button_parameters_invalid")
+        seen_indexes.add(index)
         components.append({
-            "type": component_type,
-            "parameters": [{"type": "text", "text": value} for value in values],
+            "type": "button", "sub_type": "url", "index": str(index),
+            "parameters": [{"type": "text", "text": value}],
         })
     template = {"name": template_name, "language": {"code": language_code}}
     if components:
@@ -106,7 +126,7 @@ class MetaWhatsAppSender:
         self, *, version: str, phone_number_id: str, access_token: str,
         recipient: str, body: str | None = None, template_name: str | None = None,
         language_code: str | None = None,
-        template_parameters: dict[str, list[str]] | None = None,
+        template_parameters: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         normalized = _validate_common(version, phone_number_id, access_token, recipient)
         if (body is None) == (template_name is None):
