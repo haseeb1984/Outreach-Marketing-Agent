@@ -334,8 +334,9 @@ async def readiness() -> Response:
                             '038_whatsapp_outbound_queue_leases.sql',
                             '039_website_audit_job_idempotency.sql',
                             '040_email_provider_feedback.sql',
-                            '041_campaign_delivery_scheduling.sql'
-                          )) = 41"""
+                            '041_campaign_delivery_scheduling.sql',
+                            '042_whatsapp_template_components.sql'
+                          )) = 42"""
             )
             if not schema_ready:
                 return JSONResponse(
