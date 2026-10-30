@@ -11,7 +11,7 @@
 
 ## Required server settings
 
-- `DATABASE_URL`: PostgreSQL database with migrations through `038_whatsapp_outbound_queue_leases.sql`.
+- `DATABASE_URL`: PostgreSQL database with migrations through `043_whatsapp_inbound_media_storage.sql`.
 - `PROVIDER_CREDENTIAL_ENCRYPTION_KEY`: stable URL-safe base64-encoded 32-byte key.
 - `META_WHATSAPP_APP_SECRET`: Meta app secret, at least 32 bytes, used for webhook signature validation.
 - `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`: unique random verify token, at least 32 bytes.
