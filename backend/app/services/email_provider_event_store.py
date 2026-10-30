@@ -99,3 +99,36 @@ class EmailProviderEventStore:
                     "prospect_id": str(delivery["prospect_id"]),
                     "suppressed": bool(suppression_reason),
                 }
+
+    async def unsubscribe(
+        self, *, workspace_id: str, prospect_id: UUID, email: str, occurred_at: Any,
+    ) -> dict[str, Any]:
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                prospect = await conn.fetchrow(
+                    """SELECT id,contact_email,created_by FROM crm_prospects
+                       WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL FOR UPDATE""",
+                    prospect_id, workspace_id,
+                )
+                if prospect is None or not prospect["contact_email"] or prospect["contact_email"].strip().casefold() != email.casefold():
+                    raise LookupError("unsubscribe_contact_not_found")
+                await conn.execute(
+                    """INSERT INTO outreach_contact_controls
+                       (workspace_id,prospect_id,email_suppressed,email_suppression_reason,
+                        email_suppressed_at,updated_by,updated_at)
+                       VALUES($1,$2,TRUE,'unsubscribe',$3,$4,now())
+                       ON CONFLICT(workspace_id,prospect_id) DO UPDATE
+                       SET email_suppressed=TRUE,email_suppression_reason='unsubscribe',
+                           email_suppressed_at=COALESCE(outreach_contact_controls.email_suppressed_at,EXCLUDED.email_suppressed_at),
+                           updated_at=now()""",
+                    workspace_id, prospect_id, occurred_at, prospect["created_by"],
+                )
+                await conn.execute(
+                    """UPDATE outreach_deliveries q SET status='cancelled',
+                       error_code='email_unsubscribe',updated_at=now()
+                       FROM outreach_drafts d
+                       WHERE q.workspace_id=$1 AND q.draft_id=d.id AND d.workspace_id=q.workspace_id
+                         AND d.prospect_id=$2 AND q.channel='email' AND q.status='queued'""",
+                    workspace_id, prospect_id,
+                )
+        return {"unsubscribed": True, "workspace_id": workspace_id, "prospect_id": str(prospect_id)}
