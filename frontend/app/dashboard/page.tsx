@@ -589,6 +589,23 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function rotateWhatsAppToken(account: WhatsAppAccount) {
+    if (!workspaceId || !csrf || !window.confirm("Replace the access token for " + account.label + "? Pending deliveries will be cancelled and must be queued again.")) return;
+    const token = window.prompt("Paste the new Meta access token. It will be encrypted and will not be shown again.");
+    if (!token?.trim()) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ status: string; queued_reservations_released: number }>(
+        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/rotate-token",
+        csrf,
+        { method: "POST", body: JSON.stringify({ workspace_id: workspaceId, access_token: token.trim() }) },
+      );
+      setNotice("WhatsApp token rotated. " + result.queued_reservations_released + " queued reservation(s) released. Verify the account again.");
+      await refresh(workspaceId, csrf);
+    } catch (err) { setError(err instanceof Error ? err.message : "WhatsApp token could not be rotated."); }
+    finally { setBusy(false); }
+  }
+
   async function syncWhatsAppTemplates(account: WhatsAppAccount) {
     if (!workspaceId || !csrf) return;
     setBusy(true); setError(""); setNotice("");
@@ -1724,12 +1741,12 @@ export default function DashboardPage() {
               <div className="metric"><strong>{integrationStatus.ai_outreach?.configured ? "AI provider configured" : "Template fallback"}</strong><span>AI outreach generation</span><p className="fine">{integrationStatus.ai_outreach?.configured ? "Personalized copy uses the configured " + (integrationStatus.ai_outreach.model || "AI model") + " provider, then enters mandatory human review." : "Configure AI_API_KEY to enable provider-generated copy. Evidence-grounded templates remain available; every draft still requires human approval."}</p></div>
             </div> : <p className="fine">Provider status has not been loaded for this workspace.</p>}
             <h3>Official Meta WhatsApp accounts</h3>
-            <p className="fine">Add an access token from Meta Business settings and the matching WhatsApp Business Account and phone-number IDs. Tokens are encrypted at rest and never shown again. New accounts stay pending verification; this does not enable sending.</p>
+            <p className="fine">Add an access token from Meta Business settings and the matching WhatsApp Business Account and phone-number IDs. Tokens are encrypted at rest and never shown again. New accounts stay pending verification. Account verification also subscribes the app to WABA webhooks; outbound dispatch is a separate server-side setting.</p>
             <div className="cards">{whatsappAccounts.length ? whatsappAccounts.map(account => <article className="card" key={account.id}>
               <h4>{account.label}</h4><p className="fine">WABA ID: {account.waba_id} · Phone number ID: {account.phone_number_id}</p>
               <p className="fine">Status: {account.status}</p>
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "pending_verification" && <button className="button" type="button" disabled={busy} onClick={() => verifyWhatsAppAccount(account)}>Verify with Meta</button>}
-              {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "active" && <button className="button" type="button" disabled={busy} onClick={() => syncWhatsAppTemplates(account)}>Sync approved templates</button>}
+              {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "active" && <button className="button" type="button" disabled={busy} onClick={() => syncWhatsAppTemplates(account)}>Sync approved templates</button>}{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => rotateWhatsAppToken(account)}>Rotate access token</button>}
               {whatsappTemplates[account.id]?.length ? <section aria-label={"Templates for " + account.label}>
                 <h5>Message templates ({whatsappTemplates[account.id].length})</h5>
                 <ul>{whatsappTemplates[account.id].map(template => <li key={template.template_name + ":" + template.language_code}>
