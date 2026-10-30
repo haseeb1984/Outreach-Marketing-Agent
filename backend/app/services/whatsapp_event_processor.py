@@ -307,6 +307,14 @@ async def process_pending_whatsapp_events(
                                              AND provider_message_id=$5
                                              AND status IN ('processing','uncertain','sent','delivered','read','failed')
                                              AND ($3 <> 'failed' OR status IN ('processing','uncertain','sent','failed'))
+                                             AND ($3 <> 'failed' OR NOT EXISTS (
+                                               SELECT 1 FROM whatsapp_delivery_status_events newer
+                                               WHERE newer.workspace_id=$1 AND newer.account_id=$2
+                                                 AND newer.provider_message_id=$5
+                                                 AND newer.status IN ('sent','delivered','read')
+                                                 AND COALESCE(newer.provider_timestamp,newer.received_at)
+                                                     > COALESCE($4,$6)
+                                             ))
                                              AND CASE status
                                                WHEN 'processing' THEN 0
                                                WHEN 'uncertain' THEN 0
@@ -322,7 +330,7 @@ async def process_pending_whatsapp_events(
                                                WHEN 'read' THEN 3
                                                ELSE 5 END""",
                                         workspace_id, account_id, target_status,
-                                        _timestamp(status.get("timestamp")), provider_id,
+                                        _timestamp(status.get("timestamp")), provider_id, event_received_at,
                                     )
                     await conn.execute(
                         """UPDATE meta_whatsapp_webhook_events
