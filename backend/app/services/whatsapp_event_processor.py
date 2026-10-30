@@ -6,6 +6,7 @@ send messages; it only stores inbound conversations and provider delivery-status
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import re
 from typing import Any
 from uuid import UUID
@@ -58,6 +59,25 @@ def _delivery_status_target(value: Any) -> str | None:
         "read": "read",
         "failed": "failed",
     }.get(value.strip().lower())
+
+
+def _media_metadata(message: dict[str, Any], kind: str) -> dict[str, Any]:
+    """Persist safe media and interactive metadata without fetching provider media."""
+    value = message.get(kind)
+    if kind in {"image", "video", "audio", "document", "sticker"} and isinstance(value, dict):
+        allowed = ("id", "mime_type", "sha256", "caption", "filename", "voice", "animated")
+        return {key: value[key] for key in allowed if isinstance(value.get(key), (str, bool)) and len(str(value[key])) <= 2048}
+    if kind == "location" and isinstance(value, dict):
+        allowed = ("latitude", "longitude", "name", "address")
+        return {key: value[key] for key in allowed if isinstance(value.get(key), (str, int, float)) and len(str(value[key])) <= 512}
+    if kind == "interactive" and isinstance(value, dict):
+        result: dict[str, Any] = {"type": str(value.get("type") or "")[:40]}
+        for key in ("button_reply", "list_reply"):
+            item = value.get(key)
+            if isinstance(item, dict):
+                result[key] = {name: item[name] for name in ("id", "title", "description") if isinstance(item.get(name), str) and len(item[name]) <= 512}
+        return result
+    return {}
 
 
 def _text(message: dict[str, Any]) -> tuple[str, str | None]:
