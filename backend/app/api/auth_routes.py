@@ -282,6 +282,41 @@ async def verification_landing(token: str = "") -> HTMLResponse:
     return HTMLResponse(html, headers={"Referrer-Policy": "no-referrer", "Cache-Control": "no-store"})
 
 
+
+
+@router.get("/sessions")
+async def list_account_sessions(request: Request):
+    store, _, session = await _authenticated(request)
+    try:
+        items = await store.list_sessions(
+            user_id=session["user_id"], current_session_id=session["session_id"],
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="session_list_unavailable") from None
+    return {"items": items}
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_account_session(session_id: str, request: Request):
+    store, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    try:
+        target_id = UUID(session_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="session_not_found") from None
+    if str(target_id) == str(session["session_id"]):
+        raise HTTPException(status_code=409, detail="use_sign_out_for_current_session")
+    try:
+        revoked = await store.revoke_session_by_id(
+            user_id=session["user_id"], session_id=target_id,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="session_revoke_unavailable") from None
+    if not revoked:
+        raise HTTPException(status_code=404, detail="session_not_found")
+    return {"session_id": str(target_id), "revoked": True}
+
+
 @router.post("/login")
 async def login(payload: LoginInput, request: Request):
     _require_origin(request)
