@@ -60,7 +60,7 @@ class CampaignStore:
         """Load and pre-qualify workspace-owned facts before spending on AI generation."""
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT c.client_business,c.client_offer,p.name AS prospect_name,
+                """SELECT c.client_business,c.client_offer,c.target_customer_profile,p.name AS prospect_name,
                           p.evidence_url,p.fit_reason,p.verified_facts,p.stage,
                           p.contact_email,p.contact_phone_e164,
                           ctrl.email_suppressed,ctrl.whatsapp_opt_in_at,
