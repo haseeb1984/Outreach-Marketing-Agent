@@ -6,6 +6,7 @@ documented opt-in, approved templates, account verification, and workspace entit
 from __future__ import annotations
 
 import hmac
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -106,7 +107,7 @@ async def list_whatsapp_messages(
                 except ValueError:
                     raise HTTPException(status_code=422, detail="invalid_before_message_id") from None
                 rows = await conn.fetch(
-                    """SELECT id, conversation_id, provider_message_id, message_type, text_body,
+                    """SELECT id, conversation_id, provider_message_id, message_type, text_body, media_metadata,
                               provider_timestamp, received_at
                        FROM whatsapp_inbound_messages
                        WHERE workspace_id=$1 AND conversation_id=$2
@@ -127,6 +128,9 @@ async def list_whatsapp_messages(
                     workspace_id, conversation_id, limit,
                 )
         items = [_serialize(dict(row)) for row in rows]
+        for item in items:
+            if isinstance(item.get("media_metadata"), str):
+                item["media_metadata"] = json.loads(item["media_metadata"])
         return {"items": items, "limit": limit, "has_more": len(items) == limit}
     except HTTPException:
         raise
