@@ -173,6 +173,38 @@ class SMTPAccountStore:
             )
         return result.endswith(" 1")
 
+
+    async def update(
+        self, *, workspace_id: str, account_id: UUID, label: str,
+        smtp_host: str, smtp_username: str, smtp_password: str,
+        from_email: str, from_name: str,
+    ) -> dict[str, Any] | None:
+        """Rotate SMTP settings and require a fresh connection test before sending."""
+        label = label.strip()
+        if not label or len(label) > 120:
+            raise ValueError("invalid_account_label")
+        host = _validate_host(smtp_host)
+        username = smtp_username.strip()
+        if not username or len(username) > 320:
+            raise ValueError("invalid_smtp_username")
+        if not isinstance(smtp_password, str) or not 1 <= len(smtp_password) <= 1024:
+            raise ValueError("invalid_smtp_password")
+        sender = _validate_email(from_email)
+        name = from_name.strip()
+        if not name or len(name) > 200:
+            raise ValueError("invalid_sender_name")
+        encrypted = _encrypt_password(smtp_password, workspace_id, account_id)
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """UPDATE workspace_email_accounts SET label=$3,smtp_host=$4,smtp_username=$5,
+                   encrypted_password=$6,from_email=$7,from_name=$8,status='pending_test',updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status IN ('active','pending_test')
+                   RETURNING id,workspace_id,label,smtp_host,smtp_port,smtp_username,
+                             from_email,from_name,starttls,status,created_at,updated_at""",
+                account_id, workspace_id, label, host, username, encrypted, sender, name,
+            )
+        return self._serialize(dict(row)) if row else None
+
     async def disable(self, *, workspace_id: str, account_id: UUID) -> bool:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
