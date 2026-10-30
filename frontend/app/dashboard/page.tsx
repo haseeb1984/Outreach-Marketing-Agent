@@ -316,6 +316,8 @@ export default function DashboardPage() {
         const first = result.items?.[0]?.id || "";
         setWorkspaceId(first);
         if (first) await loadWorkspaceData(first, session.csrf_token);
+        const sessionList = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", session.csrf_token);
+        if (!cancelled) setAuthSessions(sessionList.items || []);
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : "";
@@ -338,7 +340,6 @@ export default function DashboardPage() {
         method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, role }),
       });
       setNotice("Workspace member role updated.");
-      void loadAuthSessions();
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Member role could not be changed.");
