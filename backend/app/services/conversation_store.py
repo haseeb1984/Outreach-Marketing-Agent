@@ -41,3 +41,36 @@ class ConversationStore:
         for row in rows:
             item=dict(row); item["id"]=str(item["id"]); item["prospect_id"]=str(item["prospect_id"]); result.append(item)
         return result
+
+    async def list_threads(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+        """Return the latest inbound-reply thread per prospect for a workspace inbox."""
+        if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+            raise ValueError("pagination_out_of_range")
+        async with self._pool.acquire() as c:
+            rows = await c.fetch("""WITH ranked AS (
+                SELECT message.id, message.prospect_id, message.channel, message.body,
+                       message.provider, message.occurred_at, message.received_at,
+                       row_number() OVER (PARTITION BY message.prospect_id
+                                          ORDER BY message.occurred_at DESC, message.id DESC) AS position,
+                       count(*) OVER (PARTITION BY message.prospect_id) AS message_count
+                FROM outreach_conversation_messages message
+                JOIN crm_prospects prospect ON prospect.id=message.prospect_id
+                  AND prospect.workspace_id=message.workspace_id AND prospect.archived_at IS NULL
+                WHERE message.workspace_id=$1
+            )
+            SELECT ranked.id, ranked.prospect_id, prospect.name AS prospect_name,
+                   prospect.company AS prospect_company, prospect.contact_email,
+                   prospect.contact_phone_e164, ranked.channel, ranked.body AS latest_message,
+                   ranked.provider, ranked.occurred_at AS latest_message_at,
+                   ranked.received_at, ranked.message_count
+            FROM ranked JOIN crm_prospects prospect ON prospect.id=ranked.prospect_id
+            WHERE ranked.position=1
+            ORDER BY ranked.occurred_at DESC, ranked.id DESC LIMIT $2 OFFSET $3""",
+                workspace_id, limit, offset)
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["id"] = str(item["id"])
+            item["prospect_id"] = str(item["prospect_id"])
+            result.append(item)
+        return result
