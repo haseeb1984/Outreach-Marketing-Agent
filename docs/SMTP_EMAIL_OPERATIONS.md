@@ -22,3 +22,12 @@ Definite pre-send configuration failures are recorded as failed and do not repre
 ## Operational boundaries
 
 SMTP is a message-submission protocol, not a universal delivery-event or mailbox-sync protocol. A successful SMTP submission is not proof of inbox placement, delivery, open, or click. The application now accepts signed normalized provider feedback and inbound-reply callbacks, persists delivery events, and applies bounce/complaint/unsubscribe suppression. See [Email provider feedback, replies and suppression](EMAIL_PROVIDER_FEEDBACK.md) for the relay contract. The selected ESP's native webhook signature and inbound mailbox/parser integration must still be configured at the provider relay; generic SMTP credentials alone cannot read a mailbox.
+
+
+## Scheduled campaign email dispatch
+
+Approved email drafts accept an optional timezone-aware scheduled_at value. The dashboard converts its local date/time selection to UTC. Future deliveries remain queued and cannot be claimed early. At dispatch time the worker rechecks approval, campaign status, recipient suppression/reply state, and active SMTP account.
+
+Configure an external scheduler to POST to /api/v1/deliveries/process-due?limit=25 every minute. Authenticate with Authorization: Bearer followed by the CRON_SECRET value configured in the backend environment. CRON_SECRET must be high entropy, stored only in hosting secrets, and never exposed to the browser. The endpoint processes bounded batches and uses idempotent reservations and atomic claims to tolerate overlapping invocations. Quota-denied messages remain queued; definite provider configuration failures are marked failed; ambiguous SMTP outcomes become uncertain and are never automatically retried.
+
+Apply 041_campaign_delivery_scheduling.sql before enabling this scheduler. The dispatcher is an external cron entry point, not an in-process background task.
