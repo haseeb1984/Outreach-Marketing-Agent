@@ -57,6 +57,16 @@ class ProspectCreate(BaseModel):
     fit_reason: str = Field(min_length=1, max_length=2000)
     verified_facts: list[str] = Field(default_factory=list, max_length=30)
 
+    @field_validator("contact_email")
+    @classmethod
+    def validate_contact_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if cleaned and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", cleaned):
+            raise ValueError("invalid_contact_email")
+        return cleaned or None
+
     @field_validator("website_url", "evidence_url")
     @classmethod
     def require_https(cls, value: str) -> str:
@@ -95,7 +105,7 @@ class ProspectUpdate(BaseModel):
     company: str | None = Field(default=None, min_length=1, max_length=240)
     role: str | None = Field(default=None, max_length=160)
     contact_email: str | None = Field(default=None, max_length=320)
-    contact_phone_e164: str | None = Field(default=None, min_length=9, max_length=16, pattern=r"^\\+[1-9][0-9]{7,14}$")
+    contact_phone_e164: str | None = Field(default=None, min_length=9, max_length=16, pattern=r"^\+[1-9][0-9]{7,14}$")
     website_url: str | None = Field(default=None, min_length=8, max_length=2048)
     evidence_url: str | None = Field(default=None, min_length=8, max_length=2048)
     fit_reason: str | None = Field(default=None, min_length=1, max_length=2000)
@@ -174,7 +184,9 @@ async def update_prospect(prospect_id: UUID, payload: ProspectUpdate, request: R
         )
     except ValueError:
         raise HTTPException(status_code=422, detail="no_prospect_updates_supplied") from None
-    except Exception:
+    except Exception as exc:
+        if type(exc).__name__ == "UniqueViolationError":
+            raise HTTPException(status_code=409, detail="prospect_evidence_already_exists") from None
         raise HTTPException(status_code=503, detail="prospect_update_unavailable") from None
     if result is None:
         raise HTTPException(status_code=404, detail="prospect_not_found")
