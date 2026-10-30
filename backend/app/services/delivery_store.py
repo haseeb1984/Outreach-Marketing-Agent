@@ -42,6 +42,30 @@ class DeliveryStore:
                     if scheduled_at is not None and r["scheduled_at"] != scheduled_at: raise ValueError("delivery_schedule_conflict")
                 return self._serialize(dict(r))
 
+    async def reschedule(self, *, workspace_id: str, delivery_id: UUID, scheduled_at: datetime) -> dict[str, Any] | None:
+        if scheduled_at.tzinfo is None or scheduled_at.utcoffset() is None:
+            raise ValueError("scheduled_at_must_include_timezone")
+        scheduled_at = scheduled_at.astimezone(timezone.utc)
+        if scheduled_at <= datetime.now(timezone.utc):
+            raise ValueError("scheduled_at_must_be_future")
+        async with self._pool.acquire() as c:
+            row = await c.fetchrow(
+                """UPDATE outreach_deliveries SET scheduled_at=$3, updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status='queued'
+                   RETURNING *""",
+                delivery_id, workspace_id, scheduled_at,
+            )
+        return self._serialize(dict(row)) if row else None
+
+    async def cancel(self, *, workspace_id: str, delivery_id: UUID) -> bool:
+        async with self._pool.acquire() as c:
+            result = await c.execute(
+                """UPDATE outreach_deliveries SET status='cancelled', updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status='queued'""",
+                delivery_id, workspace_id,
+            )
+        return result.endswith(" 1")
+
     async def list_deliveries(self,*,workspace_id: str,limit: int=50,offset: int=0)->list[dict[str,Any]]:
         if not 1<=limit<=100 or not 0<=offset<=100000: raise ValueError("pagination_out_of_range")
         async with self._pool.acquire() as c:
