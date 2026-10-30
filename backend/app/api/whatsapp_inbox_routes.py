@@ -62,10 +62,17 @@ async def list_whatsapp_conversations(
     workspace_id: str = Query(min_length=1, max_length=200),
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100000),
+    assigned_to_me: bool = Query(default=False),
+    unassigned: bool = Query(default=False),
+    inbox_status: str | None = Query(default=None, pattern="^(open|pending|resolved)$"),
+    priority: str | None = Query(default=None, pattern="^(low|normal|high|urgent)$"),
+    search: str | None = Query(default=None, min_length=1, max_length=200),
 ) -> dict:
     _, _, session = await _authenticated(request)
     await _authorize(request, workspace_id, session)
     try:
+        user_id = str(session["user_id"])
+        search_term = search.strip() if search else None
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
                 """SELECT c.id, c.workspace_id, c.account_id, c.prospect_id, c.wa_id,
@@ -86,9 +93,19 @@ async def list_whatsapp_conversations(
                        ORDER BY received_at DESC, id DESC LIMIT 1
                    ) m ON TRUE
                    WHERE c.workspace_id=$1
+                     AND (NOT $4::boolean OR c.assigned_to_user_id=$5)
+                     AND (NOT $6::boolean OR c.assigned_to_user_id IS NULL)
+                     AND ($7::text IS NULL OR c.inbox_status=$7)
+                     AND ($8::text IS NULL OR c.priority=$8)
+                     AND ($9::text IS NULL OR
+                          c.wa_id ILIKE '%' || $9 || '%' OR
+                          COALESCE(p.name,'') ILIKE '%' || $9 || '%' OR
+                          COALESCE(p.company,'') ILIKE '%' || $9 || '%' OR
+                          COALESCE(m.text_body,'') ILIKE '%' || $9 || '%')
                    ORDER BY COALESCE(m.received_at,c.updated_at) DESC,c.id
                    LIMIT $2 OFFSET $3""",
-                workspace_id, limit, offset,
+                workspace_id, limit, offset, assigned_to_me, user_id,
+                unassigned, inbox_status, priority, search_term,
             )
         return {"items": [_serialize(dict(row)) for row in rows], "limit": limit, "offset": offset}
     except HTTPException:
