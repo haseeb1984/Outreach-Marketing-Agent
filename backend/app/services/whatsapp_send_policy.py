@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import re
+import json
 from typing import Any
 from uuid import UUID
 
@@ -29,6 +30,7 @@ class WhatsAppSendPolicy:
         draft_id: UUID,
         template_name: str | None = None,
         language_code: str | None = None,
+        template_parameters: dict[str, list[str]] | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Return an eligibility decision; missing or ambiguous state fails closed."""
@@ -121,7 +123,7 @@ class WhatsAppSendPolicy:
                 }
 
             template = await conn.fetchrow(
-                """SELECT id,template_name,language_code,provider_template_id
+                """SELECT id,template_name,language_code,provider_template_id,components
                    FROM whatsapp_message_templates
                    WHERE workspace_id=$1 AND account_id=$2
                      AND template_name=$3 AND language_code=$4
