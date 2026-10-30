@@ -475,7 +475,7 @@ export default function DashboardPage() {
       });
       setEditingEmailAccountId(null);
       setEmailAccountLabel(""); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail("");
-      setNotice("SMTP credentials updated. The account is pending a fresh connection test and cannot send until the test succeeds.");
+      setNotice("SMTP credentials updated. Queued messages tied to the old sender were retired; retest this account before creating new deliveries.");
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account could not be updated.");
@@ -606,7 +606,7 @@ export default function DashboardPage() {
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
-      setNotice("Email account disabled.");
+      setNotice("Email account disabled. Its queued messages were retired and will not be sent later if the account is re-enabled.");
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account could not be disabled.");
