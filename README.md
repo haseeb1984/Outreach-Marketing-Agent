@@ -68,6 +68,10 @@ Outreach drafts support an optional OpenAI-compatible Chat Completions provider.
 
 Draft editing, approval/rejection notes, and a workspace-authorized activity timeline are available in the review queue. WhatsApp sending remains separately gated by official Meta onboarding and dispatch controls.
 
+## Email and SMTP operations
+
+Workspace SMTP identities support encrypted credential storage, connection verification before activation, a confirmed diagnostic email to the configured sender address, credential rotation, and disable controls. Rotating or disabling an identity atomically retires its already-queued messages so they cannot unexpectedly send after a later retest. Ambiguous SMTP outcomes remain uncertain and are never automatically retried. See [SMTP and email operations](docs/SMTP_EMAIL_OPERATIONS.md) for API behavior and the limits of SMTP delivery evidence. Provider-specific bounce/complaint webhooks and mailbox synchronization remain separate integrations; SMTP acceptance is not inbox-delivery proof.
+
 ## Background worker operations
 
 - [Durable website-growth worker runbook](docs/WORKER_OPERATIONS.md). One-off and recurring growth scans require a continuously supervised worker process; merging code alone does not run queued jobs.
