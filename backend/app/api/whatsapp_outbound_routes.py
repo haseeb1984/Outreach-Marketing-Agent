@@ -219,7 +219,7 @@ async def process_queued_whatsapp_deliveries(request: Request, limit: int = Quer
     if scheme.lower() != "bearer" or not token or not hmac.compare_digest(configured, token):
         raise HTTPException(status_code=401, detail="invalid_scheduler_authorization")
     if not settings.whatsapp_dispatch_enabled:
-        raise HTTPException(status_code=503, detail="whatsapp_dispatch_not_enabled")
+        return {"accepted": False, "dispatch_enabled": False, "skipped": True}
     pool = _pool(request)
     try:
         from app.services.whatsapp_dispatcher import process_whatsapp_outbound
