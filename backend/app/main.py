@@ -286,6 +286,9 @@ async def readiness() -> Response:
                      AND to_regclass('public.whatsapp_inbound_messages') IS NOT NULL
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_inbound_messages' AND column_name='media_ciphertext')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_inbound_messages' AND column_name='media_downloaded_at')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_conversations' AND column_name='assigned_to_user_id')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_conversations' AND column_name='inbox_status')
+                     AND to_regclass('public.whatsapp_conversation_notes') IS NOT NULL
                      AND to_regclass('public.whatsapp_delivery_status_events') IS NOT NULL
                      AND to_regclass('public.whatsapp_contact_preferences') IS NOT NULL
                      AND to_regclass('public.whatsapp_message_templates') IS NOT NULL
