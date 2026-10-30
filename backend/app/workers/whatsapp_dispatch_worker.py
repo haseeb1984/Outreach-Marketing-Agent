@@ -176,6 +176,18 @@ async def process_claimed_delivery(
                 error_code=reason,
             )
             return "policy_denied"
+        approved_name = None
+        approved_language = None
+        if decision.get("requires_approved_template"):
+            approved_name = decision.get("template_name")
+            approved_language = decision.get("language_code")
+            if (
+                not isinstance(approved_name, str) or not approved_name.strip()
+                or not isinstance(approved_language, str) or not approved_language.strip()
+                or not decision.get("template_id")
+                or not decision.get("provider_template_id")
+            ):
+                raise ValueError("whatsapp_approved_template_identity_missing")
         credentials = await WhatsAppCredentialStore(pool).get_active_credentials(
             workspace_id=workspace_id, account_id=UUID(str(delivery["account_id"])),
         )
@@ -204,15 +216,6 @@ async def process_claimed_delivery(
     }
     try:
         if decision.get("requires_approved_template"):
-            approved_name = decision.get("template_name")
-            approved_language = decision.get("language_code")
-            if (
-                not isinstance(approved_name, str) or not approved_name.strip()
-                or not isinstance(approved_language, str) or not approved_language.strip()
-                or not decision.get("template_id")
-                or not decision.get("provider_template_id")
-            ):
-                raise ValueError("whatsapp_approved_template_identity_missing")
             result = await provider.send(
                 **kwargs,
                 template_name=approved_name,
