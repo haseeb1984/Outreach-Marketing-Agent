@@ -291,4 +291,12 @@ async def integrations_status(request: Request, workspace_id: str=Query(min_leng
    "reason": "whatsapp_outbound_queue_implemented_dispatch_disabled_until_verified_worker",
    "outbound_queue_api_implemented": True,
   },
+  "ai_outreach": {
+   "provider": "openai_compatible_chat_completions",
+   "configured": bool(settings.ai_api_key and settings.ai_api_key.strip()),
+   "model": settings.ai_model if settings.ai_api_key else None,
+   "generation_mode": "provider_ai" if settings.ai_api_key else "evidence_grounded_template_fallback",
+   "human_approval_required": True,
+   "automatic_send": False,
+  },
  }
