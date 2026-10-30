@@ -205,6 +205,65 @@ async def export_prospects_csv(
     )
 
 
+@router.post("/import.csv")
+async def import_prospects_csv(request: Request, workspace_id: str = Query(min_length=1, max_length=200)):
+    """Validate and import a bounded CSV batch; duplicate evidence rows are reported, never overwritten."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, "member", session)
+    raw = await request.body()
+    if not raw or len(raw) > 1_000_000:
+        raise HTTPException(status_code=413, detail="csv_file_empty_or_too_large")
+    try:
+        decoded = raw.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded, newline=""))
+        required = {"name", "company", "website_url", "evidence_url", "fit_reason"}
+        headers = {str(value or "").strip() for value in (reader.fieldnames or [])}
+        if not required.issubset(headers):
+            raise HTTPException(status_code=422, detail="csv_missing_required_columns")
+        rows = list(reader)
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=422, detail="csv_must_be_utf8") from None
+    except csv.Error:
+        raise HTTPException(status_code=422, detail="csv_format_invalid") from None
+    if len(rows) > 500:
+        raise HTTPException(status_code=422, detail="csv_row_limit_exceeded_500")
+    store = _store(request)
+    created = 0
+    duplicates = 0
+    invalid = []
+    for index, row in enumerate(rows, start=2):
+        try:
+            payload = ProspectCreate.model_validate({
+                "workspace_id": workspace_id,
+                "name": row.get("name", ""),
+                "company": row.get("company", ""),
+                "role": row.get("role") or None,
+                "contact_email": row.get("contact_email") or None,
+                "contact_phone_e164": row.get("contact_phone_e164") or None,
+                "website_url": row.get("website_url", ""),
+                "evidence_url": row.get("evidence_url", ""),
+                "fit_reason": row.get("fit_reason", ""),
+                "verified_facts": [],
+            })
+            await store.create_prospect(
+                workspace_id=workspace_id, created_by=session["user_id"],
+                name=payload.name, company=payload.company, role=payload.role,
+                contact_email=payload.contact_email, contact_phone_e164=payload.contact_phone_e164,
+                website_url=payload.website_url, evidence_url=payload.evidence_url,
+                fit_reason=payload.fit_reason, verified_facts=payload.verified_facts,
+            )
+            created += 1
+        except Exception as exc:
+            if type(exc).__name__ == "UniqueViolationError":
+                duplicates += 1
+            elif hasattr(exc, "errors"):
+                invalid.append({"row": index, "reason": "invalid_fields"})
+            else:
+                raise HTTPException(status_code=503, detail="prospect_import_unavailable") from None
+    return {"created": created, "duplicates": duplicates, "invalid": invalid[:100], "invalid_count": len(invalid), "processed": len(rows)}
+
+
 @router.post("", status_code=201)
 async def create_prospect(payload: ProspectCreate, request: Request):
     _, _, session = await _authenticated(request)
