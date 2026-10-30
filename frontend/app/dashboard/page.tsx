@@ -22,7 +22,8 @@ type AuthSession = { id: string; created_at: string; last_seen_at: string; expir
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string; buttons?: Array<{ type?: string; url?: string }> }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
-type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
+type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; assigned_to_user_id?: string | null; inbox_status?: "open" | "pending" | "resolved"; priority?: "low" | "normal" | "high" | "urgent"; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
+type WhatsAppInternalNote = { id: string; author_user_id: string; body: string; created_at: string };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; media_mime_type?: string | null; media_filename?: string | null; media_size?: number | null; media_downloaded_at?: string | null; provider_timestamp?: string | null; received_at: string };
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
@@ -102,6 +103,8 @@ export default function DashboardPage() {
   const [whatsappTemplates, setWhatsappTemplates] = useState<Record<string, WhatsAppTemplate[]>>({});
   const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  const [whatsappNotes, setWhatsappNotes] = useState<WhatsAppInternalNote[]>([]);
+  const [whatsappNoteDraft, setWhatsappNoteDraft] = useState("");
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
   const [unifiedReplyThreads, setUnifiedReplyThreads] = useState<UnifiedReplyThread[]>([]);
@@ -572,6 +575,36 @@ export default function DashboardPage() {
     } finally { setWhatsappInboxBusy(false); }
   }
 
+  async function updateWhatsAppConversation(conversation: WhatsAppConversation, patch: Partial<Pick<WhatsAppConversation, "assigned_to_user_id" | "inbox_status" | "priority">>) {
+    if (!workspaceId || !csrf) return;
+    setWhatsappInboxBusy(true); setError(""); setNotice("");
+    try {
+      const updated = await api<WhatsAppConversation>(
+        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
+        "?workspace_id=" + encodeURIComponent(workspaceId), csrf,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      );
+      setWhatsappConversations(items => items.map(item => item.id === conversation.id ? { ...item, ...updated } : item));
+      setNotice("WhatsApp conversation updated.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Conversation update failed."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
+  async function addWhatsAppInternalNote() {
+    if (!workspaceId || !csrf || !selectedWhatsAppConversation || !whatsappNoteDraft.trim()) return;
+    setWhatsappInboxBusy(true); setError(""); setNotice("");
+    try {
+      const note = await api<WhatsAppInternalNote>(
+        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(selectedWhatsAppConversation) +
+        "/notes?workspace_id=" + encodeURIComponent(workspaceId), csrf,
+        { method: "POST", body: JSON.stringify({ body: whatsappNoteDraft.trim() }) },
+      );
+      setWhatsappNotes(items => [...items, note]); setWhatsappNoteDraft("");
+      setNotice("Internal note added. It was not sent to the WhatsApp contact.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Internal note could not be saved."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
   async function openWhatsAppConversation(conversation: WhatsAppConversation) {
     if (!workspaceId || !csrf) return;
     setWhatsappInboxBusy(true);
@@ -584,6 +617,12 @@ export default function DashboardPage() {
       );
       setSelectedWhatsAppConversation(conversation.id);
       setWhatsappMessages((result.items || []).slice().reverse());
+      const notes = await api<{ items: WhatsAppInternalNote[] }>(
+        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
+        "/notes?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf,
+      );
+      setWhatsappNotes((notes.items || []).slice().reverse());
+      setWhatsappNoteDraft("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
     } finally {
@@ -1822,11 +1861,42 @@ export default function DashboardPage() {
                   style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}
                 >
                   <strong>{conversation.prospect_name || conversation.wa_id}</strong>
+                  <span className="fine" style={{display:"block"}}>{(conversation.inbox_status || "open").toUpperCase()} · {(conversation.priority || "normal").toUpperCase()} · {conversation.assigned_to_user_id ? (members.find(member=>member.user_id===conversation.assigned_to_user_id)?.email || "Assigned teammate") : "Unassigned"}</span>
                   <span style={{display:"block"}}>{conversation.account_label} · {conversation.prospect_company || "Unmatched contact"}</span>
                   <span style={{display:"block"}}>{conversation.last_message_text || ("Latest message type: " + (conversation.last_message_type || "not available"))}</span>
                 </button>) : <p className="fine">No inbound conversations have been processed yet.</p>}
               </article>
               <article className="card">
+                <h4>Conversation workspace</h4>
+                {selectedWhatsAppConversation && (() => {
+                  const conversation = whatsappConversations.find(item => item.id === selectedWhatsAppConversation);
+                  if (!conversation) return null;
+                  const canManage = ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "");
+                  return <div className="stack" style={{marginBottom:"1rem"}}>
+                    <div className="grid grid-3">
+                      <label>Assignee
+                        <select className="input" disabled={!canManage || whatsappInboxBusy} value={conversation.assigned_to_user_id || ""} onChange={event=>updateWhatsAppConversation(conversation,{assigned_to_user_id:event.target.value || null})}>
+                          <option value="">Unassigned</option>
+                          {members.filter(member=>member.status==="active").map(member=><option key={member.user_id} value={member.user_id}>{member.email} ({member.role})</option>)}
+                        </select>
+                      </label>
+                      <label>Status
+                        <select className="input" disabled={!canManage || whatsappInboxBusy} value={conversation.inbox_status || "open"} onChange={event=>updateWhatsAppConversation(conversation,{inbox_status:event.target.value as "open"|"pending"|"resolved"})}>
+                          <option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option>
+                        </select>
+                      </label>
+                      <label>Priority
+                        <select className="input" disabled={!canManage || whatsappInboxBusy} value={conversation.priority || "normal"} onChange={event=>updateWhatsAppConversation(conversation,{priority:event.target.value as "low"|"normal"|"high"|"urgent"})}>
+                          <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                        </select>
+                      </label>
+                    </div>
+                    <h4>Internal notes</h4>
+                    {whatsappNotes.length ? <ul>{whatsappNotes.map(note=><li key={note.id} style={{marginBottom:"0.5rem"}}><p>{note.body}</p><span className="fine">{members.find(member=>member.user_id===note.author_user_id)?.email || "Workspace teammate"} · {new Date(note.created_at).toLocaleString()}</span></li>)}</ul> : <p className="fine">No internal notes yet.</p>}
+                    <textarea className="input" rows={3} maxLength={5000} value={whatsappNoteDraft} onChange={event=>setWhatsappNoteDraft(event.target.value)} placeholder="Add an internal note for your team (not sent to the contact)" />
+                    <button className="button secondary" type="button" disabled={whatsappInboxBusy || !whatsappNoteDraft.trim()} onClick={addWhatsAppInternalNote}>Add internal note</button>
+                  </div>;
+                })()}
                 <h4>Messages</h4>
                 {selectedWhatsAppConversation ? (whatsappMessages.length ? <ol>
                   {whatsappMessages.map(message => <li key={message.id} style={{marginBottom:"0.75rem"}}>
