@@ -445,6 +445,21 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function syncWhatsAppTemplates(account: WhatsAppAccount) {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ templates_received: number; templates_synced: number; templates_skipped: number; sending_enabled: boolean }>(
+        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates/sync?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf,
+        { method: "POST" },
+      );
+      setNotice("Meta template sync complete for " + account.label + ": " + result.templates_synced + " saved, " + result.templates_skipped + " skipped from " + result.templates_received + " received. Sending remains disabled.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp templates could not be synchronized.");
+    } finally { setBusy(false); }
+  }
+
   async function disableWhatsAppAccount(account: WhatsAppAccount) {
     if (!workspaceId || !csrf || !window.confirm("Disable the WhatsApp account " + account.label + "?")) return;
     setBusy(true); setError(""); setNotice("");
@@ -1379,10 +1394,11 @@ export default function DashboardPage() {
               <h4>{account.label}</h4><p className="fine">WABA ID: {account.waba_id} · Phone number ID: {account.phone_number_id}</p>
               <p className="fine">Status: {account.status}</p>
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "pending_verification" && <button className="button" type="button" disabled={busy} onClick={() => verifyWhatsAppAccount(account)}>Verify with Meta</button>}
+              {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "active" && <button className="button" type="button" disabled={busy} onClick={() => syncWhatsAppTemplates(account)}>Sync approved templates</button>}
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
             </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
             <h3>WhatsApp inbox</h3>
-            <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; replies and outbound sending remain disabled until opt-in, template and delivery safeguards are complete.</p>
+            <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; approved templates can be synchronized by workspace admins; outbound sending remains disabled.</p>
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !whatsappAccounts.some(account=>account.status==="active")} onClick={processWhatsAppInboxEvents}>Process pending inbound events</button><p className="fine">Processes at most 25 pending events for active accounts in this workspace. Does not send messages.</p></div>}
             {whatsappDeadLetterEvents.length > 0 && <article className="card">
               <h4>Webhook events needing attention ({whatsappDeadLetterEvents.length})</h4>
