@@ -44,6 +44,12 @@ class EmailAccountCreate(BaseModel):
         return value
 
 
+class EmailAccountTestSend(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    confirm_send: bool
+
+
 class EmailAccountUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
@@ -159,6 +165,52 @@ async def test_email_account(account_id: UUID, request: Request, workspace_id: s
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="email_account_test_unavailable") from None
+
+
+@router.post("/{account_id}/send-test")
+async def send_email_account_test_message(
+    account_id: UUID, payload: EmailAccountTestSend, request: Request,
+) -> dict:
+    """Send one explicitly confirmed diagnostic message only to the configured sender address."""
+    await _authorize(request, payload.workspace_id, "admin", csrf=True)
+    if payload.confirm_send is not True:
+        raise HTTPException(status_code=422, detail="test_email_confirmation_required")
+    try:
+        configuration = await _store(request).get_config(
+            workspace_id=payload.workspace_id, account_id=account_id,
+        )
+        await SMTPEmailDelivery(configuration).send_outreach_email(
+            recipient=configuration.smtp_from_email,
+            subject="SMTP delivery test",
+            body=(
+                "This is a diagnostic email sent at your request to verify that the "
+                "connected SMTP account can submit a message to its configured sender address. "
+                "Successful SMTP submission does not guarantee inbox placement."
+            ),
+        )
+        return {
+            "workspace_id": payload.workspace_id,
+            "account_id": str(account_id),
+            "sent_to": configuration.smtp_from_email,
+            "status": "submitted",
+            "note": "SMTP accepted the diagnostic message; inbox placement is not guaranteed.",
+        }
+    except LookupError:
+        raise HTTPException(status_code=409, detail="email_account_not_active") from None
+    except CredentialEncryptionNotConfigured:
+        raise HTTPException(status_code=503, detail="provider_credential_encryption_not_configured") from None
+    except CredentialDecryptionFailed:
+        raise HTTPException(status_code=503, detail="provider_credential_decryption_failed") from None
+    except EmailDeliveryNotConfigured:
+        raise HTTPException(status_code=503, detail="email_account_configuration_incomplete") from None
+    except ValueError:
+        raise HTTPException(status_code=422, detail="email_test_message_invalid") from None
+    except EmailDeliveryFailed:
+        raise HTTPException(status_code=502, detail="email_test_submission_failed") from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="email_test_send_unavailable") from None
 
 
 @router.delete("/{account_id}")
