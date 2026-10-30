@@ -204,10 +204,19 @@ async def process_claimed_delivery(
     }
     try:
         if decision.get("requires_approved_template"):
+            approved_name = decision.get("template_name")
+            approved_language = decision.get("language_code")
+            if (
+                not isinstance(approved_name, str) or not approved_name.strip()
+                or not isinstance(approved_language, str) or not approved_language.strip()
+                or not decision.get("template_id")
+                or not decision.get("provider_template_id")
+            ):
+                raise ValueError("whatsapp_approved_template_identity_missing")
             result = await provider.send(
                 **kwargs,
-                template_name=str(delivery["template_name"]),
-                language_code=str(delivery["language_code"]),
+                template_name=approved_name,
+                language_code=approved_language,
             )
         else:
             result = await provider.send(**kwargs, body=str(content["body"]))
