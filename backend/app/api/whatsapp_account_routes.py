@@ -282,6 +282,68 @@ async def disable_whatsapp_account(
         raise HTTPException(status_code=503, detail="whatsapp_account_disable_unavailable") from None
 
 
+class WhatsAppTokenRotate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    access_token: str = Field(min_length=20, max_length=4096)
+
+    @field_validator("access_token")
+    @classmethod
+    def clean_token(cls, value: str) -> str:
+        value = value.strip()
+        if not value or any(ch.isspace() for ch in value):
+            raise ValueError("invalid_meta_access_token")
+        return value
+
+
+@router.post("/{account_id}/rotate-token")
+async def rotate_whatsapp_account_token(
+    account_id: UUID, payload: WhatsAppTokenRotate, request: Request,
+) -> dict[str, Any]:
+    """Replace an expiring/revoked token and force fresh Meta verification."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    encrypted = _encrypt(payload.access_token, payload.workspace_id, account_id)
+    try:
+        async with _pool(request).acquire() as connection:
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """UPDATE workspace_whatsapp_accounts
+                       SET encrypted_access_token=$3,status='pending',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
+                       RETURNING id""",
+                    account_id, payload.workspace_id, encrypted,
+                )
+                if row is None:
+                    raise HTTPException(status_code=404, detail="whatsapp_account_not_found")
+                cancelled = await connection.fetch(
+                    """WITH changed AS (
+                           UPDATE whatsapp_outbound_deliveries
+                           SET status='cancelled',error_code='whatsapp_token_rotated',updated_at=now()
+                           WHERE workspace_id=$1 AND account_id=$2 AND status='queued'
+                           RETURNING usage_reservation_id
+                       )
+                       UPDATE feature_usage_reservations r
+                       SET status='released',updated_at=now()
+                       FROM changed c
+                       WHERE r.id=c.usage_reservation_id AND r.workspace_id=$1
+                         AND r.status='reserved'
+                       RETURNING r.id""",
+                    payload.workspace_id, account_id,
+                )
+        return {
+            "account_id": str(account_id),
+            "status": "pending",
+            "queued_reservations_released": len(cancelled),
+            "notice": "Token replaced and encrypted. Verify the account again to re-check Meta access and WABA webhook subscription before queueing sends.",
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_token_rotation_unavailable") from None
+
+
 @router.get("/{account_id}/templates")
 async def list_whatsapp_templates(
     account_id: UUID,
