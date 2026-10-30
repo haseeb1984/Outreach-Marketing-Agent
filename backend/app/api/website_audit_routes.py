@@ -13,6 +13,7 @@ from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
 from app.services.competitor_research import discover_competitor_candidates
 from app.services.competitor_page_analysis import analyze_competitor_pages
+from app.services.seo_strategy import merge_competitor_content_gaps
 from app.services.website_discovery import discover_and_crawl
 from app.services.website_fetch import FetchLimits
 
@@ -323,6 +324,10 @@ async def create_website_growth_review(payload: WebsiteGrowthReviewRequest, requ
                         target_queries=payload.target_queries,
                         client_pages=report["page_evidence"],
                         max_candidates=3,
+                    )
+                    report["strategy"] = merge_competitor_content_gaps(
+                        report.get("strategy", {}),
+                        report["competitor_analysis"].get("potential_gaps", []),
                     )
             except TimeoutError:
                 report["competitor_analysis"] = {
