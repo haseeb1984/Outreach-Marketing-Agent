@@ -56,8 +56,27 @@ class CampaignStore:
             )
         return self._serialize(dict(row)) if row else None
 
+    async def get_draft_generation_context(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID) -> dict[str, Any] | None:
+        """Load workspace-owned facts for AI generation without holding a write transaction."""
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT c.client_business,c.client_offer,p.name AS prospect_name,
+                          p.evidence_url,p.fit_reason,p.verified_facts
+                   FROM outreach_campaigns c
+                   JOIN crm_prospects p ON p.workspace_id=c.workspace_id
+                   WHERE c.id=$1 AND c.workspace_id=$2 AND c.status NOT IN ('archived','paused')
+                     AND p.id=$3 AND p.archived_at IS NULL""",
+                campaign_id, workspace_id, prospect_id,
+            )
+        if row is None:
+            return None
+        data = dict(row)
+        data["verified_facts"] = self._json_list(data.get("verified_facts"))
+        return data
+
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
+                           generated_content: dict[str, Any] | None = None,
                            ) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -115,17 +134,33 @@ class CampaignStore:
                     if opted_out:
                         raise ValueError("WhatsApp contact has opted out")
                 facts = self._json_list(p.get("verified_facts"))
-                draft = draft_outreach(
-                    channel=channel,
-                    client_business=campaign["client_business"],
-                    client_offer=campaign["client_offer"],
-                    prospect_name=p["name"],
-                    prospect_evidence_url=p["evidence_url"],
-                    verified_relevance=p["fit_reason"],
-                    verified_facts=facts,
-                    call_to_action=call_to_action,
-                    whatsapp_opt_in_confirmed=(channel != "whatsapp" or bool(controls and controls["whatsapp_opt_in_at"])),
-                )
+                if generated_content is not None:
+                    subject = generated_content.get("subject")
+                    body = generated_content.get("body")
+                    if not isinstance(body, str) or not body.strip() or len(body) > 10000:
+                        raise ValueError("ai_draft_content_invalid")
+                    if channel == "email" and (not isinstance(subject, str) or not subject.strip() or len(subject) > 300):
+                        raise ValueError("ai_draft_content_invalid")
+                    if channel == "whatsapp":
+                        subject = None
+                    draft = {
+                        "subject": subject.strip() if isinstance(subject, str) else None,
+                        "body": body.strip(),
+                        "source_evidence_url": p["evidence_url"],
+                        "verified_facts_used": facts[:2],
+                    }
+                else:
+                    draft = draft_outreach(
+                        channel=channel,
+                        client_business=campaign["client_business"],
+                        client_offer=campaign["client_offer"],
+                        prospect_name=p["name"],
+                        prospect_evidence_url=p["evidence_url"],
+                        verified_relevance=p["fit_reason"],
+                        verified_facts=facts,
+                        call_to_action=call_to_action,
+                        whatsapp_opt_in_confirmed=(channel != "whatsapp" or bool(controls and controls["whatsapp_opt_in_at"])),
+                    )
                 row = await conn.fetchrow(
                     """INSERT INTO outreach_drafts
                        (workspace_id,campaign_id,prospect_id,channel,subject,body,source_evidence_url,
