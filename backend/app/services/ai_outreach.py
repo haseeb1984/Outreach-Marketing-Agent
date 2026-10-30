@@ -27,6 +27,7 @@ async def generate_ai_outreach(*, api_key: str, base_url: str, model: str,
     payload = {
         "business": str(context["client_business"])[:240],
         "offer": str(context["client_offer"])[:2000],
+        "target_customer_profile": str(context.get("target_customer_profile", ""))[:2000],
         "prospect_name": str(context["prospect_name"])[:200],
         "verified_relevance": str(context["fit_reason"])[:2000],
         "verified_facts": [str(fact)[:600] for fact in facts[:8] if isinstance(fact, str)],
