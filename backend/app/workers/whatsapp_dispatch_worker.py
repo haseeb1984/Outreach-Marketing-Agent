@@ -53,6 +53,25 @@ async def _release_if_reserved(
         logger.error("WhatsApp reservation release failed; manual billing reconciliation required")
 
 
+async def _finish_pre_provider_failure(
+    queue: Any, subscriptions: Any, *, delivery_id: UUID, lease_token: UUID,
+    workspace_id: str, reservation_id: str, reservation_status: str | None,
+    error_code: str,
+) -> None:
+    """Persist a no-send failure best-effort and release quota independently."""
+    try:
+        await queue.finish_claim(
+            delivery_id=delivery_id, lease_token=lease_token, outcome="failed",
+            error_code=error_code[:100],
+        )
+    except Exception:
+        logger.error("WhatsApp pre-provider status write failed; lease recovery required")
+    if reservation_status == "reserved":
+        await _release_if_reserved(
+            subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
+        )
+
+
 async def _consume_reservation(
     subscriptions: Any, *, workspace_id: str, reservation_id: str,
 ) -> None:
@@ -119,14 +138,12 @@ async def process_claimed_delivery(
     except Exception:
         entitlement = {"allowed": False, "reason": "subscription_recheck_unavailable"}
     if not entitlement.get("allowed"):
-        await queue.finish_claim(
-            delivery_id=delivery_id, lease_token=lease_token, outcome="failed",
-            error_code=str(entitlement.get("reason", "whatsapp_entitlement_denied"))[:100],
+        await _finish_pre_provider_failure(
+            queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+            workspace_id=workspace_id, reservation_id=reservation_id,
+            reservation_status=entitlement.get("reservation_status"),
+            error_code=str(entitlement.get("reason", "whatsapp_entitlement_denied")),
         )
-        if entitlement.get("reservation_status") == "reserved":
-            await _release_if_reserved(
-                subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
-            )
         return "entitlement_denied"
 
     try:
@@ -152,14 +169,12 @@ async def process_claimed_delivery(
         )
         if not decision.get("allowed"):
             reason = str(decision.get("reason", "whatsapp_policy_denied"))[:100]
-            await queue.finish_claim(
-                delivery_id=delivery_id, lease_token=lease_token, outcome="failed",
+            await _finish_pre_provider_failure(
+                queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+                workspace_id=workspace_id, reservation_id=reservation_id,
+                reservation_status=entitlement.get("reservation_status"),
                 error_code=reason,
             )
-            if entitlement.get("reservation_status") == "reserved":
-                await _release_if_reserved(
-                    subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
-                )
             return "policy_denied"
         credentials = await WhatsAppCredentialStore(pool).get_active_credentials(
             workspace_id=workspace_id, account_id=UUID(str(delivery["account_id"])),
@@ -172,14 +187,12 @@ async def process_claimed_delivery(
     except Exception as exc:
         # No provider call has happened yet, so the reservation can safely be released.
         code = str(exc) if isinstance(exc, (ValueError, LookupError, WhatsAppCredentialUnavailable)) else "whatsapp_preflight_unavailable"
-        await queue.finish_claim(
-            delivery_id=delivery_id, lease_token=lease_token, outcome="failed",
-            error_code=code[:100],
+        await _finish_pre_provider_failure(
+            queue, subscriptions, delivery_id=delivery_id, lease_token=lease_token,
+            workspace_id=workspace_id, reservation_id=reservation_id,
+            reservation_status=entitlement.get("reservation_status"),
+            error_code=code,
         )
-        if entitlement.get("reservation_status") == "reserved":
-            await _release_if_reserved(
-                subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
-            )
         return "preflight_failed"
 
     provider = sender or MetaWhatsAppSender()

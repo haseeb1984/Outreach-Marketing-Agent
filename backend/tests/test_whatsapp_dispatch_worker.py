@@ -233,3 +233,37 @@ def test_definite_provider_rejection_releases_usage_when_queue_persistence_raise
     assert result == "provider_rejected"
     assert queue.finished[0]["outcome"] == "failed"
     assert subscriptions.finished[0]["outcome"] == "released"
+
+
+@pytest.mark.parametrize("failure", ["entitlement", "policy", "preflight"])
+def test_pre_provider_failure_releases_usage_when_queue_persistence_raises(monkeypatch, failure):
+    pool, queue, subscriptions, delivery = _dispatch_fakes(monkeypatch, queue_error=True)
+    if failure == "entitlement":
+        async def denied(**kwargs):
+            return {"allowed": False, "reason": "subscription_inactive", "reservation_status": "reserved"}
+        subscriptions.validate_job_reservation = denied
+    elif failure == "policy":
+        class DeniedPolicy:
+            def __init__(self, pool): pass
+            async def evaluate(self, **kwargs):
+                return {"allowed": False, "reason": "contact_suppressed"}
+        monkeypatch.setattr(worker, "WhatsAppSendPolicy", DeniedPolicy)
+    else:
+        class BrokenCredentials:
+            async def get_active_credentials(self, **kwargs):
+                raise RuntimeError("credential store unavailable")
+        monkeypatch.setattr(worker, "WhatsAppCredentialStore", lambda pool: BrokenCredentials())
+    class ForbiddenSender:
+        async def send(self, **kwargs):
+            raise AssertionError("pre-provider failure must not call Meta")
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery,
+        sender=ForbiddenSender(),
+    ))
+    expected = {"entitlement": "entitlement_denied", "policy": "policy_denied", "preflight": "preflight_failed"}[failure]
+    assert result == expected
+    assert queue.finished[0]["outcome"] == "failed"
+    assert subscriptions.finished == [{
+        "workspace_id": "workspace-a", "reservation_id": delivery["usage_reservation_id"],
+        "outcome": "released",
+    }]
