@@ -538,6 +538,21 @@ export default function DashboardPage() {
     } finally { setUnifiedReplyBusy(false); }
   }
 
+  async function deleteWhatsAppMedia(message: WhatsAppMessage) {
+    if (!workspaceId || !csrf || !window.confirm("Permanently delete the stored WhatsApp attachment? The message record and provider metadata will remain.")) return;
+    setWhatsappInboxBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/whatsapp/inbox/messages/" + encodeURIComponent(message.id) +
+        "/media?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setWhatsappMessages(items => items.map(item => item.id === message.id
+        ? { ...item, media_downloaded_at: null, media_mime_type: null, media_filename: null, media_size: null }
+        : item));
+      setNotice("Stored WhatsApp attachment permanently deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp attachment could not be deleted.");
+    } finally { setWhatsappInboxBusy(false); }
+  }
+
   async function downloadWhatsAppMedia(message: WhatsAppMessage) {
     if (!workspaceId || !csrf || !selectedWhatsAppConversation) return;
     const conversation = whatsappConversations.find(item => item.id === selectedWhatsAppConversation);
@@ -1819,7 +1834,7 @@ export default function DashboardPage() {
                     {message.media_metadata && Object.keys(message.media_metadata).length > 0 && <pre className="fine" style={{whiteSpace:"pre-wrap"}}>{JSON.stringify(message.media_metadata, null, 2)}</pre>}
                     {message.media_metadata && typeof message.media_metadata.id === "string" && ["image","video","audio","document","sticker"].includes(message.message_type) && <div>
                       <button className="button secondary" type="button" disabled={whatsappInboxBusy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => downloadWhatsAppMedia(message)}>{message.media_downloaded_at ? "Download again / refresh stored attachment" : "Secure attachment download"}</button>
-                      {message.media_downloaded_at && <span className="fine">Stored: {message.media_filename || "attachment"} · {message.media_size || 0} bytes</span>}{" "}<a href={"/api/v1/integrations/whatsapp/inbox/messages/" + encodeURIComponent(message.id) + "/media?workspace_id=" + encodeURIComponent(workspaceId)} target="_blank" rel="noreferrer">Open stored attachment</a>
+                      {message.media_downloaded_at && <><span className="fine">Stored: {message.media_filename || "attachment"} · {message.media_size || 0} bytes</span>{" "}<button className="button secondary" type="button" disabled={whatsappInboxBusy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => deleteWhatsAppMedia(message)}>Delete stored attachment</button></>}{" "}<a href={"/api/v1/integrations/whatsapp/inbox/messages/" + encodeURIComponent(message.id) + "/media?workspace_id=" + encodeURIComponent(workspaceId)} target="_blank" rel="noreferrer">Open stored attachment</a>
                     </div>}
                     <p className="fine">{message.provider_timestamp ? new Date(message.provider_timestamp).toLocaleString() : new Date(message.received_at).toLocaleString()}</p>
                   </li>)}
