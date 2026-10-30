@@ -200,6 +200,7 @@ def test_schedule_advances_and_releases_quota_after_deterministic_enqueue_reject
         "workspace_id": "workspace-a",
         "reservation_id": subscriptions.reservation["reservation_id"],
         "outcome": "released",
+        "connection": connection,
     }]
 
 
