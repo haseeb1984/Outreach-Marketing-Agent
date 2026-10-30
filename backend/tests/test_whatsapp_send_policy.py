@@ -212,3 +212,43 @@ def test_phone_without_international_plus_prefix_fails_closed():
     result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect])
     assert result == {"allowed": False, "reason": "prospect_whatsapp_phone_invalid"}
     assert len(conn.queries) == 2
+
+
+
+def test_approved_template_returns_canonical_verified_provider_identity():
+    account_id = uuid4()
+    prospect = {
+        "id": uuid4(),
+        "contact_phone_e164": "+14155550123",
+        "stage": "new",
+        "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": account_id,
+    }
+    preference = {
+        "opted_out_at": None,
+        "opted_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        "last_inbound_at": datetime(2026, 10, 21, 11, tzinfo=timezone.utc),
+    }
+    canonical = {
+        "id": uuid4(),
+        "template_name": "verified_notice",
+        "language_code": "en_US",
+        "provider_template_id": "meta-template-987",
+    }
+    result, conn = run_policy(
+        [{"id": account_id, "has_credentials": True}, prospect, preference, {"id": uuid4()}, canonical],
+        account_id=account_id,
+        template_name="verified_notice",
+        language_code="en_US",
+    )
+    assert result == {
+        "allowed": True,
+        "reason": "approved_template_outside_customer_service_window",
+        "requires_approved_template": True,
+        "template_id": str(canonical["id"]),
+        "provider_template_id": "meta-template-987",
+        "template_name": "verified_notice",
+        "language_code": "en_US",
+    }
+    assert "btrim(provider_template_id) <> ''" in conn.queries[-1][0]
