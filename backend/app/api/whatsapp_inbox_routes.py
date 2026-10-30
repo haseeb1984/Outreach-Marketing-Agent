@@ -357,7 +357,7 @@ async def get_whatsapp_inbound_media(
         )
         mime = str(row["media_mime_type"] or "application/octet-stream")
         filename = str(row["media_filename"] or "whatsapp-attachment")
-        filename = "".join(ch for ch in filename if ch.isalnum() or ch in "._-")[:180]
+        filename = "".join(ch for ch in filename if ch.isascii() and (ch.isalnum() or ch in "._-"))[:180]
         return Response(
             content=content,
             media_type=mime,
