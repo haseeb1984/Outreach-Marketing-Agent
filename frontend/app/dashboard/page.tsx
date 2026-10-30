@@ -17,6 +17,7 @@ type GrowthJob = { id: string; job_type: string; status: string; error_code?: st
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
+type AuthSession = { id: string; created_at: string; last_seen_at: string; expires_at: string; user_agent?: string | null; is_current: boolean };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
@@ -128,6 +129,7 @@ export default function DashboardPage() {
   const [projectBrandVoice, setProjectBrandVoice] = useState("");
   const [projectCompetitors, setProjectCompetitors] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
+  const [authSessions, setAuthSessions] = useState<AuthSession[]>([]);
   const [workspaceName, setWorkspaceName] = useState("");
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -336,6 +338,7 @@ export default function DashboardPage() {
         method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, role }),
       });
       setNotice("Workspace member role updated.");
+      void loadAuthSessions();
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Member role could not be changed.");
@@ -368,6 +371,28 @@ export default function DashboardPage() {
       await refresh(workspaceId, csrf);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Workspace ownership could not be transferred.");
+    } finally { setBusy(false); }
+  }
+
+  async function loadAuthSessions() {
+    if (!csrf) return;
+    try {
+      const result = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", csrf);
+      setAuthSessions(result.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
+    }
+  }
+
+  async function revokeAuthSession(session: AuthSession) {
+    if (!csrf || session.is_current || !window.confirm("Sign out this device/session? It will need to sign in again.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/auth/sessions/" + encodeURIComponent(session.id), csrf, { method: "DELETE" });
+      setAuthSessions(current => current.filter(item => item.id !== session.id));
+      setNotice("Selected session signed out.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Session could not be revoked.");
     } finally { setBusy(false); }
   }
 
@@ -1580,6 +1605,19 @@ export default function DashboardPage() {
           </div>
         </section>
         <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && deliveries.some(delivery=>delivery.status==="processing") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={reconcileStaleDeliveries}>Reconcile sends stuck for 15+ minutes</button><p className="fine">This only marks stale sends as uncertain. It never automatically retries messages.</p></div>}<div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
+        <section className="section" aria-labelledby="sessions-title">
+          <h2 id="sessions-title">Signed-in devices and sessions</h2>
+          <article className="card">
+            <p>Review active sign-ins for this account. You can remotely sign out a device you no longer use; the current session is protected and must be ended with Sign out.</p>
+            <div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={loadAuthSessions}>Refresh sessions</button></div>
+            <div className="cards">{authSessions.length ? authSessions.map(session=><article className="card" key={session.id}>
+              <h3>{session.is_current ? "This device (current session)" : "Other signed-in device"}</h3>
+              <p className="fine">Last active: {new Date(session.last_seen_at).toLocaleString()} · Expires: {new Date(session.expires_at).toLocaleString()}</p>
+              {session.user_agent && <p className="fine">{session.user_agent}</p>}
+              {!session.is_current && <button className="button secondary" type="button" disabled={busy} onClick={()=>revokeAuthSession(session)}>Sign out this device</button>}
+            </article>) : <article className="card"><p>No active sessions loaded. Refresh to retrieve this account's signed-in devices.</p></article>}</div>
+          </article>
+        </section>
         <section className="section" aria-labelledby="account-danger-title">
           <h2 id="account-danger-title">Account privacy and deletion</h2>
           <article className="card">
