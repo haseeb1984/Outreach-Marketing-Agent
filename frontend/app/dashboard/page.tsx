@@ -19,6 +19,7 @@ type Invitation = { id: string; invited_email: string; role: string; status: str
 type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
+type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
 type WhatsAppConversation = { id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; provider_timestamp?: string | null; received_at: string };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
@@ -89,6 +90,7 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<Record<string, WhatsAppTemplate[]>>({});
   const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
@@ -221,7 +223,19 @@ export default function DashboardPage() {
     setEmailAccounts(loadedEmailAccounts);
     setSelectedEmailAccountId(current => loadedEmailAccounts.some(account => account.id === current && account.status === "active") ? current : (loadedEmailAccounts.find(account => account.status === "active")?.id || ""));
     const whatsappAccountResult = await Promise.allSettled([api<ApiResult<WhatsAppAccount>>("/api/v1/integrations/whatsapp/accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
-    setWhatsappAccounts(whatsappAccountResult[0].status === "fulfilled" ? (whatsappAccountResult[0].value.items || []) : []);
+    const loadedWhatsAppAccounts = whatsappAccountResult[0].status === "fulfilled" ? (whatsappAccountResult[0].value.items || []) : [];
+    setWhatsappAccounts(loadedWhatsAppAccounts);
+    const templateResults = await Promise.allSettled(loadedWhatsAppAccounts.map(account =>
+      api<{ items: WhatsAppTemplate[] }>(
+        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates?workspace_id=" + encodeURIComponent(selectedId),
+        token,
+      ),
+    ));
+    const loadedTemplates: Record<string, WhatsAppTemplate[]> = {};
+    templateResults.forEach((result, index) => {
+      if (result.status === "fulfilled") loadedTemplates[loadedWhatsAppAccounts[index].id] = result.value.items || [];
+    });
+    setWhatsappTemplates(loadedTemplates);
     const [inboxResult, webhookDeadLetterResult] = await Promise.allSettled([
       api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<{ items: WhatsAppWebhookEvent[] }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25", token),
@@ -454,6 +468,11 @@ export default function DashboardPage() {
         csrf,
         { method: "POST" },
       );
+      const refreshed = await api<{ items: WhatsAppTemplate[] }>(
+        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf,
+      );
+      setWhatsappTemplates(current => ({ ...current, [account.id]: refreshed.items || [] }));
       setNotice("Meta template sync complete for " + account.label + ": " + result.templates_synced + " saved, " + result.templates_skipped + " skipped from " + result.templates_received + " received. Sending remains disabled.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "WhatsApp templates could not be synchronized.");
@@ -1395,7 +1414,16 @@ export default function DashboardPage() {
               <p className="fine">Status: {account.status}</p>
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "pending_verification" && <button className="button" type="button" disabled={busy} onClick={() => verifyWhatsAppAccount(account)}>Verify with Meta</button>}
               {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status === "active" && <button className="button" type="button" disabled={busy} onClick={() => syncWhatsAppTemplates(account)}>Sync approved templates</button>}
-              {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
+              {whatsappTemplates[account.id]?.length ? <section aria-label={"Templates for " + account.label}>
+                <h5>Message templates ({whatsappTemplates[account.id].length})</h5>
+                <ul>{whatsappTemplates[account.id].map(template => <li key={template.template_name + ":" + template.language_code}>
+                  <strong>{template.template_name}</strong> · {template.language_code} · {template.category}
+                  <span className="fine"> — Meta: {template.provider_status || template.status}; local status: {template.status}
+                    {template.verified_at ? "; verified " + new Date(template.verified_at).toLocaleString() : ""}
+                  </span>
+                </li>)}</ul>
+              </section> : <p className="fine">No synchronized templates are recorded for this account yet.</p>}
+                            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
             </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
             <h3>WhatsApp inbox</h3>
             <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; approved templates can be synchronized by workspace admins; outbound sending remains disabled.</p>
