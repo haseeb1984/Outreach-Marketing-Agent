@@ -138,10 +138,42 @@ class WhatsAppSendPolicy:
             if template is None:
                 return {"allowed": False, "reason": "approved_provider_template_not_found"}
 
+            raw_components = template["components"]
+            if isinstance(raw_components, str):
+                try:
+                    raw_components = json.loads(raw_components)
+                except (TypeError, ValueError):
+                    return {"allowed": False, "reason": "approved_template_schema_invalid"}
+            expected: dict[str, int] = {}
+            if not isinstance(raw_components, list):
+                return {"allowed": False, "reason": "approved_template_schema_invalid"}
+            for component in raw_components:
+                if not isinstance(component, dict):
+                    continue
+                kind = str(component.get("type") or "").lower()
+                if kind not in {"body", "header"}:
+                    continue
+                if kind == "header" and str(component.get("format") or "").upper() != "TEXT":
+                    continue
+                text_value = component.get("text")
+                if isinstance(text_value, str):
+                    indexes = [int(value) for value in re.findall(r"{{([1-9][0-9]?)}}", text_value)]
+                    expected[kind] = max(indexes, default=0)
+            supplied = template_parameters or {}
+            if not isinstance(supplied, dict) or set(supplied) - {"body", "header"}:
+                return {"allowed": False, "reason": "whatsapp_template_parameters_invalid"}
+            for kind in ("body", "header"):
+                values = supplied.get(kind, [])
+                if not isinstance(values, list) or len(values) != expected.get(kind, 0):
+                    return {"allowed": False, "reason": "whatsapp_template_parameter_count_mismatch"}
+                if any(not isinstance(value, str) or not value.strip() or len(value) > 1024 for value in values):
+                    return {"allowed": False, "reason": "whatsapp_template_parameter_invalid"}
             return {
                 "allowed": True,
                 "reason": "approved_template_outside_customer_service_window",
                 "requires_approved_template": True,
+                "template_parameters": supplied,
+                "required_template_parameters": expected,
                 # Dispatch must use the exact canonical identity verified above,
                 # never template metadata copied from the mutable queue payload.
                 "template_id": str(template["id"]),
