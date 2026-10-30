@@ -78,3 +78,11 @@ The sender supports plain text inside the 24-hour customer-service window and ap
 - Workspace members and above can add and read internal-only notes using `POST/GET /api/v1/integrations/whatsapp/inbox/conversations/{conversation_id}/notes?workspace_id=...`. Notes are stored separately and are never included in outbound Meta payloads. Workspace admins can delete notes.
 - Conversation lists include current assignee, lifecycle status and priority. Resolved conversations remain available in history and can be reopened by an admin.
 - These collaboration actions do not initiate outbound messages or alter consent state.
+
+
+## Conversation activity history
+
+- Apply migration `045_whatsapp_conversation_activity.sql` after migration 044.
+- The inbox exposes `GET /api/v1/integrations/whatsapp/inbox/conversations/{conversation_id}/activity?workspace_id=...` to workspace viewers and above. Results are newest-first, bounded to 100 records, and can be paginated with `before_id`.
+- Assignment, lifecycle status and priority changes are recorded in the same database transaction as the conversation update. Internal note creation and deletion are also recorded transactionally.
+- Activity entries contain the actor user ID, event type, timestamp and minimal change metadata. Note bodies and message contents are deliberately excluded. Entries are append-only through the application API and cascade only when the parent conversation is deleted.
