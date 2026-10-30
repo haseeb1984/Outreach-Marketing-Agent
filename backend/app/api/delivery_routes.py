@@ -127,6 +127,14 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
                     reservation_id=reservation["reservation_id"], error_code=str(exc)[:100], quota_outcome="released",
                 )
             results.append({"delivery_id": str(delivery_id), "status": "blocked", "reason": str(exc)[:100]})
+        except (EmailDeliveryNotConfigured, CredentialEncryptionNotConfigured, CredentialDecryptionFailed, LookupError):
+            if reservation and reservation.get("reservation_id"):
+                await _settle_delivery_attempt(
+                    store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
+                    reservation_id=reservation["reservation_id"], error_code="provider_not_configured",
+                    quota_outcome="released",
+                )
+            results.append({"delivery_id": str(delivery_id), "status": "failed", "reason": "provider_not_configured"})
         except EmailDeliveryFailed:
             if reservation and reservation.get("reservation_id"):
                 await _settle_delivery_attempt(
