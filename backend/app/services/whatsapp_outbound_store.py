@@ -199,13 +199,15 @@ class WhatsAppOutboundStore:
                    FROM candidates c
                    WHERE q.id=c.id
                    RETURNING q.id,q.workspace_id,q.account_id,q.draft_id,q.prospect_id,
-                             q.usage_reservation_id,q.template_name,q.language_code,
+                             q.usage_reservation_id,q.template_name,q.language_code,q.template_parameters,
                              q.status,q.attempts,q.lease_token,q.lease_expires_at""",
                 limit, lease_seconds,
             )
         result = []
         for row in rows:
             item = dict(row)
+            if isinstance(item.get("template_parameters"), str):
+                item["template_parameters"] = json.loads(item["template_parameters"])
             for key, value in item.items():
                 if isinstance(value, UUID):
                     item[key] = str(value)
