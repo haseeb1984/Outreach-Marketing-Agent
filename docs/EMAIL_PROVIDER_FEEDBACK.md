@@ -10,7 +10,7 @@ Outreach sends fail closed unless `OUTREACH_WEBHOOK_SECRET` is at least 32 bytes
 
 Mailbox providers can POST to:
 
-`POST /api/v1/email/unsubscribe?token=<signed-token>`
+`POST /api/v1/webhooks/email/unsubscribe?token=<signed-token>`
 
 The endpoint validates the HMAC, resolves the exact workspace/prospect/email tuple, sets email suppression with reason `unsubscribe`, and cancels every queued email delivery for that prospect in that workspace. Repeated requests are safe. The endpoint intentionally does not require a login or CSRF token because the signed URL is the one-click authorization.
 
