@@ -74,6 +74,16 @@ def build_website_growth_report(
             "errors": crawl_report.get("errors", []),
             "cross_host_redirects_not_crawled": crawl_report.get("cross_host_redirects_not_crawled", []),
         },
+        "page_evidence": [
+            {
+                "url": page.get("final_url"),
+                "title": page.get("title"),
+                "meta_descriptions": page.get("meta_descriptions", []),
+                "headings": page.get("headings", {}),
+            }
+            for page in crawl_report.get("pages", [])
+            if isinstance(page, dict) and page.get("final_url")
+        ][:25],
         "strategy": strategy,
         "review_required": True,
         "limitations": [
