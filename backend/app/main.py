@@ -130,6 +130,7 @@ from app.api.account_routes import router as account_router
 from app.api.workspace_member_routes import router as workspace_member_router
 from app.api.workspace_settings_routes import router as workspace_settings_router
 from app.api.email_account_routes import router as email_account_router
+from app.api.email_provider_webhook_routes import router as email_provider_webhook_router
 from app.api.workspace_routes import router as workspace_router
 from app.api.dashboard_routes import router as dashboard_router
 from app.api.meta_whatsapp_webhook_routes import router as meta_whatsapp_webhook_router
@@ -158,6 +159,7 @@ app.include_router(account_router)
 app.include_router(workspace_member_router)
 app.include_router(workspace_settings_router)
 app.include_router(email_account_router)
+app.include_router(email_provider_webhook_router)
 app.include_router(workspace_router)
 app.include_router(dashboard_router)
 app.include_router(meta_whatsapp_webhook_router)
@@ -252,6 +254,9 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_projects') IS NOT NULL
                      AND to_regclass('public.workspace_invitations') IS NOT NULL
                      AND to_regclass('public.workspace_email_accounts') IS NOT NULL
+                     AND to_regclass('public.email_provider_events') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_deliveries' AND column_name='provider_status')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_contact_controls' AND column_name='email_suppression_reason')
                      AND to_regclass('public.website_audit_reports') IS NOT NULL
                      AND to_regclass('public.domain_verification_challenges') IS NOT NULL
                      AND to_regclass('public.workspace_jobs') IS NOT NULL
@@ -325,8 +330,10 @@ async def readiness() -> Response:
                             '035_workspace_growth_schedules.sql',
                             '036_growth_schedule_quota_status.sql',
                             '037_whatsapp_outbound_template_persistence.sql',
-                            '038_whatsapp_outbound_queue_leases.sql'
-                          )) = 38"""
+                            '038_whatsapp_outbound_queue_leases.sql',
+                            '039_website_audit_job_idempotency.sql',
+                            '040_email_provider_feedback.sql'
+                          )) = 40"""
             )
             if not schema_ready:
                 return JSONResponse(
