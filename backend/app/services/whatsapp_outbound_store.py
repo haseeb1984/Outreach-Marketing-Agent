@@ -14,7 +14,7 @@ class WhatsAppOutboundStore:
         self, *, workspace_id: str, account_id: UUID, draft_id: UUID,
         actor_id: UUID | str, idempotency_key: str, usage_reservation_id: UUID | str,
         template_name: str | None = None, language_code: str | None = None,
-        template_parameters: dict[str, list[str]] | None = None,
+        template_parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
             raise ValueError("workspace_id_invalid")
@@ -27,11 +27,25 @@ class WhatsAppOutboundStore:
             raise ValueError("whatsapp_identity_uuid_invalid") from None
         if template_parameters is None:
             template_parameters = {}
-        if not isinstance(template_parameters, dict) or set(template_parameters) - {"body", "header"}:
+        if not isinstance(template_parameters, dict) or set(template_parameters) - {"body", "header", "buttons"}:
             raise ValueError("whatsapp_template_parameters_invalid")
-        for values in template_parameters.values():
+        for key in ("body", "header"):
+            values = template_parameters.get(key, [])
             if not isinstance(values, list) or len(values) > 20 or any(not isinstance(v, str) or not v.strip() or len(v) > 1024 for v in values):
                 raise ValueError("whatsapp_template_parameters_invalid")
+        buttons = template_parameters.get("buttons", [])
+        if not isinstance(buttons, list) or len(buttons) > 10:
+            raise ValueError("whatsapp_template_button_parameters_invalid")
+        seen = set()
+        for button in buttons:
+            if not isinstance(button, dict) or set(button) != {"index", "sub_type", "value"}:
+                raise ValueError("whatsapp_template_button_parameters_invalid")
+            index, value = button.get("index"), button.get("value")
+            if (isinstance(index, bool) or not isinstance(index, int) or not 0 <= index <= 9
+                or index in seen or button.get("sub_type") != "url"
+                or not isinstance(value, str) or not value.strip() or len(value) > 2000):
+                raise ValueError("whatsapp_template_button_parameters_invalid")
+            seen.add(index)
         if (template_name is None) != (language_code is None):
             raise ValueError("whatsapp_template_metadata_pair_required")
         if template_name is not None:
