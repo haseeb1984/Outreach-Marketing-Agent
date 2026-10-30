@@ -284,6 +284,8 @@ async def readiness() -> Response:
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_prospects' AND column_name='contact_phone_e164')
                      AND to_regclass('public.whatsapp_conversations') IS NOT NULL
                      AND to_regclass('public.whatsapp_inbound_messages') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_inbound_messages' AND column_name='media_ciphertext')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_inbound_messages' AND column_name='media_downloaded_at')
                      AND to_regclass('public.whatsapp_delivery_status_events') IS NOT NULL
                      AND to_regclass('public.whatsapp_contact_preferences') IS NOT NULL
                      AND to_regclass('public.whatsapp_message_templates') IS NOT NULL
