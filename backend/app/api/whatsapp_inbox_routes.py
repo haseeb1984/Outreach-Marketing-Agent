@@ -284,9 +284,12 @@ async def process_pending_whatsapp_events_system(
     if scheme.lower() != "bearer" or not token or not hmac.compare_digest(configured, token):
         raise HTTPException(status_code=401, detail="invalid_scheduler_authorization")
     try:
+        pool = _pool(request)
         from app.services.whatsapp_event_processor import process_pending_whatsapp_events
-        result = await process_pending_whatsapp_events(_pool(request), batch_size=batch_size)
-        return {"accepted": True, **result}
+        from app.services.whatsapp_status_reconciliation import reconcile_whatsapp_delivery_statuses
+        result = await process_pending_whatsapp_events(pool, batch_size=batch_size)
+        reconciliation = await reconcile_whatsapp_delivery_statuses(pool, batch_size=500)
+        return {"accepted": True, **result, "status_reconciliation": reconciliation}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
