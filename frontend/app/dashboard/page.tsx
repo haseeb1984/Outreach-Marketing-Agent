@@ -624,6 +624,8 @@ export default function DashboardPage() {
         "/notes?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf,
       );
       setWhatsappNotes((notes.items || []).slice().reverse());
+      const activity = await api<{ items: WhatsAppActivity[] }>("/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) + "/activity?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf);
+      setWhatsappActivity((activity.items || []).slice().reverse());
       setWhatsappNoteDraft("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
