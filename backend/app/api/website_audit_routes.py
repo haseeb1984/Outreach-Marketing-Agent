@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
 from app.services.competitor_research import discover_competitor_candidates
+from app.services.competitor_page_analysis import analyze_competitor_pages
 from app.services.website_discovery import discover_and_crawl
 from app.services.website_fetch import FetchLimits
 
@@ -313,6 +314,33 @@ async def create_website_growth_review(payload: WebsiteGrowthReviewRequest, requ
                 "reason": "client_domain_invalid",
                 "items": [],
                 "notice": "Competitor candidates could not be searched for this website.",
+            }
+        if report.get("competitor_discovery", {}).get("items") and report.get("page_evidence"):
+            try:
+                async with asyncio.timeout(6):
+                    report["competitor_analysis"] = await analyze_competitor_pages(
+                        candidates=report["competitor_discovery"]["items"],
+                        target_queries=payload.target_queries,
+                        client_pages=report["page_evidence"],
+                        max_candidates=3,
+                    )
+            except TimeoutError:
+                report["competitor_analysis"] = {
+                    "status": "unavailable",
+                    "reason": "competitor_page_analysis_timeout",
+                    "pages_checked": 0,
+                    "items": [],
+                    "potential_gaps": [],
+                    "notice": "Competitor page comparison timed out; the core growth review is still available.",
+                }
+        else:
+            report["competitor_analysis"] = {
+                "status": "unavailable",
+                "reason": "client_page_evidence_unavailable",
+                "pages_checked": 0,
+                "items": [],
+                "potential_gaps": [],
+                "notice": "Content comparison requires successfully crawled client page evidence and public candidates.",
             }
         status = "crawl_skipped" if report.get("status") == "crawl_skipped" else "completed"
         async with pool.acquire() as conn:
