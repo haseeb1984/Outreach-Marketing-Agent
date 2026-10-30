@@ -288,6 +288,9 @@ async def integrations_status(request: Request, workspace_id: str=Query(min_leng
    "provider": "smtp",
    **smtp,
    "note": "Configuration presence is not proof that SMTP authentication or delivery works.",
+   "provider_feedback_webhook_configured": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32),
+   "provider_feedback_events": ["delivered", "deferred", "bounced", "complained", "unsubscribed"],
+   "signed_one_click_unsubscribe": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32 and settings.public_base_url and settings.public_base_url.strip().lower().startswith("https://")),
   },
   "whatsapp": {
    "provider": "meta_whatsapp_cloud_api",
