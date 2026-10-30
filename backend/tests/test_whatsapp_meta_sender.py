@@ -128,3 +128,17 @@ def test_sender_does_not_follow_redirects_in_injected_client_or_leak_provider_bo
         assert "evil" not in str(error.value)
         assert "secret-token" not in str(error.value)
     asyncio.run(scenario())
+
+
+
+def test_payload_builders_normalize_formatted_phone_numbers():
+    assert build_text_payload(recipient="+1 (415) 555-0123", body="Hello")["to"] == "14155550123"
+    assert build_template_payload(
+        recipient="+1-415-555-0123", template_name="welcome", language_code="en_US",
+    )["to"] == "14155550123"
+
+
+@pytest.mark.parametrize("recipient", ["abc14155550123", "14155550123xyz", "++14155550123", "1+4155550123", "123", ""])
+def test_payload_builders_reject_malformed_phone_numbers(recipient):
+    with pytest.raises(ValueError, match="whatsapp_recipient_invalid"):
+        build_text_payload(recipient=recipient, body="Hello")

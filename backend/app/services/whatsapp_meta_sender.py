@@ -33,6 +33,18 @@ _VERSION = re.compile(r"^v[0-9]{2,3}\.0$")
 _ASSET_ID = re.compile(r"^[0-9]{5,128}$")
 
 
+def _normalize_recipient(recipient: str) -> str:
+    """Normalize human-formatted international numbers without discarding letters."""
+    if not isinstance(recipient, str) or not recipient or len(recipient) > 32:
+        raise ValueError("whatsapp_recipient_invalid")
+    if any(not (char.isdigit() or char in "+ ()-.") for char in recipient):
+        raise ValueError("whatsapp_recipient_invalid")
+    normalized = "".join(char for char in recipient if char.isdigit())
+    if not 7 <= len(normalized) <= 15 or (recipient.count("+") > 1 or ("+" in recipient and not recipient.lstrip().startswith("+"))):
+        raise ValueError("whatsapp_recipient_invalid")
+    return normalized
+
+
 def _validate_common(version: str, phone_number_id: str, access_token: str, recipient: str) -> str:
     if not isinstance(version, str) or not _VERSION.fullmatch(version):
         raise ValueError("meta_graph_api_version_invalid")
@@ -40,21 +52,17 @@ def _validate_common(version: str, phone_number_id: str, access_token: str, reci
         raise ValueError("meta_phone_number_id_invalid")
     if not isinstance(access_token, str) or not access_token.strip() or any(c.isspace() for c in access_token):
         raise ValueError("meta_access_token_invalid")
-    if not isinstance(recipient, str):
-        raise ValueError("whatsapp_recipient_invalid")
-    normalized = "".join(c for c in recipient if c.isdigit())
-    if not 7 <= len(normalized) <= 15:
-        raise ValueError("whatsapp_recipient_invalid")
-    return normalized
+    return _normalize_recipient(recipient)
 
 
 def build_text_payload(*, recipient: str, body: str) -> dict[str, Any]:
+    normalized = _normalize_recipient(recipient)
     if not isinstance(body, str) or not body.strip() or len(body) > 4096:
         raise ValueError("whatsapp_text_body_invalid")
     return {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
-        "to": recipient,
+        "to": normalized,
         "type": "text",
         "text": {"preview_url": False, "body": body},
     }
@@ -63,13 +71,14 @@ def build_text_payload(*, recipient: str, body: str) -> dict[str, Any]:
 def build_template_payload(
     *, recipient: str, template_name: str, language_code: str,
 ) -> dict[str, Any]:
+    normalized = _normalize_recipient(recipient)
     if not isinstance(template_name, str) or not template_name.strip() or len(template_name) > 512:
         raise ValueError("whatsapp_template_name_invalid")
     if not isinstance(language_code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{2,32}", language_code):
         raise ValueError("whatsapp_template_language_invalid")
     return {
         "messaging_product": "whatsapp",
-        "to": recipient,
+        "to": normalized,
         "type": "template",
         "template": {"name": template_name, "language": {"code": language_code}},
     }
