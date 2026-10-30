@@ -214,6 +214,35 @@ class CampaignStore:
                 )
         return self._serialize(dict(row))
 
+    async def list_draft_events(self, *, workspace_id: str, draft_id: UUID, limit: int = 100) -> list[dict[str, Any]]:
+        """Return a bounded, workspace-scoped audit timeline for a draft."""
+        if not 1 <= limit <= 200:
+            raise ValueError("pagination_out_of_range")
+        async with self._pool.acquire() as conn:
+            exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM outreach_drafts WHERE id=$1 AND workspace_id=$2)",
+                draft_id, workspace_id,
+            )
+            if not exists:
+                return []
+            rows = await conn.fetch(
+                """SELECT event_type, note, actor_id, created_at
+                   FROM outreach_draft_events
+                   WHERE draft_id=$1 AND workspace_id=$2
+                   ORDER BY created_at DESC, id DESC
+                   LIMIT $3""",
+                draft_id, workspace_id, limit,
+            )
+        return [
+            {
+                "event_type": row["event_type"],
+                "note": row["note"],
+                "actor_id": str(row["actor_id"]) if row["actor_id"] is not None else None,
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            }
+            for row in rows
+        ]
+
     @staticmethod
     def _validate_page(limit: int, offset: int) -> None:
         if not 1 <= limit <= 100 or not 0 <= offset <= 100_000:
