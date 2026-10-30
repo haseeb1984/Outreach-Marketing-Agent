@@ -69,6 +69,7 @@ async def list_whatsapp_conversations(
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
                 """SELECT c.id, c.workspace_id, c.account_id, c.prospect_id, c.wa_id,
+                          c.assigned_to_user_id,c.inbox_status,c.priority,c.assigned_at,c.closed_at,
                           c.created_at, c.updated_at, a.label AS account_label,
                           p.name AS prospect_name, p.company AS prospect_company,
                           m.text_body AS last_message_text, m.message_type AS last_message_type,
