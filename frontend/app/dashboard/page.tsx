@@ -101,6 +101,7 @@ export default function DashboardPage() {
   const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState("");
   const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
   const [selectedEmailAccountId, setSelectedEmailAccountId] = useState("");
+  const [editingEmailAccountId, setEditingEmailAccountId] = useState<string | null>(null);
   const [emailAccountLabel, setEmailAccountLabel] = useState("");
   const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
   const [smtpUsername, setSmtpUsername] = useState("");
@@ -394,6 +395,35 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account could not be connected.");
     } finally { setBusy(false); }
+  }
+
+
+  async function saveEmailAccountChanges(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !editingEmailAccountId) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/email-accounts/" + encodeURIComponent(editingEmailAccountId), csrf, {
+        method: "PUT",
+        body: JSON.stringify({ workspace_id: workspaceId, label: emailAccountLabel, smtp_host: smtpHost,
+          smtp_port: 587, smtp_username: smtpUsername, smtp_password: smtpPassword,
+          from_email: smtpFromEmail, from_name: smtpFromName, starttls: true }),
+      });
+      setEditingEmailAccountId(null);
+      setEmailAccountLabel(""); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail("");
+      setNotice("SMTP credentials updated. The account is pending a fresh connection test and cannot send until the test succeeds.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Email account could not be updated.");
+    } finally { setBusy(false); }
+  }
+
+  function beginEmailAccountEdit(account: EmailAccount) {
+    setEditingEmailAccountId(account.id);
+    setEmailAccountLabel(account.label); setSmtpHost(account.smtp_host);
+    setSmtpUsername(account.smtp_username); setSmtpPassword("");
+    setSmtpFromEmail(account.from_email); setSmtpFromName(account.from_name);
+    setError(""); setNotice("Enter the replacement SMTP password. Existing passwords are never displayed.");
   }
 
   async function testEmailAccount(account: EmailAccount) {
@@ -1221,8 +1251,17 @@ export default function DashboardPage() {
           <p className="fine">SMTP credentials are encrypted at rest. Only supported TLS submission hosts on port 587 are accepted. Connection tests authenticate only and do not send a message.</p>
           <div className="field"><label htmlFor="selected-email-account">Account used for new queued email</label><select id="selected-email-account" value={selectedEmailAccountId} onChange={e=>setSelectedEmailAccountId(e.target.value)}><option value="">Use server default SMTP configuration</option>{emailAccounts.filter(account=>account.status==="active").map(account=><option value={account.id} key={account.id}>{account.label} · {account.from_email}</option>)}</select></div>
           <div className="cards">{emailAccounts.length ? emailAccounts.map(account=><article className="card" key={account.id}><h3>{account.label}</h3><p>{account.from_email}</p><p className="fine">{account.smtp_host}:{account.smtp_port} · {account.smtp_username} · {account.status}</p>
-            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>testEmailAccount(account)}>Test connection</button>{account.status!=="disabled" && <button className="button secondary" type="button" disabled={busy} onClick={()=>disableEmailAccount(account)}>Disable</button>}</div>}
+            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>beginEmailAccountEdit(account)}>Edit credentials</button><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>testEmailAccount(account)}>Test connection</button>{account.status!=="disabled" && <button className="button secondary" type="button" disabled={busy} onClick={()=>disableEmailAccount(account)}>Disable</button>}</div>}
           </article>) : <article className="card"><p>No workspace email accounts are connected. The server default may still be used if configured.</p></article>}</div>
+          {editingEmailAccountId && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <article className="card" aria-labelledby="edit-email-account-title"><h3 id="edit-email-account-title">Update SMTP account</h3><p className="fine">A new password is required. Saving rotates the credentials and disables delivery until a fresh connection test succeeds.</p><form onSubmit={saveEmailAccountChanges}>
+            <div className="field"><label htmlFor="edit-email-account-label">Account label</label><input id="edit-email-account-label" required maxLength={120} value={emailAccountLabel} onChange={e=>setEmailAccountLabel(e.target.value)} /></div>
+            <div className="field"><label htmlFor="edit-smtp-host">SMTP provider host</label><select id="edit-smtp-host" value={smtpHost} onChange={e=>setSmtpHost(e.target.value)}><option value="smtp.gmail.com">Gmail / Google Workspace</option><option value="smtp.office365.com">Microsoft 365</option><option value="smtp-mail.outlook.com">Outlook.com</option><option value="smtp.zoho.com">Zoho Mail</option><option value="smtp.zoho.eu">Zoho Mail EU</option><option value="smtp-relay.brevo.com">Brevo</option><option value="smtp.sendgrid.net">SendGrid</option><option value="smtp.mailgun.org">Mailgun</option></select></div>
+            <div className="field"><label htmlFor="edit-smtp-username">SMTP username</label><input id="edit-smtp-username" required maxLength={320} value={smtpUsername} onChange={e=>setSmtpUsername(e.target.value)} /></div>
+            <div className="field"><label htmlFor="edit-smtp-password">Replacement SMTP password</label><input id="edit-smtp-password" type="password" required minLength={1} maxLength={1024} autoComplete="new-password" value={smtpPassword} onChange={e=>setSmtpPassword(e.target.value)} /></div>
+            <div className="field"><label htmlFor="edit-smtp-from-email">Verified sender email</label><input id="edit-smtp-from-email" type="email" required maxLength={320} value={smtpFromEmail} onChange={e=>setSmtpFromEmail(e.target.value)} /></div>
+            <div className="field"><label htmlFor="edit-smtp-from-name">Sender name</label><input id="edit-smtp-from-name" required maxLength={200} value={smtpFromName} onChange={e=>setSmtpFromName(e.target.value)} /></div>
+            <div className="actions"><button className="button" type="submit" disabled={busy || !csrf}>Save and require connection retest</button><button className="button secondary" type="button" disabled={busy} onClick={()=>{setEditingEmailAccountId(null);setSmtpPassword("");}}>Cancel</button></div>
+          </form></article>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details className="card"><summary>Connect an SMTP account</summary><form onSubmit={createEmailAccount}>
             <div className="field"><label htmlFor="email-account-label">Account label</label><input id="email-account-label" required maxLength={120} value={emailAccountLabel} onChange={e=>setEmailAccountLabel(e.target.value)} /></div>
             <div className="field"><label htmlFor="smtp-host">SMTP provider host</label><select id="smtp-host" value={smtpHost} onChange={e=>setSmtpHost(e.target.value)}><option value="smtp.gmail.com">Gmail / Google Workspace</option><option value="smtp.office365.com">Microsoft 365</option><option value="smtp-mail.outlook.com">Outlook.com</option><option value="smtp.zoho.com">Zoho Mail</option><option value="smtp.zoho.eu">Zoho Mail EU</option><option value="smtp-relay.brevo.com">Brevo</option><option value="smtp.sendgrid.net">SendGrid</option><option value="smtp.mailgun.org">Mailgun</option></select></div>
