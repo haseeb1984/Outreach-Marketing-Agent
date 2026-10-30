@@ -22,6 +22,8 @@ type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_i
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
 type WhatsAppConversation = { id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; provider_timestamp?: string | null; received_at: string };
+type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
+type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; domain?: string; description: string; relevance_score?: number; relevance_reasons?: string[]; relevance_method?: string; evidence_type: string; requires_human_review: boolean };
@@ -95,6 +97,10 @@ export default function DashboardPage() {
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
+  const [unifiedReplyThreads, setUnifiedReplyThreads] = useState<UnifiedReplyThread[]>([]);
+  const [selectedReplyProspectId, setSelectedReplyProspectId] = useState("");
+  const [unifiedReplyMessages, setUnifiedReplyMessages] = useState<UnifiedReplyMessage[]>([]);
+  const [unifiedReplyBusy, setUnifiedReplyBusy] = useState(false);
   const [whatsappInboxBusy, setWhatsappInboxBusy] = useState(false);
   const [whatsappLabel, setWhatsappLabel] = useState("");
   const [whatsappWabaId, setWhatsappWabaId] = useState("");
@@ -192,6 +198,13 @@ export default function DashboardPage() {
     setCampaigns(c.items || []);
     setDrafts(d.items || []);
     setDeliveries(deliveryResult.items || []);
+    const replyInboxResult = await Promise.allSettled([
+      api<{ items: UnifiedReplyThread[] }>("/api/v1/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
+    ]);
+    const loadedReplyThreads = replyInboxResult[0].status === "fulfilled" ? (replyInboxResult[0].value.items || []) : [];
+    setUnifiedReplyThreads(loadedReplyThreads);
+    setSelectedReplyProspectId(current => loadedReplyThreads.some(thread => thread.prospect_id === current) ? current : "");
+    if (!loadedReplyThreads.length) setUnifiedReplyMessages([]);
     setCounts(a.counts || {});
     const performanceResult = await Promise.allSettled([
       api<{ items: CampaignPerformance[] }>("/api/v1/analytics/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period + "&limit=50", token),
@@ -436,6 +449,22 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Email account connection test failed.");
     } finally { setBusy(false); }
+  }
+
+
+  async function openUnifiedReplyThread(thread: UnifiedReplyThread) {
+    if (!workspaceId || !csrf) return;
+    setUnifiedReplyBusy(true); setError("");
+    try {
+      const result = await api<{ items: UnifiedReplyMessage[] }>(
+        "/api/v1/prospects/" + encodeURIComponent(thread.prospect_id) + "/messages?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
+        csrf,
+      );
+      setSelectedReplyProspectId(thread.prospect_id);
+      setUnifiedReplyMessages((result.items || []).slice().reverse());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
+    } finally { setUnifiedReplyBusy(false); }
   }
 
   async function openWhatsAppConversation(conversation: WhatsAppConversation) {
@@ -1513,6 +1542,24 @@ export default function DashboardPage() {
             </details>}
             <p className="fine">Inbound Meta webhook signatures are validated and events are stored in a private inbox. A worker can map events to workspace-owned accounts and persist inbound messages/statuses; configure a trusted scheduler to process the inbox. Outbound sending remains disabled until opt-in and approved-template safeguards are complete.</p>
           </article>
+        </section>
+
+        <section className="section" aria-labelledby="unified-reply-inbox-title">
+          <h2 id="unified-reply-inbox-title">Unified reply inbox</h2>
+          <p className="fine">Email and WhatsApp replies linked to workspace CRM prospects appear together. This inbox is read-only; replies do not trigger automatic outbound messages.</p>
+          <div className="cards">
+            <article className="card">
+              <h3>Reply threads ({unifiedReplyThreads.length})</h3>
+              {unifiedReplyThreads.length ? unifiedReplyThreads.map(thread=><button key={thread.prospect_id} type="button" className={"button " + (selectedReplyProspectId===thread.prospect_id ? "" : "secondary")} disabled={unifiedReplyBusy} onClick={()=>openUnifiedReplyThread(thread)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}>
+                <strong>{thread.prospect_name}</strong><span style={{display:"block"}}>{thread.prospect_company} · {thread.channel.toUpperCase()} · {thread.message_count} messages</span><span style={{display:"block"}}>{thread.latest_message}</span><span className="fine">{new Date(thread.latest_message_at).toLocaleString()}</span>
+              </button>) : <p className="fine">No linked email or WhatsApp replies have been received yet.</p>}
+              <button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf} onClick={()=>refresh(workspaceId,csrf)}>Refresh reply inbox</button>
+            </article>
+            <article className="card">
+              <h3>Conversation history</h3>
+              {selectedReplyProspectId ? (unifiedReplyMessages.length ? <ol>{unifiedReplyMessages.map(message=><li key={message.id} style={{marginBottom:"0.75rem"}}><p>{message.body}</p><p className="fine">{message.direction} · {message.channel.toUpperCase()} · {message.provider} · {new Date(message.occurred_at).toLocaleString()}</p></li>)}</ol> : <p className="fine">No messages are available for this prospect.</p>) : <p className="fine">Select a reply thread to view its complete inbound history.</p>}
+            </article>
+          </div>
         </section>
         <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && deliveries.some(delivery=>delivery.status==="processing") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={reconcileStaleDeliveries}>Reconcile sends stuck for 15+ minutes</button><p className="fine">This only marks stale sends as uncertain. It never automatically retries messages.</p></div>}<div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.status === "queued" && delivery.channel === "email" && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
         <section className="section" aria-labelledby="account-danger-title">
