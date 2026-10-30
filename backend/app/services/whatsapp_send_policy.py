@@ -151,10 +151,12 @@ class WhatsAppSendPolicy:
                 if not isinstance(component, dict):
                     continue
                 kind = str(component.get("type") or "").lower()
+                if kind == "buttons":
+                    return {"allowed": False, "reason": "whatsapp_template_button_parameters_not_supported"}
                 if kind not in {"body", "header"}:
                     continue
                 if kind == "header" and str(component.get("format") or "").upper() != "TEXT":
-                    continue
+                    return {"allowed": False, "reason": "whatsapp_template_media_header_not_supported"}
                 text_value = component.get("text")
                 if isinstance(text_value, str):
                     indexes = [int(value) for value in re.findall(r"{{([1-9][0-9]?)}}", text_value)]
