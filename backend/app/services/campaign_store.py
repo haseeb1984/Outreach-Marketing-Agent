@@ -56,23 +56,59 @@ class CampaignStore:
             )
         return self._serialize(dict(row)) if row else None
 
-    async def get_draft_generation_context(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID) -> dict[str, Any] | None:
-        """Load workspace-owned facts for AI generation without holding a write transaction."""
+    async def get_draft_generation_context(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID, channel: str) -> dict[str, Any] | None:
+        """Load and pre-qualify workspace-owned facts before spending on AI generation."""
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT c.client_business,c.client_offer,p.name AS prospect_name,
-                          p.evidence_url,p.fit_reason,p.verified_facts
+                          p.evidence_url,p.fit_reason,p.verified_facts,p.stage,
+                          p.contact_email,p.contact_phone_e164,
+                          ctrl.email_suppressed,ctrl.whatsapp_opt_in_at,
+                          ctrl.whatsapp_opt_in_evidence_url,ctrl.whatsapp_account_id
                    FROM outreach_campaigns c
                    JOIN crm_prospects p ON p.workspace_id=c.workspace_id
+                   LEFT JOIN outreach_contact_controls ctrl
+                     ON ctrl.workspace_id=p.workspace_id AND ctrl.prospect_id=p.id
                    WHERE c.id=$1 AND c.workspace_id=$2 AND c.status NOT IN ('archived','paused')
                      AND p.id=$3 AND p.archived_at IS NULL""",
                 campaign_id, workspace_id, prospect_id,
             )
-        if row is None:
-            return None
-        data = dict(row)
-        data["verified_facts"] = self._json_list(data.get("verified_facts"))
-        return data
+            if row is None:
+                return None
+            data = dict(row)
+            if data.get("stage") == "do_not_contact":
+                raise ValueError("contact_suppressed")
+            if data.get("stage") == "replied":
+                raise ValueError("contact_replied")
+            if channel == "email":
+                if not data.get("contact_email"):
+                    raise ValueError("prospect_email_required")
+                if data.get("email_suppressed"):
+                    raise ValueError("contact_suppressed")
+            elif channel == "whatsapp":
+                if not data.get("contact_phone_e164"):
+                    raise ValueError("prospect_whatsapp_phone_required")
+                if not data.get("whatsapp_opt_in_at") or not data.get("whatsapp_opt_in_evidence_url"):
+                    raise ValueError("WhatsApp documented opt-in evidence is required")
+                account_id = data.get("whatsapp_account_id")
+                active = await conn.fetchval(
+                    """SELECT EXISTS(SELECT 1 FROM workspace_whatsapp_accounts
+                       WHERE id=$1 AND workspace_id=$2 AND status='active')""",
+                    account_id, workspace_id,
+                ) if account_id else False
+                if not active:
+                    raise ValueError("WhatsApp consent account is not active")
+                digits = "".join(ch for ch in str(data["contact_phone_e164"]) if ch.isdigit())
+                opted_out = await conn.fetchval(
+                    """SELECT EXISTS(SELECT 1 FROM whatsapp_contact_preferences
+                       WHERE workspace_id=$1 AND wa_id=$2 AND opted_out_at IS NOT NULL
+                         AND (opted_in_at IS NULL OR opted_out_at >= opted_in_at))""",
+                    workspace_id, digits,
+                )
+                if opted_out:
+                    raise ValueError("WhatsApp contact has opted out")
+            data["verified_facts"] = self._json_list(data.get("verified_facts"))
+            return data
 
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
