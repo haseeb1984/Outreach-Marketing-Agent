@@ -86,3 +86,11 @@ The sender supports plain text inside the 24-hour customer-service window and ap
 - The inbox exposes `GET /api/v1/integrations/whatsapp/inbox/conversations/{conversation_id}/activity?workspace_id=...` to workspace viewers and above. Results are newest-first, bounded to 100 records, and can be paginated with `before_id`.
 - Assignment, lifecycle status and priority changes are recorded in the same database transaction as the conversation update. Internal note creation and deletion are also recorded transactionally.
 - Activity entries contain the actor user ID, event type, timestamp and minimal change metadata. Note bodies and message contents are deliberately excluded. Entries are append-only through the application API and cascade only when the parent conversation is deleted.
+
+
+## Inbox filtering and search
+
+- The conversation list endpoint supports `assigned_to_me=true`, `unassigned=true`, `inbox_status=open|pending|resolved`, `priority=low|normal|high|urgent`, and `search=...` alongside the existing bounded `limit` and `offset` parameters.
+- `assigned_to_me` is evaluated against the authenticated session user; clients cannot supply an arbitrary assignee identity for this filter.
+- Search matches the WhatsApp contact identifier, linked prospect name/company, and latest inbound message text. All conditions remain scoped to the authorized workspace.
+- The dashboard provides assignment, status, priority and text-search controls with apply and clear actions.
