@@ -315,6 +315,9 @@ async def integrations_status(request: Request, workspace_id: str=Query(min_leng
    "provider_feedback_webhook_configured": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32),
    "provider_feedback_events": ["delivered", "deferred", "bounced", "complained", "unsubscribed"],
    "signed_one_click_unsubscribe": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32 and settings.public_base_url and settings.public_base_url.strip().lower().startswith("https://")),
+   "inbound_reply_webhook_implemented": True,
+   "inbound_reply_webhook_configured": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32),
+   "provider_native_signature_verification_required_in_relay": True,
   },
   "whatsapp": {
    "provider": "meta_whatsapp_cloud_api",
