@@ -12,7 +12,7 @@ class ProspectStore:
 
     async def list_prospects(
         self, *, workspace_id: str, stage: str | None = None,
-        limit: int = 50, offset: int = 0,
+        limit: int = 50, offset: int = 0, search: str | None = None,
     ) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 100_000:
             raise ValueError("pagination_out_of_range")
@@ -29,9 +29,14 @@ class ProspectStore:
                      ON cc.workspace_id=p.workspace_id AND cc.prospect_id=p.id
                    WHERE p.workspace_id=$1 AND p.archived_at IS NULL
                      AND ($2::text IS NULL OR p.stage=$2)
+                     AND ($5::text IS NULL OR
+                          p.name ILIKE '%' || $5 || '%' OR p.company ILIKE '%' || $5 || '%' OR
+                          COALESCE(p.contact_email,'') ILIKE '%' || $5 || '%' OR
+                          COALESCE(p.contact_phone_e164,'') ILIKE '%' || $5 || '%' OR
+                          COALESCE(p.role,'') ILIKE '%' || $5 || '%' OR p.website_url ILIKE '%' || $5 || '%')
                    ORDER BY p.updated_at DESC, p.id
                    LIMIT $3 OFFSET $4""",
-                workspace_id, stage, limit, offset,
+                workspace_id, stage, limit, offset, search.strip()[:120] if search and search.strip() else None,
             )
         return [self._serialize(dict(row)) for row in rows]
 
@@ -60,20 +65,31 @@ class ProspectStore:
         return self._serialize(dict(row))
 
     async def update_prospect(
-        self, *, workspace_id: str, prospect_id: UUID, stage: str | None = None,
-        notes: str | None = None,
+        self, *, workspace_id: str, prospect_id: UUID, stage: str | None = None, notes: str | None = None,
+        name: str | None = None, company: str | None = None, role: str | None = None,
+        contact_email: str | None = None, contact_phone_e164: str | None = None,
+        website_url: str | None = None, evidence_url: str | None = None, fit_reason: str | None = None,
     ) -> dict[str, Any] | None:
-        if stage is None and notes is None:
+        if all(value is None for value in (stage, notes, name, company, role, contact_email, contact_phone_e164, website_url, evidence_url, fit_reason)):
             raise ValueError("no_updates_supplied")
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """UPDATE crm_prospects
-                   SET stage=COALESCE($3,stage), notes=COALESCE($4,notes), updated_at=now()
+                   SET stage=COALESCE($3,stage), notes=COALESCE($4,notes),
+                       name=COALESCE($5,name), company=COALESCE($6,company), role=COALESCE($7,role),
+                       contact_email=COALESCE($8,contact_email), contact_phone_e164=COALESCE($9,contact_phone_e164),
+                       website_url=COALESCE($10,website_url), evidence_url=COALESCE($11,evidence_url),
+                       fit_reason=COALESCE($12,fit_reason), updated_at=now()
                    WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL
                    RETURNING id, workspace_id, name, company, role, contact_email, contact_phone_e164,
                              website_url, evidence_url, evidence_observed_at, fit_reason,
                              verified_facts, stage, notes, created_by, created_at, updated_at""",
-                prospect_id, workspace_id, stage, notes,
+                prospect_id, workspace_id, stage, notes, name.strip() if name else None,
+                company.strip() if company else None, role.strip() if role else None,
+                contact_email.strip().lower() if contact_email else None,
+                contact_phone_e164.strip() if contact_phone_e164 else None,
+                website_url.strip() if website_url else None, evidence_url.strip() if evidence_url else None,
+                fit_reason.strip() if fit_reason else None,
             )
         return self._serialize(dict(row)) if row else None
 
