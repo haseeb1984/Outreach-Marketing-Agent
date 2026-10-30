@@ -183,6 +183,48 @@ async def reconcile_stale_deliveries(
         raise HTTPException(status_code=503, detail="delivery_reconciliation_unavailable") from None
 
 
+class DeliveryScheduleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    scheduled_at: datetime
+
+
+@router.patch("/deliveries/{delivery_id}/schedule")
+async def reschedule_delivery(delivery_id: UUID, payload: DeliveryScheduleUpdate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    try:
+        result = await _store(request).reschedule(
+            workspace_id=payload.workspace_id, delivery_id=delivery_id,
+            scheduled_at=payload.scheduled_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="delivery_reschedule_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=409, detail="delivery_not_queued_or_not_found")
+    return result
+
+
+@router.delete("/deliveries/{delivery_id}")
+async def cancel_delivery(
+    delivery_id: UUID, request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, "admin", session)
+    try:
+        cancelled = await _store(request).cancel(workspace_id=workspace_id, delivery_id=delivery_id)
+    except Exception:
+        raise HTTPException(status_code=503, detail="delivery_cancel_unavailable") from None
+    if not cancelled:
+        raise HTTPException(status_code=409, detail="delivery_not_queued_or_not_found")
+    return {"id": str(delivery_id), "status": "cancelled"}
+
+
 @router.get("/deliveries")
 async def list_deliveries(request: Request,workspace_id: str=Query(min_length=1,max_length=200),limit: int=Query(default=50,ge=1,le=100),offset: int=Query(default=0,ge=0,le=100000)):
  _,_,s=await _authenticated(request); await _authorize(request,workspace_id,"viewer",s)
