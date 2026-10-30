@@ -10,6 +10,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf
+from app.core.config import settings
+from app.services.competitor_research import discover_competitor_candidates
 from app.services.website_discovery import discover_and_crawl
 from app.services.website_fetch import FetchLimits
 
@@ -290,6 +292,28 @@ async def create_website_growth_review(payload: WebsiteGrowthReviewRequest, requ
             )
         report["project_id"] = str(payload.project_id)
         report["project_name"] = project["name"]
+        try:
+            async with asyncio.timeout(9):
+                report["competitor_discovery"] = await discover_competitor_candidates(
+                    website_url=start_url,
+                    target_queries=payload.target_queries,
+                    api_key=settings.brave_search_api_key,
+                    max_candidates=12,
+                )
+        except TimeoutError:
+            report["competitor_discovery"] = {
+                "status": "unavailable",
+                "reason": "search_provider_timeout",
+                "items": [],
+                "notice": "Competitor candidate search timed out; the website audit report is still available.",
+            }
+        except ValueError:
+            report["competitor_discovery"] = {
+                "status": "unavailable",
+                "reason": "client_domain_invalid",
+                "items": [],
+                "notice": "Competitor candidates could not be searched for this website.",
+            }
         status = "crawl_skipped" if report.get("status") == "crawl_skipped" else "completed"
         async with pool.acquire() as conn:
             saved = await conn.fetchrow(
