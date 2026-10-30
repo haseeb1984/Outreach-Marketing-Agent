@@ -153,7 +153,7 @@ class WhatsAppOutboundStore:
             raise ValueError("idempotency_key_invalid")
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT id,account_id,draft_id,status,queued_at,template_name,language_code
+                """SELECT id,account_id,draft_id,status,queued_at,template_name,language_code,template_parameters
                    FROM whatsapp_outbound_deliveries
                    WHERE workspace_id=$1 AND idempotency_key=$2""",
                 workspace_id, idempotency_key,
@@ -168,6 +168,7 @@ class WhatsAppOutboundStore:
             "queued_at": row["queued_at"].isoformat(),
             "template_name": row["template_name"],
             "language_code": row["language_code"],
+            "template_parameters": row["template_parameters"] if isinstance(row["template_parameters"], dict) else json.loads(row["template_parameters"] or "{}"),
             "replayed": True,
         }
 
