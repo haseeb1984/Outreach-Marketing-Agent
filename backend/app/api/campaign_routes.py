@@ -268,3 +268,29 @@ async def edit_draft(draft_id: UUID, payload: DraftEdit, request: Request):
     if result is None:
         raise HTTPException(status_code=404, detail="draft_not_found")
     return result
+
+
+@router.get("/drafts/{draft_id}/events")
+async def list_draft_events(
+    draft_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=100, ge=1, le=200),
+):
+    """Expose the persisted draft review/edit timeline to workspace viewers."""
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    try:
+        events = await _store(request).list_draft_events(
+            workspace_id=workspace_id, draft_id=draft_id, limit=limit
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="draft_history_unavailable") from None
+    if not events:
+        # Distinguish a missing draft from an existing draft with no events.
+        draft = await _store(request).list_drafts(
+            workspace_id=workspace_id, status="all", limit=1, offset=0
+        ) if False else None
+    return {"items": events, "draft_id": str(draft_id), "limit": limit}
