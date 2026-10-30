@@ -288,9 +288,6 @@ async def list_draft_events(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="draft_history_unavailable") from None
-    if not events:
-        # Distinguish a missing draft from an existing draft with no events.
-        draft = await _store(request).list_drafts(
-            workspace_id=workspace_id, status="all", limit=1, offset=0
-        ) if False else None
+    if events is None:
+        raise HTTPException(status_code=404, detail="draft_not_found")
     return {"items": events, "draft_id": str(draft_id), "limit": limit}
