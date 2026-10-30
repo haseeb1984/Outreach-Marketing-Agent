@@ -2,11 +2,18 @@
 from __future__ import annotations
 from typing import Any
 from uuid import UUID
+from datetime import datetime, timezone
 
 class DeliveryStore:
     def __init__(self,pool: Any)->None: self._pool=pool
 
-    async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str,email_account_id: UUID|None=None)->dict[str,Any]:
+    async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str,email_account_id: UUID|None=None,scheduled_at: datetime|None=None)->dict[str,Any]:
+        if scheduled_at is not None:
+            if scheduled_at.tzinfo is None or scheduled_at.utcoffset() is None:
+                raise ValueError("scheduled_at_must_include_timezone")
+            scheduled_at = scheduled_at.astimezone(timezone.utc)
+            if scheduled_at.timestamp() < datetime.now(timezone.utc).timestamp() - 60:
+                raise ValueError("scheduled_at_must_be_future")
         async with self._pool.acquire() as c:
             async with c.transaction():
                 d=await c.fetchrow("""SELECT d.id,d.status,d.channel,p.contact_email,p.stage,cc.email_suppressed,c.status AS campaign_status
@@ -25,13 +32,14 @@ class DeliveryStore:
                 if email_account_id is not None:
                     account = await c.fetchrow("SELECT status FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2 FOR SHARE", email_account_id, workspace_id)
                     if account is None or account["status"] != "active": raise LookupError("email_account_not_available")
-                r=await c.fetchrow("""INSERT INTO outreach_deliveries(workspace_id,draft_id,channel,idempotency_key,queued_by,email_account_id)
-                  VALUES($1,$2,'email',$3,$4,$5) ON CONFLICT DO NOTHING RETURNING *""",workspace_id,draft_id,idempotency_key,UUID(str(actor_id)),email_account_id)
+                r=await c.fetchrow("""INSERT INTO outreach_deliveries(workspace_id,draft_id,channel,idempotency_key,queued_by,email_account_id,scheduled_at)
+                  VALUES($1,$2,'email',$3,$4,$5,COALESCE($6,now())) ON CONFLICT DO NOTHING RETURNING *""",workspace_id,draft_id,idempotency_key,UUID(str(actor_id)),email_account_id,scheduled_at)
                 if r is None:
                     r=await c.fetchrow("""SELECT * FROM outreach_deliveries WHERE workspace_id=$1
                       AND (idempotency_key=$2 OR draft_id=$3) ORDER BY (idempotency_key=$2) DESC LIMIT 1 FOR UPDATE""",workspace_id,idempotency_key,draft_id)
                     if r is None or r["draft_id"]!=draft_id: raise ValueError("idempotency_key_conflict")
                     if r["email_account_id"] != email_account_id: raise ValueError("email_account_conflict")
+                    if scheduled_at is not None and r["scheduled_at"] != scheduled_at: raise ValueError("delivery_schedule_conflict")
                 return self._serialize(dict(r))
 
     async def list_deliveries(self,*,workspace_id: str,limit: int=50,offset: int=0)->list[dict[str,Any]]:
@@ -43,7 +51,7 @@ class DeliveryStore:
     async def claim(self,*,workspace_id: str,delivery_id: UUID)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
-                r=await c.fetchrow("""SELECT q.id AS delivery_id,q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id, d.prospect_id,
+                r=await c.fetchrow("""SELECT q.id AS delivery_id,q.status AS queue_status,q.scheduled_at,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id, d.prospect_id,
                   p.contact_email,p.stage,p.archived_at,cc.email_suppressed,c.status AS campaign_status,ea.status AS email_account_status
                   FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
@@ -54,6 +62,7 @@ class DeliveryStore:
                   WHERE q.id=$1 AND q.workspace_id=$2 FOR UPDATE OF q,d,c,p""",delivery_id,workspace_id)
                 if r is None: raise LookupError("delivery_not_found")
                 if r["queue_status"]!="queued": raise ValueError("delivery_not_queued")
+                if r["scheduled_at"] > datetime.now(timezone.utc): raise ValueError("delivery_not_due")
                 if r["draft_status"]!="approved": raise ValueError("draft_not_approved")
                 if r["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if r["campaign_status"] == "paused": raise ValueError("campaign_paused")
