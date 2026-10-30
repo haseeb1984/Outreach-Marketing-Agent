@@ -50,6 +50,55 @@ def build_seo_strategy(*, business_type: str, target_market: str, target_queries
     return {"business_context": {"business_type": business_type.strip(), "target_market": target_market.strip()}, "target_queries": list(dict.fromkeys(q.strip() for q in target_queries if q.strip())), "actions": actions, "method": {"name": "transparent_evidence_triage_v1", "score_range": "0-100", "score_meaning": "Internal prioritization heuristic only; not a Google/Bing ranking score or probability.", "ranking_guarantee": False}, "measurement_plan": ["Record baseline rankings and impressions for the target queries where authorized data is available.", "Record baseline organic clicks, conversions, and technical findings with timestamps.", "Implement only approved changes and preserve the evidence URL and change log.", "Re-run the same checks and compare query-level outcomes over a suitable period.", "Report observed results separately from correlation, estimates, and unverified hypotheses."], "limitations": ["Competitor pages reveal public signals, not competitors private analytics or exact search-engine weights.", "Search systems change and ranking outcomes depend on competition, intent, location, site history, and other factors.", "This output prioritizes supplied evidence; it does not crawl sites, change pages, or guarantee a ranking result."]}
 
 
+def merge_competitor_content_gaps(
+    strategy: dict[str, Any],
+    potential_gaps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Add reviewed-evidence competitor coverage signals to the prioritized action list."""
+    result = dict(strategy)
+    actions = list(strategy.get("actions", []))
+    seen = {
+        (str(action.get("title", "")).casefold(), str(action.get("evidence_url", "")))
+        for action in actions if isinstance(action, dict)
+    }
+    for index, gap in enumerate(potential_gaps):
+        if not isinstance(gap, dict) or not gap.get("requires_human_review", True):
+            continue
+        query = str(gap.get("query", "")).strip()
+        evidence_url = str(gap.get("competitor_evidence_url", "")).strip()
+        if not query or not evidence_url:
+            continue
+        title = f"Review content coverage for: {query}"
+        if (title.casefold(), evidence_url) in seen:
+            continue
+        try:
+            score = max(0.0, min(100.0, float(gap.get("priority_score", 0))))
+        except (TypeError, ValueError):
+            score = 0.0
+        actions.append({
+            "id": f"competitor-gap-{index + 1}",
+            "source": "observed_competitor_gap",
+            "category": "competitive_content",
+            "title": title,
+            "evidence_url": evidence_url,
+            "recommended_action": (
+                "Review the cited competitor page and the listed client pages, validate search intent, "
+                "then create or improve a genuinely useful and differentiated page only if the gap is relevant."
+            ),
+            "priority_score": round(score, 1),
+            "priority": _priority_label(score),
+            "confidence": str(gap.get("confidence") or "low") + "_requires_validation",
+            "verification": (
+                "Confirm the topic is not already covered elsewhere on the site, approve the content brief, "
+                "and measure target-query impressions, clicks and conversions after publishing."
+            ),
+        })
+        seen.add((title.casefold(), evidence_url))
+    actions.sort(key=lambda action: (-float(action.get("priority_score", 0)), str(action.get("id", ""))))
+    result["actions"] = actions
+    return result
+
+
 def _bounded_score(value: Any, *, default: int, maximum: int = 5) -> int:
     try:
         score = int(value)
