@@ -121,11 +121,13 @@ class WhatsAppSendPolicy:
                 }
 
             template = await conn.fetchrow(
-                """SELECT provider_template_id FROM whatsapp_message_templates
+                """SELECT id,template_name,language_code,provider_template_id
+                   FROM whatsapp_message_templates
                    WHERE workspace_id=$1 AND account_id=$2
                      AND template_name=$3 AND language_code=$4
                      AND status='approved' AND verified_at IS NOT NULL
-                     AND provider_template_id IS NOT NULL""",
+                     AND provider_template_id IS NOT NULL
+                     AND btrim(provider_template_id) <> ''""",
                 workspace_id,
                 account_id,
                 template_name,
@@ -138,4 +140,10 @@ class WhatsAppSendPolicy:
                 "allowed": True,
                 "reason": "approved_template_outside_customer_service_window",
                 "requires_approved_template": True,
+                # Dispatch must use the exact canonical identity verified above,
+                # never template metadata copied from the mutable queue payload.
+                "template_id": str(template["id"]),
+                "provider_template_id": str(template["provider_template_id"]),
+                "template_name": str(template["template_name"]),
+                "language_code": str(template["language_code"]),
             }
