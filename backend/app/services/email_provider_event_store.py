@@ -132,3 +132,24 @@ class EmailProviderEventStore:
                     workspace_id, prospect_id,
                 )
         return {"unsubscribed": True, "workspace_id": workspace_id, "prospect_id": str(prospect_id)}
+
+    async def list_events(
+        self, *, workspace_id: str, delivery_id: UUID, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 100:
+            raise ValueError("pagination_out_of_range")
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT e.id,e.provider,e.provider_event_id,e.event_type,e.occurred_at,e.received_at
+                   FROM email_provider_events e
+                   JOIN outreach_deliveries q ON q.id=e.delivery_id
+                   WHERE q.id=$1 AND q.workspace_id=$2
+                   ORDER BY e.occurred_at DESC,e.id DESC LIMIT $3""",
+                delivery_id, workspace_id, limit,
+            )
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["id"] = str(item["id"])
+            result.append(item)
+        return result
