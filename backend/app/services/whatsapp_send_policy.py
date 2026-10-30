@@ -13,7 +13,7 @@ from uuid import UUID
 
 
 CUSTOMER_SERVICE_WINDOW_SECONDS = 24 * 60 * 60
-_E164_PHONE = re.compile(r"^\\+[1-9][0-9]{6,14}$")
+_E164_PHONE = re.compile(r"^\+[1-9][0-9]{6,14}$")
 
 
 class WhatsAppSendPolicy:
