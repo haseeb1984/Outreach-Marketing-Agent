@@ -188,7 +188,7 @@ async def create_draft(payload: DraftCreate, request: Request):
 
     reservation_id = reservation["reservation_id"]
     generated_content = None
-    if settings.ai_api_key:
+    if settings.ai_api_key and settings.ai_api_key.strip():
         try:
             context = await store.get_draft_generation_context(
                 workspace_id=payload.workspace_id,
@@ -202,7 +202,7 @@ async def create_draft(payload: DraftCreate, request: Request):
                 )
                 raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
             generated_content = await generate_ai_outreach(
-                api_key=settings.ai_api_key,
+                api_key=settings.ai_api_key.strip(),
                 base_url=settings.ai_base_url,
                 model=settings.ai_model,
                 channel=payload.channel,
