@@ -209,15 +209,16 @@ async def process_pending_whatsapp_events(
                                     workspace_id, account_id, prospect["id"] if prospect else None, wa_id,
                                 )
                                 message_type, body = _text(msg)
+                                media_metadata = _media_metadata(msg, message_type)
                                 provider_timestamp = _timestamp(msg.get("timestamp"))
                                 inbound_at = _effective_inbound_timestamp(provider_timestamp, event_received_at)
                                 inserted = await conn.fetchval(
                                     """INSERT INTO whatsapp_inbound_messages
-                                       (workspace_id,conversation_id,provider_message_id,message_type,text_body,provider_timestamp)
-                                       VALUES($1,$2,$3,$4,$5,$6)
+                                       (workspace_id,conversation_id,provider_message_id,message_type,text_body,provider_timestamp,media_metadata)
+                                       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
                                        ON CONFLICT(provider_message_id) DO NOTHING
                                        RETURNING id""",
-                                    workspace_id, conversation["id"], provider_id, message_type, body, provider_timestamp,
+                                    workspace_id, conversation["id"], provider_id, message_type, body, provider_timestamp, json.dumps(media_metadata),
                                 )
                                 if inserted:
                                     saved_this_event += 1
