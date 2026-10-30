@@ -1,6 +1,7 @@
 """Authenticated, workspace-authorized prospect CRM endpoints."""
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -152,9 +153,12 @@ async def list_prospects(
     if stage is not None and stage not in ALLOWED_STAGES:
         raise HTTPException(status_code=422, detail="invalid_prospect_stage")
     await _authorize(request, workspace_id, "viewer")
-    return {"items": await _store(request).list_prospects(
+    store = _store(request)
+    items = await store.list_prospects(
         workspace_id=workspace_id, stage=stage, limit=limit, offset=offset, search=search,
-    ), "limit": limit, "offset": offset}
+    )
+    total = await store.count_prospects(workspace_id=workspace_id, stage=stage, search=search)
+    return {"items": items, "limit": limit, "offset": offset, "total": total, "has_more": offset + len(items) < total}
 
 
 @router.post("", status_code=201)
