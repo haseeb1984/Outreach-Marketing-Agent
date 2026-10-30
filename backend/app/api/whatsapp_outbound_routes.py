@@ -231,3 +231,38 @@ async def process_queued_whatsapp_deliveries(request: Request, limit: int = Quer
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_dispatch_unavailable") from None
+
+
+@router.delete("/{delivery_id}")
+async def cancel_queued_whatsapp_delivery(
+    delivery_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Cancel a queued WhatsApp delivery and release its unused quota reservation."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, "admin")
+    try:
+        async with _pool(request).acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE whatsapp_outbound_deliveries
+                       SET status='cancelled',error_code='cancelled_by_workspace_admin',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status='queued'
+                       RETURNING usage_reservation_id""",
+                    delivery_id, workspace_id,
+                )
+                if row is None:
+                    raise HTTPException(status_code=404, detail="queued_whatsapp_delivery_not_found")
+                await conn.execute(
+                    """UPDATE feature_usage_reservations
+                       SET status='released',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status='reserved'""",
+                    row["usage_reservation_id"], workspace_id,
+                )
+        return {"delivery_id": str(delivery_id), "status": "cancelled", "quota_released": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_delivery_cancel_unavailable") from None
