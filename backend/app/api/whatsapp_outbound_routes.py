@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hmac
 from uuid import UUID
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,7 +23,7 @@ class QueueWhatsAppDraft(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=200, pattern=r"^[A-Za-z0-9._:-]+$")
     template_name: str | None = Field(default=None, min_length=1, max_length=512)
     language_code: str | None = Field(default=None, min_length=2, max_length=32)
-    template_parameters: dict[str, list[str]] = Field(default_factory=dict)
+    template_parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 def _pool(request: Request):
