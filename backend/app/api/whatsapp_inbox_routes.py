@@ -376,3 +376,35 @@ async def get_whatsapp_inbound_media(
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_media_retrieval_unavailable") from None
+
+
+@router.delete("/messages/{message_id}/media")
+async def delete_whatsapp_inbound_media(
+    message_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Permanently remove an encrypted attachment while retaining the message record."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, "admin")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """UPDATE whatsapp_inbound_messages m
+                   SET media_ciphertext=NULL,media_mime_type=NULL,media_filename=NULL,
+                       media_size=NULL,media_downloaded_at=NULL
+                   FROM whatsapp_conversations c
+                   WHERE m.id=$1 AND m.workspace_id=$2
+                     AND c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                     AND m.media_ciphertext IS NOT NULL
+                   RETURNING m.id""",
+                message_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="stored_whatsapp_media_not_found")
+        return {"message_id": str(row["id"]), "deleted": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_media_delete_unavailable") from None
