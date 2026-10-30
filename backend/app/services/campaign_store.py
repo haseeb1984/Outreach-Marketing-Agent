@@ -389,7 +389,7 @@ class CampaignStore:
                 """SELECT event_type, note, actor_id, created_at
                    FROM outreach_draft_events
                    WHERE draft_id=$1 AND workspace_id=$2
-                   ORDER BY created_at DESC
+                   ORDER BY created_at DESC,id DESC
                    LIMIT $3""",
                 draft_id, workspace_id, limit,
             )
