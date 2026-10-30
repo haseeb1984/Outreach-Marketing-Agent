@@ -503,6 +503,21 @@ export default function DashboardPage() {
   }
 
 
+  async function sendEmailAccountTest(account: EmailAccount) {
+    if (!workspaceId || !csrf || !window.confirm("Send one diagnostic email to " + account.from_email + "? This sends a real email and does not guarantee inbox placement.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ sent_to: string; note: string }>(
+        "/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "/send-test",
+        csrf,
+        { method: "POST", body: JSON.stringify({ workspace_id: workspaceId, confirm_send: true }) },
+      );
+      setNotice("Diagnostic email submitted to " + result.sent_to + ". " + result.note);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Diagnostic email could not be submitted.");
+    } finally { setBusy(false); }
+  }
+
   async function openUnifiedReplyThread(thread: UnifiedReplyThread) {
     if (!workspaceId || !csrf) return;
     setUnifiedReplyBusy(true); setError("");
@@ -1440,7 +1455,7 @@ export default function DashboardPage() {
           <p className="fine">SMTP credentials are encrypted at rest. Only supported TLS submission hosts on port 587 are accepted. Connection tests authenticate only and do not send a message.</p>
           <div className="field"><label htmlFor="selected-email-account">Account used for new queued email</label><select id="selected-email-account" value={selectedEmailAccountId} onChange={e=>setSelectedEmailAccountId(e.target.value)}><option value="">Use server default SMTP configuration</option>{emailAccounts.filter(account=>account.status==="active").map(account=><option value={account.id} key={account.id}>{account.label} · {account.from_email}</option>)}</select></div>
           <div className="cards">{emailAccounts.length ? emailAccounts.map(account=><article className="card" key={account.id}><h3>{account.label}</h3><p>{account.from_email}</p><p className="fine">{account.smtp_host}:{account.smtp_port} · {account.smtp_username} · {account.status}</p>
-            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>beginEmailAccountEdit(account)}>Edit credentials</button><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>testEmailAccount(account)}>Test connection</button>{account.status!=="disabled" && <button className="button secondary" type="button" disabled={busy} onClick={()=>disableEmailAccount(account)}>Disable</button>}</div>}
+            {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>beginEmailAccountEdit(account)}>Edit credentials</button><button className="button secondary" type="button" disabled={busy || account.status==="disabled"} onClick={()=>testEmailAccount(account)}>Test connection</button><button className="button secondary" type="button" disabled={busy || account.status!=="active"} onClick={()=>sendEmailAccountTest(account)}>Send test email</button>{account.status!=="disabled" && <button className="button secondary" type="button" disabled={busy} onClick={()=>disableEmailAccount(account)}>Disable</button>}</div>}
           </article>) : <article className="card"><p>No workspace email accounts are connected. The server default may still be used if configured.</p></article>}</div>
           {editingEmailAccountId && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <article className="card" aria-labelledby="edit-email-account-title"><h3 id="edit-email-account-title">Update SMTP account</h3><p className="fine">A new password is required. Saving rotates the credentials and disables delivery until a fresh connection test succeeds.</p><form onSubmit={saveEmailAccountChanges}>
             <div className="field"><label htmlFor="edit-email-account-label">Account label</label><input id="edit-email-account-label" required maxLength={120} value={emailAccountLabel} onChange={e=>setEmailAccountLabel(e.target.value)} /></div>
