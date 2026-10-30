@@ -95,6 +95,8 @@ async def queue_whatsapp_draft(
             payload.template_name, payload.language_code,
         ):
             raise HTTPException(status_code=409, detail="whatsapp_template_metadata_conflict")
+        if (existing.get("template_parameters") or {}) != payload.template_parameters:
+            raise HTTPException(status_code=409, detail="whatsapp_template_parameters_conflict")
         return {
             **existing,
             "policy_reason": decision["reason"],
