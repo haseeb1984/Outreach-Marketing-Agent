@@ -66,6 +66,7 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       project_website_required: "Add a website URL to this project before running a growth review.",
       campaign_archived: "This campaign is archived, so its drafts cannot be queued or sent.",
       campaign_paused: "This campaign is paused, so new drafts and sends are blocked until it is resumed.",
+      contact_replied: "This prospect has already replied. Further outreach is blocked to prevent unwanted follow-ups.",
       domain_not_verified: "Verify this website domain in the workspace before running a growth review.",
       website_domain_not_authorized: "Verify this website domain in the active workspace before scheduling scans.",
       growth_schedule_limit_reached: "This workspace already has 20 active recurring scans. Pause one before creating or resuming another.",
