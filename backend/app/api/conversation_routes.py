@@ -97,3 +97,29 @@ async def list_messages(prospect_id: UUID,request: Request,workspace_id: str=Que
  store=getattr(request.app.state,"conversation_store",None)
  if store is None: raise HTTPException(status_code=503,detail="conversation_service_not_configured")
  return {"items":await store.list_messages(workspace_id=workspace_id,prospect_id=prospect_id,limit=limit,offset=offset),"limit":limit,"offset":offset}
+
+
+@router.get("/conversations")
+async def list_conversation_threads(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+):
+    """Unified workspace inbox of inbound email and WhatsApp replies."""
+    _, _, session = await _authenticated(request)
+    auth = getattr(request.app.state, "auth_store", None)
+    if auth is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth.authorize_workspace(
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role="viewer"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    store = getattr(request.app.state, "conversation_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="conversation_service_not_configured")
+    return {
+        "items": await store.list_threads(workspace_id=workspace_id, limit=limit, offset=offset),
+        "limit": limit,
+        "offset": offset,
+    }
