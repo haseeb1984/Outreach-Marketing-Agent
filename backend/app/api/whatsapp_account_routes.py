@@ -7,6 +7,7 @@ does not enable outbound sends or return tokens to clients.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
 from uuid import UUID, uuid4
@@ -364,7 +365,7 @@ async def list_whatsapp_templates(
                 raise HTTPException(status_code=404, detail="whatsapp_account_not_found")
             rows = await connection.fetch(
                 """SELECT template_name, language_code, category, status,
-                          provider_status, verified_at, updated_at
+                          provider_status, components, verified_at, updated_at
                    FROM whatsapp_message_templates
                    WHERE workspace_id=$1 AND account_id=$2
                    ORDER BY template_name, language_code
@@ -433,7 +434,7 @@ async def sync_whatsapp_templates(
                     raise HTTPException(status_code=502, detail="meta_template_pagination_url_invalid")
                 response = await client.get(
                     next_url,
-                    params={"fields": "id,name,language,status,category", "limit": "100"} if next_url == endpoint else None,
+                    params={"fields": "id,name,language,status,category,components", "limit": "100"} if next_url == endpoint else None,
                     headers=headers,
                 )
                 if response.status_code != 200:
@@ -488,6 +489,7 @@ async def sync_whatsapp_templates(
                     language = item.get("language")
                     provider_status = item.get("status")
                     category = str(item.get("category") or "").lower()
+                    components = item.get("components") if isinstance(item.get("components"), list) else []
                     mapped_status = status_map.get(str(provider_status or "").upper())
                     if (
                         not isinstance(provider_id, (str, int))
@@ -502,8 +504,8 @@ async def sync_whatsapp_templates(
                     await connection.execute(
                         """INSERT INTO whatsapp_message_templates
                            (workspace_id, account_id, template_name, language_code, category,
-                            provider_template_id, status, provider_status, verified_at, updated_at)
-                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                            provider_template_id, status, provider_status, components, verified_at, updated_at)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,
                                    CASE WHEN $7='approved' THEN now() ELSE NULL END, now())
                            ON CONFLICT (account_id, template_name, language_code)
                            DO UPDATE SET
@@ -512,12 +514,13 @@ async def sync_whatsapp_templates(
                              provider_template_id=EXCLUDED.provider_template_id,
                              status=EXCLUDED.status,
                              provider_status=EXCLUDED.provider_status,
+                             components=EXCLUDED.components,
                              verified_at=CASE WHEN EXCLUDED.status='approved'
                                               THEN now() ELSE NULL END,
                              updated_at=now()""",
                         workspace_id, account_id, name.strip(), language.strip(),
                         category, str(provider_id).strip(), mapped_status,
-                        str(provider_status).upper(),
+                        str(provider_status).upper(), json.dumps(components),
                     )
                     synced += 1
     except Exception:
@@ -529,4 +532,5 @@ async def sync_whatsapp_templates(
         "templates_synced": synced,
         "templates_skipped": skipped,
         "sending_enabled": False,
+        "template_components_persisted": True,
     }
