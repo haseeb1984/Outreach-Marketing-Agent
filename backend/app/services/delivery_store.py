@@ -43,7 +43,7 @@ class DeliveryStore:
     async def claim(self,*,workspace_id: str,delivery_id: UUID)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
-                r=await c.fetchrow("""SELECT q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id,
+                r=await c.fetchrow("""SELECT q.id AS delivery_id,q.status AS queue_status,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id, d.prospect_id,
                   p.contact_email,p.stage,p.archived_at,cc.email_suppressed,c.status AS campaign_status,ea.status AS email_account_status
                   FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
@@ -66,7 +66,15 @@ class DeliveryStore:
                     raise ValueError("email_account_not_available")
                 await c.execute("""UPDATE outreach_deliveries SET status='processing',attempt_count=attempt_count+1,
                   processing_at=now(),updated_at=now() WHERE id=$1 AND workspace_id=$2 AND status='queued'""",delivery_id,workspace_id)
-                return {"recipient":r["contact_email"],"subject":r["subject"] or "A message from a business","body":r["body"],"email_account_id":str(r["email_account_id"]) if r["email_account_id"] else None}
+                return {
+                    "delivery_id": str(delivery_id),
+                    "workspace_id": workspace_id,
+                    "prospect_id": str(r["prospect_id"]),
+                    "recipient": r["contact_email"],
+                    "subject": r["subject"] or "A message from a business",
+                    "body": r["body"],
+                    "email_account_id": str(r["email_account_id"]) if r["email_account_id"] else None,
+                }
 
     async def finish(self,*,workspace_id: str,delivery_id: UUID,error_code: str|None=None)->bool:
         async with self._pool.acquire() as c:
