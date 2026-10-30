@@ -1128,6 +1128,12 @@ export default function DashboardPage() {
     const account = whatsappAccounts.find(item => item.status === "active");
     if (!account) { setError("Verify an active Meta WhatsApp account before queueing this draft."); return; }
     const template = (whatsappTemplates[account.id] || []).find(item => item.status === "approved" && item.verified_at);
+    let templateParameters: Record<string, string[]> = {};
+    if (template?.components?.some(component => (component.text || "").includes("{{"))) {
+      const raw = window.prompt("Enter WhatsApp template variables as JSON, for example {\"body\":[\"First name\",\"Company\"]}");
+      if (raw === null) return;
+      try { templateParameters = JSON.parse(raw); } catch { setError("Template variables must be valid JSON."); return; }
+    }
     if (!window.confirm("Queue this approved WhatsApp draft using " + account.label + "? The dispatcher re-checks consent, opt-out, campaign status, template/window policy and quota before sending.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
@@ -1140,6 +1146,7 @@ export default function DashboardPage() {
           idempotency_key: "wa-" + crypto.randomUUID(),
           template_name: template?.template_name || null,
           language_code: template?.language_code || null,
+          template_parameters: templateParameters,
         }) },
       );
       setNotice("WhatsApp delivery " + result.id.slice(0, 8) + " queued. Dispatch is " + (result.dispatch_enabled ? "enabled by server configuration" : "disabled until the operator explicitly enables it") + ".");
