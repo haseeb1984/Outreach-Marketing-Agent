@@ -33,3 +33,5 @@ Configure an external scheduler to POST to /api/v1/deliveries/process-due?limit=
 Apply 041_campaign_delivery_scheduling.sql before enabling this scheduler. The dispatcher is an external cron entry point, not an in-process background task.
 
 Queued deliveries can also be rescheduled with the workspace-admin PATCH /api/v1/deliveries/{delivery_id}/schedule endpoint or cancelled with DELETE /api/v1/deliveries/{delivery_id}?workspace_id=... . Both operations apply only while status remains queued; a processing or completed delivery cannot be altered.
+
+The repository includes .github/workflows/process-due-deliveries.yml, which invokes the dispatcher every five minutes through GitHub Actions. Configure repository Actions secrets BACKEND_BASE_URL (the HTTPS FastAPI base URL, without a trailing slash) and CRON_SECRET (matching the backend secret). The workflow also supports manual dispatch. GitHub scheduled workflows can be delayed by GitHub; use a dedicated external scheduler if tighter dispatch timing is required.
