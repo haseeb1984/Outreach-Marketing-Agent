@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 from datetime import datetime
 import os
+import hmac
 from fastapi import APIRouter,HTTPException,Query,Request
 from pydantic import BaseModel,ConfigDict,Field
 from app.api.auth_routes import _authenticated,_check_csrf
@@ -70,6 +71,80 @@ async def enqueue_delivery(draft_id: UUID,payload: EnqueueDelivery,request: Requ
  except LookupError as exc: raise HTTPException(status_code=404,detail=str(exc)) from None
  except ValueError as e: raise HTTPException(status_code=409 if str(e) in {"idempotency_key_conflict", "campaign_archived", "campaign_paused", "contact_replied", "delivery_schedule_conflict"} else 422,detail=str(e)) from None
  except Exception: raise HTTPException(status_code=503,detail="delivery_enqueue_unavailable") from None
+@router.post("/deliveries/process-due")
+async def process_due_deliveries(request: Request, limit: int = Query(default=25, ge=1, le=100)):
+    """Cron entry point for approved, due deliveries; protected by a dedicated secret."""
+    expected = os.getenv("CRON_SECRET", "").strip()
+    supplied = request.headers.get("authorization", "")
+    if not expected or not hmac.compare_digest(supplied, "Bearer " + expected):
+        raise HTTPException(status_code=401, detail="scheduler_unauthorized")
+    store = _store(request)
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+    try:
+        due = await store.list_due(limit=limit)
+    except Exception:
+        raise HTTPException(status_code=503, detail="due_delivery_lookup_unavailable") from None
+    results = []
+    for item in due:
+        workspace_id = item["workspace_id"]
+        delivery_id = UUID(item["delivery_id"])
+        reservation = None
+        try:
+            reservation = await subscriptions.reserve_usage(
+                workspace_id=workspace_id, feature="email_sends",
+                idempotency_key=f"delivery-send:{delivery_id}",
+            )
+            if not reservation.get("allowed") or reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+                results.append({"delivery_id": str(delivery_id), "status": "skipped", "reason": reservation.get("reason", "quota_denied")})
+                continue
+            data = await store.claim(workspace_id=workspace_id, delivery_id=delivery_id)
+            if data.get("email_account_id"):
+                pool = getattr(request.app.state, "db_pool", None)
+                if pool is None:
+                    raise EmailDeliveryNotConfigured("email_account_service_not_configured")
+                configuration = await SMTPAccountStore(pool).get_config(
+                    workspace_id=workspace_id, account_id=UUID(data["email_account_id"])
+                )
+                sender = SMTPEmailDelivery(configuration)
+            else:
+                sender = SMTPEmailDelivery()
+            await sender.send_outreach_email(
+                recipient=data["recipient"], subject=data["subject"], body=data["body"],
+                delivery_id=data["delivery_id"], workspace_id=data["workspace_id"],
+                prospect_id=data["prospect_id"],
+            )
+            delivery_saved, quota_saved = await _settle_delivery_attempt(
+                store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
+                reservation_id=reservation["reservation_id"], error_code=None, quota_outcome="consumed",
+            )
+            results.append({"delivery_id": str(delivery_id), "status": "sent" if delivery_saved and quota_saved else "settlement_pending"})
+        except ValueError as exc:
+            if reservation and reservation.get("reservation_id"):
+                await _settle_delivery_attempt(
+                    store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
+                    reservation_id=reservation["reservation_id"], error_code=str(exc)[:100], quota_outcome="released",
+                )
+            results.append({"delivery_id": str(delivery_id), "status": "blocked", "reason": str(exc)[:100]})
+        except EmailDeliveryFailed:
+            if reservation and reservation.get("reservation_id"):
+                await _settle_delivery_attempt(
+                    store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
+                    reservation_id=reservation["reservation_id"], error_code="delivery_outcome_unknown", quota_outcome="consumed",
+                )
+            results.append({"delivery_id": str(delivery_id), "status": "uncertain"})
+        except Exception:
+            # A claimed send may have reached SMTP; never make an ambiguous attempt retryable.
+            if reservation and reservation.get("reservation_id"):
+                await _settle_delivery_attempt(
+                    store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
+                    reservation_id=reservation["reservation_id"], error_code="delivery_outcome_unknown", quota_outcome="consumed",
+                )
+            results.append({"delivery_id": str(delivery_id), "status": "uncertain"})
+    return {"processed": len(results), "items": results}
+
+
 @router.post("/deliveries/reconcile-stale")
 async def reconcile_stale_deliveries(
     request: Request,
