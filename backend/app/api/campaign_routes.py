@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf
+from app.core.config import settings
+from app.services.ai_outreach import AIOutreachUnavailable, generate_ai_outreach
 
 router = APIRouter(prefix="/api/v1", tags=["campaigns"])
 
@@ -178,11 +180,49 @@ async def create_draft(payload: DraftCreate, request: Request):
         raise HTTPException(status_code=409, detail="draft_generation_key_already_used")
 
     reservation_id = reservation["reservation_id"]
+    generated_content = None
+    if settings.ai_api_key:
+        try:
+            context = await store.get_draft_generation_context(
+                workspace_id=payload.workspace_id,
+                campaign_id=payload.campaign_id,
+                prospect_id=payload.prospect_id,
+            )
+            if context is None:
+                await subscriptions.finish_reservation(
+                    workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+                )
+                raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
+            generated_content = await generate_ai_outreach(
+                api_key=settings.ai_api_key,
+                base_url=settings.ai_base_url,
+                model=settings.ai_model,
+                channel=payload.channel,
+                call_to_action=payload.call_to_action,
+                context=context,
+            )
+        except AIOutreachUnavailable as exc:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+            raise HTTPException(status_code=503, detail=str(exc)) from None
+        except ValueError as exc:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        except HTTPException:
+            raise
+        except Exception:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+            raise HTTPException(status_code=503, detail="ai_draft_generation_unavailable") from None
     try:
         draft = await store.create_draft(
             workspace_id=payload.workspace_id, campaign_id=payload.campaign_id,
             prospect_id=payload.prospect_id, actor_id=session["user_id"], channel=payload.channel,
-            call_to_action=payload.call_to_action,
+            call_to_action=payload.call_to_action, generated_content=generated_content,
         )
     except ValueError as exc:
         await subscriptions.finish_reservation(
