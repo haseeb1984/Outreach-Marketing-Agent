@@ -181,7 +181,7 @@ class SMTPEmailDelivery:
             signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
             token = encoded + "." + signature
             unsubscribe_url = urlunsplit((
-                "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/email/unsubscribe",
+                "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/webhooks/email/unsubscribe",
                 urlencode({"token": token}), "",
             ))
             message["List-Unsubscribe"] = "<" + unsubscribe_url + ">"
