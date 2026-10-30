@@ -213,6 +213,95 @@ class CampaignStore:
                 )
         return self._serialize(dict(row))
 
+    async def get_draft_regeneration_context(self, *, workspace_id: str, draft_id: UUID) -> dict[str, Any] | None:
+        """Return generation context only for an editable pending draft."""
+        async with self._pool.acquire() as conn:
+            target = await conn.fetchrow(
+                """SELECT campaign_id,prospect_id,channel,status FROM outreach_drafts
+                   WHERE id=$1 AND workspace_id=$2""",
+                draft_id, workspace_id,
+            )
+        if target is None:
+            return None
+        if target["status"] != "pending_approval":
+            raise ValueError("draft_not_pending")
+        context = await self.get_draft_generation_context(
+            workspace_id=workspace_id, campaign_id=target["campaign_id"],
+            prospect_id=target["prospect_id"], channel=target["channel"],
+        )
+        if context is None:
+            return None
+        context["_campaign_id"] = str(target["campaign_id"])
+        context["_prospect_id"] = str(target["prospect_id"])
+        context["_channel"] = target["channel"]
+        return context
+
+    async def regenerate_pending_draft(
+        self, *, workspace_id: str, draft_id: UUID, actor_id: UUID | str,
+        call_to_action: str, generated_content: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Replace a pending draft atomically and append a regeneration event."""
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                current = await conn.fetchrow(
+                    """SELECT d.channel,d.status,d.campaign_id,d.prospect_id,
+                              c.client_business,c.client_offer,p.name,p.evidence_url,
+                              p.fit_reason,p.verified_facts,ctrl.whatsapp_opt_in_at
+                       FROM outreach_drafts d
+                       JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                       JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
+                       LEFT JOIN outreach_contact_controls ctrl
+                         ON ctrl.workspace_id=d.workspace_id AND ctrl.prospect_id=d.prospect_id
+                       WHERE d.id=$1 AND d.workspace_id=$2 AND p.archived_at IS NULL
+                       FOR UPDATE OF d,c,p""",
+                    draft_id, workspace_id,
+                )
+                if current is None:
+                    return None
+                if current["status"] != "pending_approval":
+                    raise ValueError("draft_not_pending")
+                facts = self._json_list(current["verified_facts"])
+                if generated_content is None:
+                    content = draft_outreach(
+                        channel=current["channel"],
+                        client_business=current["client_business"],
+                        client_offer=current["client_offer"],
+                        prospect_name=current["name"],
+                        prospect_evidence_url=current["evidence_url"],
+                        verified_relevance=current["fit_reason"],
+                        verified_facts=facts,
+                        call_to_action=call_to_action,
+                        whatsapp_opt_in_confirmed=(current["channel"] != "whatsapp" or bool(current["whatsapp_opt_in_at"])),
+                    )
+                else:
+                    content = generated_content
+                subject = content.get("subject")
+                body = content.get("body")
+                if not isinstance(body, str) or not body.strip() or len(body) > 10000:
+                    raise ValueError("ai_draft_content_invalid")
+                if current["channel"] == "email" and (not isinstance(subject, str) or not subject.strip() or len(subject) > 300):
+                    raise ValueError("ai_draft_content_invalid")
+                if current["channel"] == "whatsapp":
+                    subject = None
+                updated = await conn.fetchrow(
+                    """UPDATE outreach_drafts
+                       SET subject=$3,body=$4,source_evidence_url=$5,
+                           verified_facts_used=$6::jsonb,updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND status='pending_approval'
+                       RETURNING *""",
+                    draft_id, workspace_id, subject.strip() if isinstance(subject, str) else None,
+                    body.strip(), current["evidence_url"], json.dumps(facts[:2]),
+                )
+                if updated is None:
+                    raise ValueError("draft_not_pending")
+                await conn.execute(
+                    """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type,note)
+                       VALUES($1,$2,$3,'regenerated',$4)""",
+                    draft_id, workspace_id, UUID(str(actor_id)),
+                    "Draft regenerated; previous content replaced before approval",
+                )
+        return self._serialize(dict(updated))
+
     async def list_drafts(self, *, workspace_id: str, status: str = "pending_approval",
                           limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         self._validate_page(limit, offset)
