@@ -245,8 +245,11 @@ class CampaignStore:
             async with conn.transaction():
                 current = await conn.fetchrow(
                     """SELECT d.channel,d.status,d.campaign_id,d.prospect_id,
-                              c.client_business,c.client_offer,p.name,p.evidence_url,
-                              p.fit_reason,p.verified_facts,ctrl.whatsapp_opt_in_at
+                              c.status AS campaign_status,c.client_business,c.client_offer,
+                              p.name,p.evidence_url,p.fit_reason,p.verified_facts,p.stage,
+                              p.contact_email,p.contact_phone_e164,
+                              ctrl.email_suppressed,ctrl.whatsapp_opt_in_at,
+                              ctrl.whatsapp_opt_in_evidence_url,ctrl.whatsapp_account_id
                        FROM outreach_drafts d
                        JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
                        JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
@@ -260,6 +263,39 @@ class CampaignStore:
                     return None
                 if current["status"] != "pending_approval":
                     raise ValueError("draft_not_pending")
+                if current["campaign_status"] in {"paused", "archived"}:
+                    raise ValueError("campaign_paused")
+                if current["stage"] == "do_not_contact":
+                    raise ValueError("contact_suppressed")
+                if current["stage"] == "replied":
+                    raise ValueError("contact_replied")
+                if current["channel"] == "email":
+                    if not current["contact_email"]:
+                        raise ValueError("prospect_email_required")
+                    if current["email_suppressed"]:
+                        raise ValueError("contact_suppressed")
+                if current["channel"] == "whatsapp":
+                    if not current["contact_phone_e164"]:
+                        raise ValueError("prospect_whatsapp_phone_required")
+                    if not current["whatsapp_opt_in_at"] or not current["whatsapp_opt_in_evidence_url"]:
+                        raise ValueError("WhatsApp documented opt-in evidence is required")
+                    account_id = current["whatsapp_account_id"]
+                    active_account = await conn.fetchval(
+                        """SELECT EXISTS(SELECT 1 FROM workspace_whatsapp_accounts
+                           WHERE id=$1 AND workspace_id=$2 AND status='active')""",
+                        account_id, workspace_id,
+                    ) if account_id else False
+                    if not active_account:
+                        raise ValueError("WhatsApp consent account is not active")
+                    phone_digits = "".join(ch for ch in str(current["contact_phone_e164"]) if ch.isdigit())
+                    opted_out = await conn.fetchval(
+                        """SELECT EXISTS(SELECT 1 FROM whatsapp_contact_preferences
+                           WHERE workspace_id=$1 AND wa_id=$2 AND opted_out_at IS NOT NULL
+                             AND (opted_in_at IS NULL OR opted_out_at >= opted_in_at))""",
+                        workspace_id, phone_digits,
+                    )
+                    if opted_out:
+                        raise ValueError("WhatsApp contact has opted out")
                 facts = self._json_list(current["verified_facts"])
                 if generated_content is None:
                     content = draft_outreach(
