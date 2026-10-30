@@ -1,12 +1,14 @@
 """Approval- and quota-gated WhatsApp queue. No endpoint here dispatches messages."""
 from __future__ import annotations
 
+import hmac
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.auth_routes import _authenticated, _check_csrf
+from app.core.config import settings
 from app.services.whatsapp_outbound_store import WhatsAppOutboundStore
 from app.services.whatsapp_send_policy import WhatsAppSendPolicy
 
@@ -203,3 +205,29 @@ async def list_whatsapp_outbound_queue(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_queue_list_unavailable") from None
+
+
+
+@router.post("/process-queued")
+async def process_queued_whatsapp_deliveries(request: Request, limit: int = Query(default=10, ge=1, le=50)) -> dict:
+    """Trusted scheduler entry point; requires explicit feature enablement and a strong bearer secret."""
+    configured = (settings.cron_secret or "").strip()
+    if len(configured.encode("utf-8")) < 32:
+        raise HTTPException(status_code=503, detail="whatsapp_dispatch_secret_not_configured")
+    supplied = request.headers.get("authorization", "")
+    scheme, _, token = supplied.partition(" ")
+    if scheme.lower() != "bearer" or not token or not hmac.compare_digest(configured, token):
+        raise HTTPException(status_code=401, detail="invalid_scheduler_authorization")
+    if not settings.whatsapp_dispatch_enabled:
+        raise HTTPException(status_code=503, detail="whatsapp_dispatch_not_enabled")
+    pool = _pool(request)
+    try:
+        from app.services.whatsapp_dispatcher import process_whatsapp_outbound
+        result = await process_whatsapp_outbound(pool, limit=limit)
+        return {"accepted": True, **result}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_dispatch_unavailable") from None
