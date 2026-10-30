@@ -22,7 +22,7 @@ type AuthSession = { id: string; created_at: string; last_seen_at: string; expir
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
-type WhatsAppConversation = { id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
+type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; provider_timestamp?: string | null; received_at: string };
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
@@ -536,6 +536,25 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
     } finally { setUnifiedReplyBusy(false); }
+  }
+
+  async function downloadWhatsAppMedia(message: WhatsAppMessage) {
+    if (!workspaceId || !csrf || !selectedWhatsAppConversation) return;
+    const conversation = whatsappConversations.find(item => item.id === selectedWhatsAppConversation);
+    if (!conversation) return;
+    setWhatsappInboxBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ size: number; filename?: string; already_downloaded?: boolean }>(
+        "/api/v1/integrations/whatsapp/inbox/messages/" + encodeURIComponent(message.id) +
+        "/media/download?workspace_id=" + encodeURIComponent(workspaceId) +
+        "&account_id=" + encodeURIComponent(conversation.account_id),
+        csrf,
+        { method: "POST" },
+      );
+      setNotice("WhatsApp attachment stored securely (" + (result.size || 0) + " bytes). Use the download link in the message.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "WhatsApp attachment could not be downloaded.");
+    } finally { setWhatsappInboxBusy(false); }
   }
 
   async function openWhatsAppConversation(conversation: WhatsAppConversation) {
@@ -1798,6 +1817,10 @@ export default function DashboardPage() {
                   {whatsappMessages.map(message => <li key={message.id} style={{marginBottom:"0.75rem"}}>
                     <p>{message.text_body || ("[" + message.message_type + " message]")}</p>
                     {message.media_metadata && Object.keys(message.media_metadata).length > 0 && <pre className="fine" style={{whiteSpace:"pre-wrap"}}>{JSON.stringify(message.media_metadata, null, 2)}</pre>}
+                    {message.media_metadata && typeof message.media_metadata.id === "string" && ["image","video","audio","document","sticker"].includes(message.message_type) && <div>
+                      <button className="button secondary" type="button" disabled={whatsappInboxBusy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => downloadWhatsAppMedia(message)}>Secure attachment download</button>
+                      {" "}<a href={"/api/v1/integrations/whatsapp/inbox/messages/" + encodeURIComponent(message.id) + "/media?workspace_id=" + encodeURIComponent(workspaceId)} target="_blank" rel="noreferrer">Open stored attachment</a>
+                    </div>}
                     <p className="fine">{message.provider_timestamp ? new Date(message.provider_timestamp).toLocaleString() : new Date(message.received_at).toLocaleString()}</p>
                   </li>)}
                 </ol> : <p className="fine">No messages in this conversation.</p>) : <p className="fine">Select a conversation to view its inbound messages.</p>}
