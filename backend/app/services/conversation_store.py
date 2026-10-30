@@ -35,8 +35,15 @@ class ConversationStore:
         async with self._pool.acquire() as c:
             rows=await c.fetch("""SELECT id,workspace_id,prospect_id,provider,provider_event_id,
                 provider_message_id,in_reply_to_provider_message_id,channel,direction,body,occurred_at,received_at
-                FROM outreach_conversation_messages WHERE workspace_id=$1 AND prospect_id=$2
-                ORDER BY occurred_at DESC,id DESC LIMIT $3 OFFSET $4""",workspace_id,prospect_id,limit,offset)
+                FROM (
+                    SELECT id,workspace_id,prospect_id,provider,provider_event_id,
+                           provider_message_id,in_reply_to_provider_message_id,channel,direction,
+                           body,occurred_at,received_at
+                    FROM outreach_conversation_messages
+                    WHERE workspace_id=$1 AND prospect_id=$2
+                    ORDER BY occurred_at DESC,id DESC LIMIT $3 OFFSET $4
+                ) recent
+                ORDER BY occurred_at ASC,id ASC""",workspace_id,prospect_id,limit,offset)
         result=[]
         for row in rows:
             item=dict(row); item["id"]=str(item["id"]); item["prospect_id"]=str(item["prospect_id"]); result.append(item)
