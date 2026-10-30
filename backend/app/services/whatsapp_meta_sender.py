@@ -70,18 +70,30 @@ def build_text_payload(*, recipient: str, body: str) -> dict[str, Any]:
 
 def build_template_payload(
     *, recipient: str, template_name: str, language_code: str,
+    parameters: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     normalized = _normalize_recipient(recipient)
     if not isinstance(template_name, str) or not template_name.strip() or len(template_name) > 512:
         raise ValueError("whatsapp_template_name_invalid")
     if not isinstance(language_code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{2,32}", language_code):
         raise ValueError("whatsapp_template_language_invalid")
-    return {
-        "messaging_product": "whatsapp",
-        "to": normalized,
-        "type": "template",
-        "template": {"name": template_name, "language": {"code": language_code}},
-    }
+    components = []
+    for component_type, values in (parameters or {}).items():
+        if component_type not in {"body", "header"} or not isinstance(values, list):
+            raise ValueError("whatsapp_template_component_invalid")
+        if not values or len(values) > 20 or any(
+            not isinstance(value, str) or not value.strip() or len(value) > 1024
+            for value in values
+        ):
+            raise ValueError("whatsapp_template_parameter_invalid")
+        components.append({
+            "type": component_type,
+            "parameters": [{"type": "text", "text": value} for value in values],
+        })
+    template = {"name": template_name, "language": {"code": language_code}}
+    if components:
+        template["components"] = components
+    return {"messaging_product": "whatsapp", "to": normalized, "type": "template", "template": template}
 
 
 class MetaWhatsAppSender:
@@ -94,6 +106,7 @@ class MetaWhatsAppSender:
         self, *, version: str, phone_number_id: str, access_token: str,
         recipient: str, body: str | None = None, template_name: str | None = None,
         language_code: str | None = None,
+        template_parameters: dict[str, list[str]] | None = None,
     ) -> dict[str, str]:
         normalized = _validate_common(version, phone_number_id, access_token, recipient)
         if (body is None) == (template_name is None):
@@ -105,6 +118,7 @@ class MetaWhatsAppSender:
                 raise ValueError("whatsapp_template_language_required")
             payload = build_template_payload(
                 recipient=normalized, template_name=template_name or "", language_code=language_code,
+                parameters=template_parameters,
             )
 
         url = f"https://graph.facebook.com/{version}/{phone_number_id}/messages"
