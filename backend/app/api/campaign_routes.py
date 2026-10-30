@@ -187,6 +187,7 @@ async def create_draft(payload: DraftCreate, request: Request):
                 workspace_id=payload.workspace_id,
                 campaign_id=payload.campaign_id,
                 prospect_id=payload.prospect_id,
+                channel=payload.channel,
             )
             if context is None:
                 await subscriptions.finish_reservation(
