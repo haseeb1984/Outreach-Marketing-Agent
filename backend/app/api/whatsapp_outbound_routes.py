@@ -22,6 +22,7 @@ class QueueWhatsAppDraft(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=200, pattern=r"^[A-Za-z0-9._:-]+$")
     template_name: str | None = Field(default=None, min_length=1, max_length=512)
     language_code: str | None = Field(default=None, min_length=2, max_length=32)
+    template_parameters: dict[str, list[str]] = Field(default_factory=dict)
 
 
 def _pool(request: Request):
@@ -66,6 +67,7 @@ async def queue_whatsapp_draft(
             draft_id=draft_id,
             template_name=payload.template_name,
             language_code=payload.language_code,
+            template_parameters=payload.template_parameters,
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="workspace_draft_not_found") from None
@@ -128,6 +130,7 @@ async def queue_whatsapp_draft(
             usage_reservation_id=reservation["reservation_id"],
             template_name=payload.template_name,
             language_code=payload.language_code,
+            template_parameters=payload.template_parameters,
         )
         if result.get("replayed") and (
             result.get("usage_reservation_id") != reservation.get("reservation_id")
