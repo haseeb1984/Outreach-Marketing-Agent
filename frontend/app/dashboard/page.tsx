@@ -1901,6 +1901,11 @@ export default function DashboardPage() {
                     <button className="button secondary" type="button" disabled={whatsappInboxBusy || !whatsappNoteDraft.trim()} onClick={addWhatsAppInternalNote}>Add internal note</button>
                   </div>;
                 })()}
+                <h4>Activity history</h4>
+                {whatsappActivity.length ? <ol>{whatsappActivity.map(event => <li key={event.id} style={{marginBottom:"0.4rem"}}>
+                  <span>{event.event_type.replace(/_/g," ")}</span>
+                  <div className="fine">{members.find(member=>member.user_id===event.actor_user_id)?.email || "Workspace teammate"} · {new Date(event.created_at).toLocaleString()}</div>
+                </li>)}</ol> : <p className="fine">No activity recorded yet.</p>}
                 <h4>Messages</h4>
                 {selectedWhatsAppConversation ? (whatsappMessages.length ? <ol>
                   {whatsappMessages.map(message => <li key={message.id} style={{marginBottom:"0.75rem"}}>
