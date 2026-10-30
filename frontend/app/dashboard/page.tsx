@@ -885,6 +885,25 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
+
+  async function importProspectsCsv(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || !workspaceId || !csrf) return;
+    if (file.size > 1_000_000) { setError("CSV must be 1 MB or smaller."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const csvText = await file.text();
+      const result = await api<{ created: number; duplicates: number; invalid_count: number; invalid: Array<{row:number;reason:string}> }>("/api/v1/prospects/import.csv?workspace_id="+encodeURIComponent(workspaceId), csrf, {
+        method: "POST", headers: { "Content-Type": "text/csv" }, body: csvText,
+      });
+      setNotice("CSV import finished: "+result.created+" added, "+result.duplicates+" duplicate evidence rows skipped, "+result.invalid_count+" invalid rows skipped.");
+      if (result.invalid.length) setError("Invalid CSV rows: "+result.invalid.map(item=>item.row).join(", "));
+      await loadCrmPage(0);
+    } catch (err) { setError(err instanceof Error ? err.message : "CSV import could not be completed."); }
+    finally { setBusy(false); }
+  }
+
   async function loadCrmPage(nextOffset: number) {
     if (!workspaceId || !csrf) return;
     setBusy(true); setError("");
@@ -1558,7 +1577,7 @@ export default function DashboardPage() {
           <article className="card"><form onSubmit={searchCrmProspects}>
             <div className="field"><label htmlFor="crm-search">Search contacts</label><input id="crm-search" value={prospectSearch} onChange={event=>setProspectSearch(event.target.value)} placeholder="Name, company, email, phone, role or website" maxLength={120}/></div>
             <div className="field"><label htmlFor="crm-stage-filter">Filter by stage</label><select id="crm-stage-filter" value={prospectStageFilter} onChange={event=>setProspectStageFilter(event.target.value)}><option value="all">All stages</option>{["new","qualified","approved","contacted","replied","converted","disqualified","do_not_contact"].map(stage=><option key={stage} value={stage}>{stage.replaceAll("_"," ")}</option>)}</select></div>
-            <div className="actions"><button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Search CRM</button><button className="button secondary" type="button" disabled={busy} onClick={()=>{setProspectSearch("");setProspectStageFilter("all");void loadCrmPage(0);}}>Clear filters</button><a className="button secondary" href={"/api/v1/prospects/export.csv?workspace_id="+encodeURIComponent(workspaceId)+(prospectStageFilter!=="all"?"&stage="+encodeURIComponent(prospectStageFilter):"")+(prospectSearch.trim()?"&search="+encodeURIComponent(prospectSearch.trim()):"")}>Export filtered CSV</a></div>
+            <div className="actions"><button className="button" type="submit" disabled={busy || !workspaceId || !csrf}>Search CRM</button><button className="button secondary" type="button" disabled={busy} onClick={()=>{setProspectSearch("");setProspectStageFilter("all");void loadCrmPage(0);}}>Clear filters</button><a className="button secondary" href={"/api/v1/prospects/export.csv?workspace_id="+encodeURIComponent(workspaceId)+(prospectStageFilter!=="all"?"&stage="+encodeURIComponent(prospectStageFilter):"")+(prospectSearch.trim()?"&search="+encodeURIComponent(prospectSearch.trim()):"")}>Export filtered CSV</a><label className="button secondary" htmlFor="crm-csv-import">Import CSV</label><input id="crm-csv-import" type="file" accept=".csv,text/csv" onChange={importProspectsCsv} disabled={busy || !canWrite} style={{display:"none"}} /></div>
           </form><p className="fine">Showing {prospects.length ? crmOffset + 1 : 0}–{crmOffset + prospects.length} of {crmTotal} matching active prospects. Pages contain up to 50 records.</p></article>
           <div className="actions" aria-label="CRM pagination"><button className="button secondary" type="button" disabled={busy || crmOffset===0} onClick={()=>void loadCrmPage(Math.max(0,crmOffset-crmPageSize))}>Previous</button><span className="fine">Page {Math.floor(crmOffset/crmPageSize)+1} of {Math.max(1,Math.ceil(crmTotal/crmPageSize))}</span><button className="button secondary" type="button" disabled={busy || crmOffset+prospects.length>=crmTotal} onClick={()=>void loadCrmPage(crmOffset+crmPageSize)}>Next</button></div>
           <div className="cards">{prospects.length ? prospects.map(p=><article className="card" key={p.id}><h3>{p.name}</h3><p>{p.role ? p.role + " · " : ""}{p.company}</p><p>{p.fit_reason}</p><p className="fine">Stage: {p.stage || "new"}{p.contact_email ? " · " + p.contact_email : ""}</p><div className="field"><label htmlFor={"prospect-stage-"+p.id}>CRM stage</label><select id={"prospect-stage-"+p.id} value={p.stage || "new"} disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onChange={event=>updateProspectStage(p,event.target.value)}><option value="new">New</option><option value="qualified">Qualified</option><option value="approved">Approved</option><option value="contacted">Contacted</option><option value="replied">Replied</option><option value="converted">Converted</option><option value="disqualified">Disqualified</option><option value="do_not_contact">Do not contact</option></select></div>{p.contact_email && <p className="fine">Email outreach: {p.email_suppressed ? "Suppressed" : "Not suppressed"}</p>}{p.contact_phone_e164 && <p className="fine">WhatsApp consent: {p.whatsapp_opt_in_documented ? (p.whatsapp_opt_in_account_id ? ("Evidence recorded for " + (whatsappAccounts.find(account=>account.id===p.whatsapp_opt_in_account_id)?.label || "a previously configured account")) : "Evidence recorded, but account scope is missing — reconfirm before use") : "Not documented"}</p>}<p><a href={p.evidence_url} target="_blank" rel="noreferrer">Open evidence source</a></p><details><summary>Edit contact and evidence details</summary><form onSubmit={event=>saveProspectDetails(event,p)}>
