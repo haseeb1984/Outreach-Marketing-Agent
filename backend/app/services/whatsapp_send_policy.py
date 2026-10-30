@@ -30,7 +30,7 @@ class WhatsAppSendPolicy:
         draft_id: UUID,
         template_name: str | None = None,
         language_code: str | None = None,
-        template_parameters: dict[str, list[str]] | None = None,
+        template_parameters: dict[str, Any] | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Return an eligibility decision; missing or ambiguous state fails closed."""
@@ -145,14 +145,31 @@ class WhatsAppSendPolicy:
                 except (TypeError, ValueError):
                     return {"allowed": False, "reason": "approved_template_schema_invalid"}
             expected: dict[str, int] = {}
+            expected_buttons: dict[int, int] = {}
             if not isinstance(raw_components, list):
                 return {"allowed": False, "reason": "approved_template_schema_invalid"}
             for component in raw_components:
                 if not isinstance(component, dict):
-                    continue
+                    return {"allowed": False, "reason": "approved_template_schema_invalid"}
                 kind = str(component.get("type") or "").lower()
                 if kind == "buttons":
-                    return {"allowed": False, "reason": "whatsapp_template_button_parameters_not_supported"}
+                    buttons = component.get("buttons")
+                    if not isinstance(buttons, list) or len(buttons) > 10:
+                        return {"allowed": False, "reason": "approved_template_schema_invalid"}
+                    for index, button in enumerate(buttons):
+                        if not isinstance(button, dict):
+                            return {"allowed": False, "reason": "approved_template_schema_invalid"}
+                        button_type = str(button.get("type") or "").upper()
+                        url_value = button.get("url")
+                        if button_type == "URL" and isinstance(url_value, str):
+                            matches = re.findall(r"{{([1-9][0-9]?)}}", url_value)
+                            if matches:
+                                if len(matches) != 1 or int(matches[0]) != 1:
+                                    return {"allowed": False, "reason": "whatsapp_template_button_schema_unsupported"}
+                                expected_buttons[index] = 1
+                        elif button_type not in {"QUICK_REPLY", "PHONE_NUMBER", "COPY_CODE"}:
+                            return {"allowed": False, "reason": "whatsapp_template_button_type_unsupported"}
+                    continue
                 if kind not in {"body", "header"}:
                     continue
                 if kind == "header" and str(component.get("format") or "").upper() != "TEXT":
@@ -162,7 +179,7 @@ class WhatsAppSendPolicy:
                     indexes = [int(value) for value in re.findall(r"{{([1-9][0-9]?)}}", text_value)]
                     expected[kind] = max(indexes, default=0)
             supplied = template_parameters or {}
-            if not isinstance(supplied, dict) or set(supplied) - {"body", "header"}:
+            if not isinstance(supplied, dict) or set(supplied) - {"body", "header", "buttons"}:
                 return {"allowed": False, "reason": "whatsapp_template_parameters_invalid"}
             for kind in ("body", "header"):
                 values = supplied.get(kind, [])
@@ -170,6 +187,22 @@ class WhatsAppSendPolicy:
                     return {"allowed": False, "reason": "whatsapp_template_parameter_count_mismatch"}
                 if any(not isinstance(value, str) or not value.strip() or len(value) > 1024 for value in values):
                     return {"allowed": False, "reason": "whatsapp_template_parameter_invalid"}
+            supplied_buttons = supplied.get("buttons", [])
+            if not isinstance(supplied_buttons, list) or len(supplied_buttons) != len(expected_buttons):
+                return {"allowed": False, "reason": "whatsapp_template_button_parameter_count_mismatch"}
+            seen_button_indexes: set[int] = set()
+            for button in supplied_buttons:
+                if not isinstance(button, dict) or set(button) != {"index", "sub_type", "value"}:
+                    return {"allowed": False, "reason": "whatsapp_template_button_parameters_invalid"}
+                index, value = button.get("index"), button.get("value")
+                if (isinstance(index, bool) or not isinstance(index, int)
+                    or index not in expected_buttons or index in seen_button_indexes
+                    or button.get("sub_type") != "url" or expected_buttons[index] != 1
+                    or not isinstance(value, str) or not value.strip() or len(value) > 2000):
+                    return {"allowed": False, "reason": "whatsapp_template_button_parameters_invalid"}
+                seen_button_indexes.add(index)
+            if seen_button_indexes != set(expected_buttons):
+                return {"allowed": False, "reason": "whatsapp_template_button_parameter_count_mismatch"}
             return {
                 "allowed": True,
                 "reason": "approved_template_outside_customer_service_window",
