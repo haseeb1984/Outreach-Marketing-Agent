@@ -1106,6 +1106,30 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
+  async function cancelDelivery(delivery: Delivery) {
+    if (!workspaceId || !csrf || !window.confirm("Cancel this queued email? A cancelled delivery will not be sent.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/deliveries/" + encodeURIComponent(delivery.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setNotice("Queued email cancelled.");
+      await refresh(workspaceId, csrf);
+    } catch (err) { setError(err instanceof Error ? err.message : "Delivery could not be cancelled."); }
+    finally { setBusy(false); }
+  }
+
+  async function rescheduleDelivery(delivery: Delivery) {
+    if (!workspaceId || !csrf || !deliveryScheduleLocal) { setError("Choose a future date and time above first."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/deliveries/" + encodeURIComponent(delivery.id) + "/schedule", csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, scheduled_at: new Date(deliveryScheduleLocal).toISOString() }),
+      });
+      setNotice("Queued email rescheduled.");
+      await refresh(workspaceId, csrf);
+    } catch (err) { setError(err instanceof Error ? err.message : "Delivery could not be rescheduled."); }
+    finally { setBusy(false); }
+  }
+
   async function sendDelivery(delivery: Delivery) {
     if (!workspaceId || !csrf || !window.confirm("Send this queued email to the saved recipient now? This contacts a real person and cannot be undone.")) return;
     setBusy(true); setError(""); setNotice("");
@@ -1760,7 +1784,7 @@ export default function DashboardPage() {
             </article>
           </div>
         </section>
-        <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && deliveries.some(delivery=>delivery.status==="processing") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={reconcileStaleDeliveries}>Reconcile sends stuck for 15+ minutes</button><p className="fine">This only marks stale sends as uncertain. It never automatically retries messages.</p></div>}<div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.scheduled_at && <p className="fine">Scheduled: {new Date(delivery.scheduled_at).toLocaleString()}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.provider_status && <p className="fine">Email provider: {delivery.provider_status}{delivery.provider_status_at ? " · " + delivery.provider_status_at : ""}</p>}{delivery.status === "queued" && delivery.channel === "email" && new Date(delivery.scheduled_at || 0).getTime() <= Date.now() && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
+        <section className="section"><h2>Delivery activity</h2><p className="fine">A queued email is not sent until a workspace admin explicitly confirms. Unknown outcomes are not automatically retried.</p>{["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && deliveries.some(delivery=>delivery.status==="processing") && <div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={reconcileStaleDeliveries}>Reconcile sends stuck for 15+ minutes</button><p className="fine">This only marks stale sends as uncertain. It never automatically retries messages.</p></div>}<div className="cards">{deliveries.length ? deliveries.map(delivery=><article className="card" key={delivery.id}><p className="eyebrow">{delivery.channel || "email"} · {delivery.status}</p><h3>{delivery.subject || "Email delivery"}</h3>{delivery.created_at && <p className="fine">Queued: {delivery.created_at}</p>}{delivery.scheduled_at && <p className="fine">Scheduled: {new Date(delivery.scheduled_at).toLocaleString()}</p>}{delivery.error_code && <p className="fine">Status detail: {delivery.error_code}</p>}{delivery.provider_status && <p className="fine">Email provider: {delivery.provider_status}{delivery.provider_status_at ? " · " + delivery.provider_status_at : ""}</p>}{delivery.status === "queued" && delivery.channel === "email" && <div className="actions">{new Date(delivery.scheduled_at || 0).getTime() <= Date.now() && <button className="button" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => sendDelivery(delivery)}>Send now</button>}<button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") || !deliveryScheduleLocal} onClick={() => rescheduleDelivery(delivery)}>Reschedule</button><button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={() => cancelDelivery(delivery)}>Cancel</button></div>}</article>) : <article className="card"><p>No delivery records yet. Approved email drafts can be queued above.</p></article>}</div></section>
         <section className="section" aria-labelledby="sessions-title">
           <h2 id="sessions-title">Signed-in devices and sessions</h2>
           <article className="card">
