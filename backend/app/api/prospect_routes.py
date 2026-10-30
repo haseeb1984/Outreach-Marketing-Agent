@@ -91,6 +91,26 @@ class ProspectUpdate(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=200)
     stage: str | None = None
     notes: str | None = Field(default=None, max_length=5000)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    company: str | None = Field(default=None, min_length=1, max_length=240)
+    role: str | None = Field(default=None, max_length=160)
+    contact_email: str | None = Field(default=None, max_length=320)
+    contact_phone_e164: str | None = Field(default=None, min_length=9, max_length=16, pattern=r"^\\+[1-9][0-9]{7,14}$")
+    website_url: str | None = Field(default=None, min_length=8, max_length=2048)
+    evidence_url: str | None = Field(default=None, min_length=8, max_length=2048)
+    fit_reason: str | None = Field(default=None, min_length=1, max_length=2000)
+
+    @field_validator("website_url", "evidence_url")
+    @classmethod
+    def validate_update_urls(cls, value: str | None) -> str | None:
+        return _https_url(value) if value is not None else None
+
+    @field_validator("name", "company", "fit_reason")
+    @classmethod
+    def validate_update_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("must_not_be_blank")
+        return value.strip() if value is not None else None
 
     @field_validator("stage")
     @classmethod
@@ -107,12 +127,13 @@ async def list_prospects(
     stage: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100000),
+    search: str | None = Query(default=None, max_length=120),
 ):
     if stage is not None and stage not in ALLOWED_STAGES:
         raise HTTPException(status_code=422, detail="invalid_prospect_stage")
     await _authorize(request, workspace_id, "viewer")
     return {"items": await _store(request).list_prospects(
-        workspace_id=workspace_id, stage=stage, limit=limit, offset=offset,
+        workspace_id=workspace_id, stage=stage, limit=limit, offset=offset, search=search,
     ), "limit": limit, "offset": offset}
 
 
@@ -146,7 +167,10 @@ async def update_prospect(prospect_id: UUID, payload: ProspectUpdate, request: R
     try:
         result = await _store(request).update_prospect(
             workspace_id=payload.workspace_id, prospect_id=prospect_id,
-            stage=payload.stage, notes=payload.notes,
+            stage=payload.stage, notes=payload.notes, name=payload.name,
+            company=payload.company, role=payload.role, contact_email=payload.contact_email,
+            contact_phone_e164=payload.contact_phone_e164, website_url=payload.website_url,
+            evidence_url=payload.evidence_url, fit_reason=payload.fit_reason,
         )
     except ValueError:
         raise HTTPException(status_code=422, detail="no_prospect_updates_supplied") from None
