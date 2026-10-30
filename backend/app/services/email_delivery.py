@@ -170,17 +170,18 @@ class SMTPEmailDelivery:
             secret = (settings.outreach_webhook_secret or "").strip()
             base = (self._settings.public_base_url or "").strip()
             parts = urlsplit(base)
-            if len(secret.encode("utf-8")) >= 32 and parts.scheme.lower() == "https" and parts.hostname:
-                payload = (workspace_id + "\\n" + prospect_id + "\\n" + recipient.strip().casefold()).encode("utf-8")
-                encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
-                signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
-                token = encoded + "." + signature
-                unsubscribe_url = urlunsplit((
-                    "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/email/unsubscribe",
-                    urlencode({"token": token}), "",
-                ))
-                message["List-Unsubscribe"] = "<" + unsubscribe_url + ">"
-                message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+            if len(secret.encode("utf-8")) < 32 or parts.scheme.lower() != "https" or not parts.hostname:
+                raise EmailDeliveryNotConfigured("email_unsubscribe_endpoint_not_configured")
+            payload = (workspace_id + "\\n" + prospect_id + "\\n" + recipient.strip().casefold()).encode("utf-8")
+            encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+            signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+            token = encoded + "." + signature
+            unsubscribe_url = urlunsplit((
+                "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/email/unsubscribe",
+                urlencode({"token": token}), "",
+            ))
+            message["List-Unsubscribe"] = "<" + unsubscribe_url + ">"
+            message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
         message.set_content(body)
         try:
             await asyncio.to_thread(self._send_message, message)
