@@ -21,7 +21,7 @@ type WorkspaceMember = { user_id: string; email: string; role: string; status: s
 type AuthSession = { id: string; created_at: string; last_seen_at: string; expires_at: string; user_agent?: string | null; is_current: boolean };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
-type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
+type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string; buttons?: Array<{ type?: string; url?: string }> }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
 type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; provider_timestamp?: string | null; received_at: string };
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
@@ -1147,9 +1147,9 @@ export default function DashboardPage() {
     const account = whatsappAccounts.find(item => item.status === "active");
     if (!account) { setError("Verify an active Meta WhatsApp account before queueing this draft."); return; }
     const template = (whatsappTemplates[account.id] || []).find(item => item.status === "approved" && item.verified_at);
-    let templateParameters: Record<string, string[]> = {};
-    if (template?.components?.some(component => (component.text || "").includes("{{"))) {
-      const raw = window.prompt("Enter WhatsApp template variables as JSON, for example {\"body\":[\"First name\",\"Company\"]}");
+    let templateParameters: Record<string, unknown> = {};
+    if (template?.components?.some(component => (component.text || "").includes("{{") || component.buttons?.some(button => (button.url || "").includes("{{")))) {
+      const raw = window.prompt("Enter WhatsApp template variables as JSON, for example {\"body\":[\"First name\",\"Company\"],\"buttons\":[{\"index\":0,\"sub_type\":\"url\",\"value\":\"tracking-path\"}]}");
       if (raw === null) return;
       try { templateParameters = JSON.parse(raw); } catch { setError("Template variables must be valid JSON."); return; }
     }
