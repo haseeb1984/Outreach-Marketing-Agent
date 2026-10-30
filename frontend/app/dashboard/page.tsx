@@ -155,7 +155,7 @@ export default function DashboardPage() {
   const [draftEvents, setDraftEvents] = useState<Record<string, DraftEvent[]>>({});
   const [draftHistoryOpen, setDraftHistoryOpen] = useState<Record<string, boolean>>({});
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
-  const [integrationStatus, setIntegrationStatus] = useState<{ email?: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp?: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string } } | null>(null);
+  const [integrationStatus, setIntegrationStatus] = useState<{ email?: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp?: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string }; ai_outreach?: { configured: boolean; model?: string | null; generation_mode: string; human_approval_required: boolean; automatic_send: boolean } } | null>(null);
   const [integrationBusy, setIntegrationBusy] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
@@ -1248,7 +1248,7 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf) return;
     setIntegrationBusy(true);
     try {
-      const result = await api<{ email: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string } }>(
+      const result = await api<{ email: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string }; ai_outreach?: { configured: boolean; model?: string | null; generation_mode: string; human_approval_required: boolean; automatic_send: boolean } }>(
         "/api/v1/integrations/status?workspace_id=" + encodeURIComponent(workspaceId), csrf
       );
       setIntegrationStatus(result);
@@ -1624,7 +1624,7 @@ export default function DashboardPage() {
             </div>
             {integrationStatus ? <div className="cards">
               <div className="metric"><strong>{integrationStatus.email?.configuration_complete ? "Configured" : "Incomplete"}</strong><span>Email / SMTP</span><p className="fine">{integrationStatus.email?.configuration_complete ? "Required settings are present; use the test button to verify TLS/authentication." : "Missing: " + (integrationStatus.email?.missing_fields || []).join(", ")}</p></div>
-              <div className="metric"><strong>{integrationStatus.whatsapp?.live_send_enabled ? "Enabled" : "Disabled"}</strong><span>Official WhatsApp Business</span><p className="fine">{integrationStatus.whatsapp?.reason || "Live sending remains disabled until official Meta onboarding and webhook verification are implemented."}</p></div>
+              <div className="metric"><strong>{integrationStatus.whatsapp?.live_send_enabled ? "Enabled" : "Disabled"}</strong><span>Official WhatsApp Business</span><p className="fine">{integrationStatus.whatsapp?.reason || "Live sending remains disabled until official Meta onboarding and webhook verification are implemented."}</p></div>\n              <div className="metric"><strong>{integrationStatus.ai_outreach?.configured ? "AI provider configured" : "Template fallback"}</strong><span>AI outreach generation</span><p className="fine">{integrationStatus.ai_outreach?.configured ? "Personalized copy uses the configured " + (integrationStatus.ai_outreach.model || "AI model") + " provider, then enters mandatory human review." : "Configure AI_API_KEY to enable provider-generated copy. Evidence-grounded templates remain available; every draft still requires human approval."}</p></div>
             </div> : <p className="fine">Provider status has not been loaded for this workspace.</p>}
             <h3>Official Meta WhatsApp accounts</h3>
             <p className="fine">Add an access token from Meta Business settings and the matching WhatsApp Business Account and phone-number IDs. Tokens are encrypted at rest and never shown again. New accounts stay pending verification; this does not enable sending.</p>
