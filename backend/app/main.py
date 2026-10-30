@@ -256,6 +256,7 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_email_accounts') IS NOT NULL
                      AND to_regclass('public.email_provider_events') IS NOT NULL
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_deliveries' AND column_name='provider_status')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_deliveries' AND column_name='scheduled_at')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_contact_controls' AND column_name='email_suppression_reason')
                      AND to_regclass('public.website_audit_reports') IS NOT NULL
                      AND to_regclass('public.domain_verification_challenges') IS NOT NULL
