@@ -246,6 +246,13 @@ async def import_prospects_csv(request: Request, workspace_id: str = Query(min_l
                 "fit_reason": row.get("fit_reason", ""),
                 "verified_facts": [],
             })
+            duplicate = await store.find_duplicate(
+                workspace_id=workspace_id, contact_email=payload.contact_email,
+                evidence_url=payload.evidence_url,
+            )
+            if duplicate:
+                duplicates += 1
+                continue
             await store.create_prospect(
                 workspace_id=workspace_id, created_by=session["user_id"],
                 name=payload.name, company=payload.company, role=payload.role,
