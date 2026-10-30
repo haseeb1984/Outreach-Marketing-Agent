@@ -7,11 +7,13 @@ sender is integrated, reviewed, and verified against Meta sandbox/live requireme
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from typing import Any
 from uuid import UUID
 
 
 CUSTOMER_SERVICE_WINDOW_SECONDS = 24 * 60 * 60
+_E164_PHONE = re.compile(r"^\\+[1-9][0-9]{6,14}$")
 
 
 class WhatsAppSendPolicy:
@@ -62,9 +64,10 @@ class WhatsAppSendPolicy:
             if prospect["stage"] == "do_not_contact":
                 return {"allowed": False, "reason": "contact_suppressed"}
 
-            phone = "".join(ch for ch in str(prospect["contact_phone_e164"] or "") if ch.isdigit())
-            if not phone:
-                return {"allowed": False, "reason": "prospect_whatsapp_phone_required"}
+            raw_phone = prospect["contact_phone_e164"]
+            if not isinstance(raw_phone, str) or not _E164_PHONE.fullmatch(raw_phone):
+                return {"allowed": False, "reason": "prospect_whatsapp_phone_invalid"}
+            phone = raw_phone[1:]
             if prospect["whatsapp_opt_in_at"] is None or not prospect["whatsapp_opt_in_evidence_url"]:
                 return {"allowed": False, "reason": "documented_whatsapp_opt_in_required"}
             if str(prospect["whatsapp_account_id"] or "") != str(account_id):

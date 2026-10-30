@@ -183,3 +183,32 @@ def test_opt_in_for_different_whatsapp_account_fails_closed():
     result, conn = run_policy([{"id": account_id, "has_credentials": True}, prospect], account_id=account_id)
     assert result == {"allowed": False, "reason": "whatsapp_opt_in_for_account_required"}
     assert len(conn.queries) == 2
+
+
+
+def test_malformed_non_e164_phone_fails_closed_before_preference_lookup():
+    prospect = {
+        "id": uuid4(),
+        "contact_phone_e164": "+1abc4155550123",
+        "stage": "new",
+        "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": uuid4(),
+    }
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect])
+    assert result == {"allowed": False, "reason": "prospect_whatsapp_phone_invalid"}
+    assert len(conn.queries) == 2
+
+
+def test_phone_without_international_plus_prefix_fails_closed():
+    prospect = {
+        "id": uuid4(),
+        "contact_phone_e164": "14155550123",
+        "stage": "new",
+        "whatsapp_opt_in_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+        "whatsapp_opt_in_evidence_url": "https://example.test/consent",
+        "whatsapp_account_id": uuid4(),
+    }
+    result, conn = run_policy([{"id": uuid4(), "has_credentials": True}, prospect])
+    assert result == {"allowed": False, "reason": "prospect_whatsapp_phone_invalid"}
+    assert len(conn.queries) == 2
