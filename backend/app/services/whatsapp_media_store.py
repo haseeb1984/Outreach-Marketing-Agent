@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import os
 from typing import Any
 from uuid import UUID
@@ -139,6 +141,12 @@ async def download_meta_media(*, pool: Any, workspace_id: str, account_id: UUID,
                     raise WhatsAppMediaError("whatsapp_media_too_large")
     if not content:
         raise WhatsAppMediaError("whatsapp_media_empty")
+    expected_hash = metadata.get("sha256") if isinstance(metadata, dict) else None
+    if isinstance(expected_hash, str) and expected_hash:
+        if len(expected_hash) != 64 or not hmac.compare_digest(
+            hashlib.sha256(content).hexdigest().lower(), expected_hash.lower()
+        ):
+            raise WhatsAppMediaError("whatsapp_media_checksum_mismatch")
     encrypted = encrypt_media(bytes(content), workspace_id, account_id, message_id)
     filename = metadata.get("filename") if isinstance(metadata, dict) else None
     if not isinstance(filename, str) or not filename.strip():
