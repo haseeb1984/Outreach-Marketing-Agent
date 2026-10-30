@@ -97,7 +97,7 @@ async def queue_whatsapp_draft(
             **existing,
             "policy_reason": decision["reason"],
             "requires_approved_template": decision["requires_approved_template"],
-            "dispatch_enabled": False,
+            "dispatch_enabled": settings.whatsapp_dispatch_enabled,
             "notice": "Existing queue record returned. No WhatsApp message was sent; outbound dispatch remains disabled.",
         }
 
