@@ -286,7 +286,7 @@ async def sync_whatsapp_templates(
     _check_csrf(request, session)
     await _authorize(request, workspace_id, "admin", session)
     version = (settings.meta_graph_api_version or "").strip()
-    if not re.fullmatch(r"v[0-9]{2,3}\\.0", version):
+    if not re.fullmatch(r"v[0-9]{2,3}\.0", version):
         raise HTTPException(status_code=503, detail="meta_graph_api_version_not_configured")
 
     try:
@@ -367,6 +367,14 @@ async def sync_whatsapp_templates(
     try:
         async with _pool(request).acquire() as connection:
             async with connection.transaction():
+                # Revoke stale approvals first; only templates present in this complete
+                # Meta snapshot are re-approved below.
+                await connection.execute(
+                    """UPDATE whatsapp_message_templates
+                       SET status='pending', verified_at=NULL, updated_at=now()
+                       WHERE workspace_id=$1 AND account_id=$2""",
+                    workspace_id, account_id,
+                )
                 for item in templates:
                     provider_id = item.get("id")
                     name = item.get("name")
