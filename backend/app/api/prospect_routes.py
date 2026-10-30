@@ -63,7 +63,7 @@ class ProspectCreate(BaseModel):
         if value is None:
             return None
         cleaned = value.strip().lower()
-        if cleaned and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", cleaned):
+        if cleaned and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", cleaned):
             raise ValueError("invalid_contact_email")
         return cleaned or None
 
@@ -109,6 +109,16 @@ class ProspectUpdate(BaseModel):
     website_url: str | None = Field(default=None, min_length=8, max_length=2048)
     evidence_url: str | None = Field(default=None, min_length=8, max_length=2048)
     fit_reason: str | None = Field(default=None, min_length=1, max_length=2000)
+
+    @field_validator("contact_email")
+    @classmethod
+    def validate_update_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if cleaned and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", cleaned):
+            raise ValueError("invalid_contact_email")
+        return cleaned or None
 
     @field_validator("website_url", "evidence_url")
     @classmethod
