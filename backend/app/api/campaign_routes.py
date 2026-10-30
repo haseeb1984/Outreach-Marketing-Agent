@@ -342,7 +342,6 @@ async def regenerate_draft(draft_id: UUID, payload: DraftRegenerate, request: Re
     if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
         raise HTTPException(status_code=409, detail="draft_regeneration_key_already_used")
     reservation_id = reservation["reservation_id"]
-    generated_content = None
     try:
         context = await store.get_draft_regeneration_context(
             workspace_id=payload.workspace_id, draft_id=draft_id
@@ -352,17 +351,13 @@ async def regenerate_draft(draft_id: UUID, payload: DraftRegenerate, request: Re
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
             )
             raise HTTPException(status_code=404, detail="draft_not_found")
+        generated_content = None
         if settings.ai_api_key:
             generated_content = await generate_ai_outreach(
                 api_key=settings.ai_api_key, base_url=settings.ai_base_url,
                 model=settings.ai_model, channel=context["_channel"],
                 call_to_action=payload.call_to_action, context=context,
             )
-        updated = await store.regenerate_pending_draft(
-            workspace_id=payload.workspace_id, draft_id=draft_id,
-            actor_id=session["user_id"], call_to_action=payload.call_to_action,
-            generated_content=generated_content,
-        )
     except HTTPException:
         raise
     except ValueError as exc:
@@ -380,6 +375,27 @@ async def regenerate_draft(draft_id: UUID, payload: DraftRegenerate, request: Re
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
         )
         raise HTTPException(status_code=503, detail="draft_regeneration_unavailable") from None
+
+    try:
+        updated = await store.regenerate_pending_draft(
+            workspace_id=payload.workspace_id, draft_id=draft_id,
+            actor_id=session["user_id"], call_to_action=payload.call_to_action,
+            generated_content=generated_content,
+        )
+    except ValueError as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=409 if str(exc) == "draft_not_pending" else 422, detail=str(exc)) from None
+    except Exception:
+        # The database commit may have succeeded before the connection failed.
+        # Consume quota to prevent a free retry from duplicating an ambiguous regeneration.
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        finally:
+            raise HTTPException(status_code=503, detail="draft_regeneration_outcome_unknown") from None
     if updated is None:
         await subscriptions.finish_reservation(
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
