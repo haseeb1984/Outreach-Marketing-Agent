@@ -1,6 +1,9 @@
 """TLS-only SMTP verification email adapter."""
 from __future__ import annotations
 import asyncio
+import base64
+import hashlib
+import hmac
 import smtplib
 from email.message import EmailMessage
 from typing import Any
@@ -143,7 +146,11 @@ class SMTPEmailDelivery:
             client.ehlo()
             client.login(self._settings.smtp_username, self._settings.smtp_password)
 
-    async def send_outreach_email(self, *, recipient: str, subject: str, body: str) -> None:
+    async def send_outreach_email(
+        self, *, recipient: str, subject: str, body: str,
+        delivery_id: str | None = None, workspace_id: str | None = None,
+        prospect_id: str | None = None,
+    ) -> None:
         """Send an explicitly approved outreach email over TLS-only SMTP."""
         self._validate_configuration()
         if not isinstance(recipient, str) or len(recipient) > 320 or "@" not in recipient:
@@ -156,6 +163,24 @@ class SMTPEmailDelivery:
         message["Subject"] = subject.strip()
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
         message["To"] = recipient
+        if delivery_id is not None:
+            message["X-OMA-Delivery-ID"] = delivery_id
+            if not workspace_id or not prospect_id:
+                raise ValueError("delivery_context_required")
+            secret = (settings.outreach_webhook_secret or "").strip()
+            base = (self._settings.public_base_url or "").strip()
+            parts = urlsplit(base)
+            if len(secret.encode("utf-8")) >= 32 and parts.scheme.lower() == "https" and parts.hostname:
+                payload = (workspace_id + "\\n" + prospect_id + "\\n" + recipient.strip().casefold()).encode("utf-8")
+                encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+                signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+                token = encoded + "." + signature
+                unsubscribe_url = urlunsplit((
+                    "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/email/unsubscribe",
+                    urlencode({"token": token}), "",
+                ))
+                message["List-Unsubscribe"] = "<" + unsubscribe_url + ">"
+                message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
         message.set_content(body)
         try:
             await asyncio.to_thread(self._send_message, message)
