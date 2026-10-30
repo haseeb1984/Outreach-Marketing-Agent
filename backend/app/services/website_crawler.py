@@ -119,6 +119,9 @@ async def crawl_website(
             "status_code": fetched.status_code,
             "title": report["observations"]["title"],
             "internal_links_count": len(report["observations"]["internal_links"]),
+            # Keep only compact content signals needed for downstream evidence comparison.
+            "meta_descriptions": report["observations"]["meta_descriptions"],
+            "headings": report["observations"]["headings"],
             "findings": report["findings"],
         }
         pages.append(page_entry)
