@@ -74,6 +74,13 @@ class DraftCreate(BaseModel):
         return value
 
 
+class DraftRegenerate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    call_to_action: str = Field(min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=180, pattern=r"^[A-Za-z0-9._:-]+$")
+
+
 class DraftReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
@@ -309,6 +316,84 @@ async def edit_draft(draft_id: UUID, payload: DraftEdit, request: Request):
     if result is None:
         raise HTTPException(status_code=404, detail="draft_not_found")
     return result
+
+
+@router.post("/drafts/{draft_id}/regenerate")
+async def regenerate_draft(draft_id: UUID, payload: DraftRegenerate, request: Request):
+    """Regenerate a pending draft while retaining approval and usage safeguards."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    store = _store(request)
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+    try:
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="ai_draft_generations",
+            idempotency_key=f"draft-regeneration:{payload.idempotency_key}",
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
+    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="draft_regeneration_key_already_used")
+    reservation_id = reservation["reservation_id"]
+    generated_content = None
+    try:
+        context = await store.get_draft_regeneration_context(
+            workspace_id=payload.workspace_id, draft_id=draft_id
+        )
+        if context is None:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
+            raise HTTPException(status_code=404, detail="draft_not_found")
+        if settings.ai_api_key:
+            generated_content = await generate_ai_outreach(
+                api_key=settings.ai_api_key, base_url=settings.ai_base_url,
+                model=settings.ai_model, channel=context["_channel"],
+                call_to_action=payload.call_to_action, context=context,
+            )
+        updated = await store.regenerate_pending_draft(
+            workspace_id=payload.workspace_id, draft_id=draft_id,
+            actor_id=session["user_id"], call_to_action=payload.call_to_action,
+            generated_content=generated_content,
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=409 if str(exc) == "draft_not_pending" else 422, detail=str(exc)) from None
+    except AIOutreachUnavailable as exc:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except Exception:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=503, detail="draft_regeneration_unavailable") from None
+    if updated is None:
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+        )
+        raise HTTPException(status_code=404, detail="draft_not_found")
+    try:
+        finished = await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="draft_quota_persistence_failed") from None
+    if not finished:
+        raise HTTPException(status_code=503, detail="draft_quota_persistence_failed")
+    return updated
 
 
 @router.get("/drafts/{draft_id}/events")
