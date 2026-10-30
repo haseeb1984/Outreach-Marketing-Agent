@@ -176,7 +176,7 @@ class SMTPEmailDelivery:
             parts = urlsplit(base)
             if len(secret.encode("utf-8")) < 32 or parts.scheme.lower() != "https" or not parts.hostname:
                 raise EmailDeliveryNotConfigured("email_unsubscribe_endpoint_not_configured")
-            payload = (workspace_id + "\\n" + prospect_id + "\\n" + recipient.strip().casefold()).encode("utf-8")
+            payload = (workspace_id + "\n" + prospect_id + "\n" + recipient.strip().casefold()).encode("utf-8")
             encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
             signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
             token = encoded + "." + signature
