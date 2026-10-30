@@ -1,11 +1,14 @@
 """Authenticated, workspace-authorized prospect CRM endpoints."""
 from __future__ import annotations
 
+import csv
+import io
 import re
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf
@@ -159,6 +162,47 @@ async def list_prospects(
     )
     total = await store.count_prospects(workspace_id=workspace_id, stage=stage, search=search)
     return {"items": items, "limit": limit, "offset": offset, "total": total, "has_more": offset + len(items) < total}
+
+
+@router.get("/export.csv")
+async def export_prospects_csv(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    stage: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
+):
+    """Export the caller's authorized workspace CRM records as a spreadsheet-safe CSV."""
+    if stage is not None and stage not in ALLOWED_STAGES:
+        raise HTTPException(status_code=422, detail="invalid_prospect_stage")
+    await _authorize(request, workspace_id, "viewer")
+    store = _store(request)
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    columns = ("id", "name", "company", "role", "contact_email", "contact_phone_e164", "website_url", "evidence_url", "fit_reason", "stage", "notes", "created_at", "updated_at")
+    writer.writerow(columns)
+    offset = 0
+    while True:
+        rows = await store.list_prospects(workspace_id=workspace_id, stage=stage, limit=100, offset=offset, search=search)
+        if not rows:
+            break
+        for row in rows:
+            values = []
+            for column in columns:
+                value = row.get(column)
+                cell = "" if value is None else str(value)
+                # Prevent spreadsheet formula execution when a CSV is opened in Excel/Sheets.
+                if cell.lstrip().startswith(("=", "+", "-", "@")):
+                    cell = "'" + cell
+                values.append(cell)
+            writer.writerow(values)
+        offset += len(rows)
+        if len(rows) < 100:
+            break
+    payload = output.getvalue().encode("utf-8-sig")
+    return StreamingResponse(
+        iter([payload]), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="outreach-prospects.csv"', "Cache-Control": "no-store"},
+    )
 
 
 @router.post("", status_code=201)
