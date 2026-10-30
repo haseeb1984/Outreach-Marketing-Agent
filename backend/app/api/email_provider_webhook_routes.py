@@ -12,7 +12,6 @@ import hmac
 import json
 from datetime import datetime, timezone
 from uuid import UUID
-from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
