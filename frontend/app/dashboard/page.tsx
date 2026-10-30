@@ -24,6 +24,7 @@ type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_i
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string; buttons?: Array<{ type?: string; url?: string }> }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
 type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; assigned_to_user_id?: string | null; inbox_status?: "open" | "pending" | "resolved"; priority?: "low" | "normal" | "high" | "urgent"; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppInternalNote = { id: string; author_user_id: string; body: string; created_at: string };
+type WhatsAppActivity = { id: string; actor_user_id: string; event_type: string; details?: Record<string, unknown>; created_at: string };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; media_mime_type?: string | null; media_filename?: string | null; media_size?: number | null; media_downloaded_at?: string | null; provider_timestamp?: string | null; received_at: string };
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
@@ -104,6 +105,7 @@ export default function DashboardPage() {
   const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   const [whatsappNotes, setWhatsappNotes] = useState<WhatsAppInternalNote[]>([]);
+  const [whatsappActivity, setWhatsappActivity] = useState<WhatsAppActivity[]>([]);
   const [whatsappNoteDraft, setWhatsappNoteDraft] = useState("");
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
