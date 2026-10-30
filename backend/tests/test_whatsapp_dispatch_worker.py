@@ -267,3 +267,59 @@ def test_pre_provider_failure_releases_usage_when_queue_persistence_raises(monke
         "workspace_id": "workspace-a", "reservation_id": delivery["usage_reservation_id"],
         "outcome": "released",
     }]
+
+
+
+def test_dispatch_uses_policy_verified_template_identity_not_queue_metadata(monkeypatch):
+    approved = {
+        "allowed": True,
+        "requires_approved_template": True,
+        "template_id": "verified-row-id",
+        "provider_template_id": "meta-template-987",
+        "template_name": "canonical_approved_notice",
+        "language_code": "en_US",
+    }
+    pool, queue, subscriptions, delivery = _dispatch_fakes(
+        monkeypatch, policy_result=approved,
+    )
+    delivery["template_name"] = "tampered_queue_template"
+    delivery["language_code"] = "xx"
+
+    class Sender:
+        def __init__(self):
+            self.kwargs = None
+        async def send(self, **kwargs):
+            self.kwargs = kwargs
+            return {"provider_message_id": "wamid.template-verified"}
+
+    sender = Sender()
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery, sender=sender,
+    ))
+    assert result == "sent"
+    assert sender.kwargs["template_name"] == "canonical_approved_notice"
+    assert sender.kwargs["language_code"] == "en_US"
+
+
+def test_dispatch_fails_closed_when_approved_template_identity_is_incomplete(monkeypatch):
+    pool, queue, subscriptions, delivery = _dispatch_fakes(
+        monkeypatch,
+        policy_result={
+            "allowed": True,
+            "requires_approved_template": True,
+            "template_name": "unverified",
+            "language_code": "en",
+        },
+    )
+
+    class ForbiddenSender:
+        async def send(self, **kwargs):
+            raise AssertionError("incomplete template identity must never reach Meta")
+
+    result = asyncio.run(worker.process_claimed_delivery(
+        pool=pool, queue=queue, subscriptions=subscriptions, delivery=delivery,
+        sender=ForbiddenSender(),
+    ))
+    assert result == "preflight_failed"
+    assert queue.finished[0]["outcome"] == "failed"
+    assert subscriptions.finished[0]["outcome"] == "released"
