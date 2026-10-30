@@ -102,6 +102,29 @@ class ProspectStore:
             )
         return result.endswith(" 1")
 
+
+    async def find_duplicate(
+        self, *, workspace_id: str, contact_email: str | None = None, evidence_url: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Find high-confidence workspace duplicates without conflating multiple contacts at one company."""
+        email = contact_email.strip().lower() if contact_email and contact_email.strip() else None
+        evidence = evidence_url.strip().rstrip("/") if evidence_url and evidence_url.strip() else None
+        if not email and not evidence:
+            return None
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT id, name, company, contact_email, evidence_url
+                   FROM crm_prospects
+                   WHERE workspace_id=$1 AND archived_at IS NULL
+                     AND (($2::text IS NOT NULL AND lower(contact_email)=$2)
+                       OR ($3::text IS NOT NULL AND rtrim(evidence_url, '/')=$3))
+                   ORDER BY CASE WHEN $2::text IS NOT NULL AND lower(contact_email)=$2 THEN 0 ELSE 1 END,
+                            updated_at DESC
+                   LIMIT 1""",
+                workspace_id, email, evidence,
+            )
+        return self._serialize(dict(row)) if row else None
+
     async def count_prospects(
         self, *, workspace_id: str, stage: str | None = None, search: str | None = None,
     ) -> int:
