@@ -48,6 +48,19 @@ class DeliveryStore:
             rows=await c.fetch("SELECT * FROM outreach_deliveries WHERE workspace_id=$1 ORDER BY queued_at DESC,id LIMIT $2 OFFSET $3",workspace_id,limit,offset)
         return [self._serialize(dict(r)) for r in rows]
 
+    async def list_due(self, *, limit: int = 25) -> list[dict[str, str]]:
+        """Return a bounded cross-workspace due list; claim() performs the atomic state transition."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("due_delivery_limit_out_of_range")
+        async with self._pool.acquire() as c:
+            rows = await c.fetch(
+                """SELECT id, workspace_id FROM outreach_deliveries
+                   WHERE status='queued' AND scheduled_at <= now()
+                   ORDER BY scheduled_at, queued_at, id LIMIT $1""",
+                limit,
+            )
+        return [{"delivery_id": str(row["id"]), "workspace_id": row["workspace_id"]} for row in rows]
+
     async def claim(self,*,workspace_id: str,delivery_id: UUID)->dict[str,Any]:
         async with self._pool.acquire() as c:
             async with c.transaction():
