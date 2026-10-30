@@ -8,7 +8,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.core.config import settings
-from app.services.whatsapp_credential_store import WhatsAppCredentialStore
+from app.services.whatsapp_credential_store import WhatsAppCredentialStore, WhatsAppCredentialUnavailable
 from app.services.whatsapp_meta_sender import MetaSendRejected, MetaSendUncertain, MetaWhatsAppSender
 from app.services.whatsapp_outbound_store import WhatsAppOutboundStore
 from app.services.whatsapp_send_policy import WhatsAppSendPolicy
@@ -86,10 +86,14 @@ async def process_whatsapp_outbound(pool, *, limit: int = 10) -> dict[str, int]:
             outcome, error_code = "failed", "meta_provider_rejected_request"
         except MetaSendUncertain:
             outcome, error_code = "uncertain", "meta_provider_outcome_uncertain"
+        except WhatsAppCredentialUnavailable:
+            outcome, error_code = "failed", "whatsapp_credentials_unavailable"
+        except ValueError:
+            outcome, error_code = "failed", "whatsapp_dispatch_payload_invalid"
         except Exception:
-            # Once a worker has entered the provider call path, an unexpected error
-            # cannot safely be interpreted as a definite non-send.
-            outcome, error_code = "uncertain", "whatsapp_dispatch_outcome_uncertain"
+            # The adapter itself converts ambiguous network outcomes to uncertain;
+            # other exceptions here are preflight failures before provider dispatch.
+            outcome, error_code = "failed", "whatsapp_dispatch_preflight_failed"
 
         try:
             finished = await store.finish_claim(
