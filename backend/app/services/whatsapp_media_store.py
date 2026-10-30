@@ -20,7 +20,9 @@ _ALLOWED_MEDIA_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "text/plain",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/plain", "text/csv",
 }
 _ALLOWED_MEDIA_HOSTS = {"lookaside.fbsbx.com", "lookaside.facebook.com"}
 
@@ -129,7 +131,7 @@ async def download_meta_media(*, pool: Any, workspace_id: str, account_id: UUID,
                 except ValueError:
                     raise WhatsAppMediaError("meta_media_length_invalid") from None
             response_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
-            if response_type and response_type != mime:
+            if response_type and response_type not in {mime, "application/octet-stream"}:
                 raise WhatsAppMediaError("meta_media_content_type_mismatch")
             async for chunk in response.aiter_bytes():
                 content.extend(chunk)
