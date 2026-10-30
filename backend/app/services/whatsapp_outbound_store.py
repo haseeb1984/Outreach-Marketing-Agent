@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import json
 from uuid import UUID
 
 
@@ -13,6 +14,7 @@ class WhatsAppOutboundStore:
         self, *, workspace_id: str, account_id: UUID, draft_id: UUID,
         actor_id: UUID | str, idempotency_key: str, usage_reservation_id: UUID | str,
         template_name: str | None = None, language_code: str | None = None,
+        template_parameters: dict[str, list[str]] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
             raise ValueError("workspace_id_invalid")
@@ -23,6 +25,13 @@ class WhatsAppOutboundStore:
             actor_uuid = UUID(str(actor_id))
         except (ValueError, TypeError, AttributeError):
             raise ValueError("whatsapp_identity_uuid_invalid") from None
+        if template_parameters is None:
+            template_parameters = {}
+        if not isinstance(template_parameters, dict) or set(template_parameters) - {"body", "header"}:
+            raise ValueError("whatsapp_template_parameters_invalid")
+        for values in template_parameters.values():
+            if not isinstance(values, list) or len(values) > 20 or any(not isinstance(v, str) or not v.strip() or len(v) > 1024 for v in values):
+                raise ValueError("whatsapp_template_parameters_invalid")
         if (template_name is None) != (language_code is None):
             raise ValueError("whatsapp_template_metadata_pair_required")
         if template_name is not None:
@@ -86,7 +95,7 @@ class WhatsAppOutboundStore:
                         raise ValueError("whatsapp_contact_opted_out")
                 existing = await conn.fetchrow(
                     """SELECT id,account_id,draft_id,status,idempotency_key,usage_reservation_id,
-                              template_name,language_code
+                              template_name,language_code,template_parameters
                        FROM whatsapp_outbound_deliveries
                        WHERE workspace_id=$1 AND (idempotency_key=$2 OR draft_id=$3)
                        FOR UPDATE""",
@@ -101,6 +110,11 @@ class WhatsAppOutboundStore:
                         raise ValueError("whatsapp_reservation_conflict")
                     if (existing["template_name"], existing["language_code"]) != (template_name, language_code):
                         raise ValueError("whatsapp_template_metadata_conflict")
+                    stored_parameters = existing["template_parameters"]
+                    if isinstance(stored_parameters, str):
+                        stored_parameters = json.loads(stored_parameters)
+                    if (stored_parameters or {}) != template_parameters:
+                        raise ValueError("whatsapp_template_parameters_conflict")
                     return {
                         "id": str(existing["id"]),
                         "status": existing["status"],
@@ -112,12 +126,12 @@ class WhatsAppOutboundStore:
                 row = await conn.fetchrow(
                     """INSERT INTO whatsapp_outbound_deliveries
                        (workspace_id,account_id,draft_id,prospect_id,idempotency_key,usage_reservation_id,queued_by,
-                        template_name,language_code)
-                       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                        template_name,language_code,template_parameters)
+                       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
                        RETURNING id,status,queued_at""",
                     workspace_id, account_id, draft_id, draft["prospect_id"],
                     idempotency_key, reservation_uuid, actor_uuid,
-                    template_name, language_code,
+                    template_name, language_code, json.dumps(template_parameters),
                 )
                 return {
                     "id": str(row["id"]),
