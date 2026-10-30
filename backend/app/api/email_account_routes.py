@@ -148,7 +148,13 @@ async def test_email_account(account_id: UUID, request: Request, workspace_id: s
         store = _store(request)
         configuration = await store.get_config(workspace_id=workspace_id, account_id=account_id, allow_pending_test=True)
         await SMTPEmailDelivery(configuration).test_connection()
-        await store.activate_after_test(workspace_id=workspace_id, account_id=account_id)
+        activated = await store.activate_after_test(
+            workspace_id=workspace_id,
+            account_id=account_id,
+            expected_updated_at=configuration.updated_at,
+        )
+        if not activated:
+            raise HTTPException(status_code=409, detail="email_account_changed_during_test")
         return {"workspace_id": workspace_id, "account_id": str(account_id), "ok": True,
                 "message": "SMTP TLS connection and authentication succeeded. No email was sent."}
     except LookupError:
