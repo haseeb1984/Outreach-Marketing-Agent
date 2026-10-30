@@ -161,11 +161,15 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
                 account_id=UUID(data["email_account_id"]),
             )
             await SMTPEmailDelivery(configuration).send_outreach_email(
-                recipient=data["recipient"], subject=data["subject"], body=data["body"]
+                recipient=data["recipient"], subject=data["subject"], body=data["body"],
+                delivery_id=data["delivery_id"], workspace_id=data["workspace_id"],
+                prospect_id=data["prospect_id"],
             )
         else:
             await SMTPEmailDelivery().send_outreach_email(
-                recipient=data["recipient"], subject=data["subject"], body=data["body"]
+                recipient=data["recipient"], subject=data["subject"], body=data["body"],
+                delivery_id=data["delivery_id"], workspace_id=data["workspace_id"],
+                prospect_id=data["prospect_id"],
             )
     except LookupError:
         await _settle_delivery_attempt(
