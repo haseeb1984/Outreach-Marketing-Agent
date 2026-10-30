@@ -1178,7 +1178,7 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf) return;
     const opening = !draftHistoryOpen[draft.id];
     setDraftHistoryOpen(current => ({ ...current, [draft.id]: opening }));
-    if (!opening || draftEvents[draft.id]) return;
+    if (!opening) return;
     try {
       const result = await api<{ items: DraftEvent[] }>(
         "/api/v1/drafts/" + encodeURIComponent(draft.id) + "/events?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
@@ -1193,10 +1193,12 @@ export default function DashboardPage() {
 
   async function reviewDraft(draft: Draft, decision: "approved" | "rejected") {
     if (!workspaceId || !csrf || !window.confirm("Confirm " + decision + " for this draft? This does not send a message.")) return;
+    const note = window.prompt("Optional review note (for the activity history):", "");
+    if (note === null) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/drafts/" + encodeURIComponent(draft.id) + "/review", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, decision }),
+        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, decision, note: note.trim() || null }),
       });
       setNotice("Draft " + decision + ". No message was sent.");
       await refresh(workspaceId, csrf);
