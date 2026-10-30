@@ -430,10 +430,10 @@ async def update_whatsapp_conversation(
     request: Request,
     workspace_id: str = Query(min_length=1, max_length=200),
 ) -> dict:
-    """Assign, prioritize, and change lifecycle state for one workspace conversation."""
+    """Assign, prioritize and change lifecycle state with an immutable activity trail."""
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
-    await _authorize(request, workspace_id, session, "admin")
+    await _authorize(request, workspace_id, session, role="admin")
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=422, detail="whatsapp_conversation_update_empty")
@@ -459,18 +459,75 @@ async def update_whatsapp_conversation(
             assignments.append(f"priority=${len(args)}")
         assignments.append("updated_at=now()")
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                "UPDATE whatsapp_conversations SET " + ",".join(assignments) +
-                " WHERE id=$1 AND workspace_id=$2 RETURNING id,assigned_to_user_id,inbox_status,priority,assigned_at,closed_at,updated_at",
-                *args,
-            )
-        if row is None:
-            raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
+            async with conn.transaction():
+                old = await conn.fetchrow(
+                    """SELECT assigned_to_user_id,inbox_status,priority
+                       FROM whatsapp_conversations WHERE id=$1 AND workspace_id=$2 FOR UPDATE""",
+                    conversation_id, workspace_id,
+                )
+                if old is None:
+                    raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
+                row = await conn.fetchrow(
+                    "UPDATE whatsapp_conversations SET " + ",".join(assignments) +
+                    " WHERE id=$1 AND workspace_id=$2 RETURNING id,assigned_to_user_id,inbox_status,priority,assigned_at,closed_at,updated_at",
+                    *args,
+                )
+                event_map = {
+                    "assigned_to_user_id": "assignment_changed",
+                    "inbox_status": "status_changed",
+                    "priority": "priority_changed",
+                }
+                for field, event_type in event_map.items():
+                    if field in changes and str(old[field] or "") != str(changes[field] or ""):
+                        await conn.execute(
+                            """INSERT INTO whatsapp_conversation_activity
+                               (workspace_id,conversation_id,actor_user_id,event_type,details)
+                               VALUES ($1,$2,$3,$4,$5::jsonb)""",
+                            workspace_id, conversation_id, str(session["user_id"]), event_type,
+                            json.dumps({"from": old[field], "to": changes[field]}),
+                        )
         return _serialize(dict(row))
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_update_unavailable") from None
+
+
+@router.get("/conversations/{conversation_id}/activity")
+async def list_whatsapp_conversation_activity(
+    conversation_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+    before_id: UUID | None = Query(default=None),
+) -> dict:
+    """Return workspace-scoped, append-only conversation activity metadata."""
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, role="viewer")
+    try:
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT a.id,a.actor_user_id,a.event_type,a.details,a.created_at
+                   FROM whatsapp_conversation_activity a
+                   JOIN whatsapp_conversations c ON c.id=a.conversation_id
+                     AND c.workspace_id=a.workspace_id
+                   WHERE a.workspace_id=$1 AND a.conversation_id=$2
+                     AND ($4::uuid IS NULL OR (a.created_at,a.id) < (
+                       SELECT created_at,id FROM whatsapp_conversation_activity
+                       WHERE id=$4 AND workspace_id=$1 AND conversation_id=$2
+                     ))
+                   ORDER BY a.created_at DESC,a.id DESC LIMIT $3""",
+                workspace_id, conversation_id, limit, before_id,
+            )
+        items = []
+        for row in rows:
+            item = _serialize(dict(row))
+            if isinstance(item.get("details"), str):
+                item["details"] = json.loads(item["details"])
+            items.append(item)
+        return {"items": items, "limit": limit, "has_more": len(items) == limit}
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_conversation_activity_unavailable") from None
 
 
 @router.get("/conversations/{conversation_id}/notes")
@@ -514,14 +571,23 @@ async def create_whatsapp_conversation_note(
         raise HTTPException(status_code=422, detail="whatsapp_internal_note_empty")
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """INSERT INTO whatsapp_conversation_notes
-                   (workspace_id,conversation_id,author_user_id,body)
-                   SELECT $1,c.id,$3,$4 FROM whatsapp_conversations c
-                   WHERE c.id=$2 AND c.workspace_id=$1
-                   RETURNING id,conversation_id,author_user_id,body,created_at,updated_at""",
-                workspace_id, conversation_id, session["user_id"], body,
-            )
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """INSERT INTO whatsapp_conversation_notes
+                       (workspace_id,conversation_id,author_user_id,body)
+                       SELECT $1,c.id,$3,$4 FROM whatsapp_conversations c
+                       WHERE c.id=$2 AND c.workspace_id=$1
+                       RETURNING id,conversation_id,author_user_id,body,created_at,updated_at""",
+                    workspace_id, conversation_id, session["user_id"], body,
+                )
+                if row is not None:
+                    await conn.execute(
+                        """INSERT INTO whatsapp_conversation_activity
+                           (workspace_id,conversation_id,actor_user_id,event_type,details)
+                           VALUES ($1,$2,$3,'note_added',$4::jsonb)""",
+                        workspace_id, conversation_id, str(session["user_id"]),
+                        json.dumps({"note_id": str(row["id"])}),
+                    )
         if row is None:
             raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
         return _serialize(dict(row))
@@ -543,14 +609,23 @@ async def delete_whatsapp_conversation_note(
     await _authorize(request, workspace_id, session, "admin")
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """DELETE FROM whatsapp_conversation_notes n
-                   USING whatsapp_conversations c
-                   WHERE n.id=$1 AND n.conversation_id=$2 AND n.workspace_id=$3
-                     AND c.id=n.conversation_id AND c.workspace_id=n.workspace_id
-                   RETURNING n.id""",
-                note_id, conversation_id, workspace_id,
-            )
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """DELETE FROM whatsapp_conversation_notes n
+                       USING whatsapp_conversations c
+                       WHERE n.id=$1 AND n.conversation_id=$2 AND n.workspace_id=$3
+                         AND c.id=n.conversation_id AND c.workspace_id=n.workspace_id
+                       RETURNING n.id""",
+                    note_id, conversation_id, workspace_id,
+                )
+                if row is not None:
+                    await conn.execute(
+                        """INSERT INTO whatsapp_conversation_activity
+                           (workspace_id,conversation_id,actor_user_id,event_type,details)
+                           VALUES ($1,$2,$3,'note_deleted',$4::jsonb)""",
+                        workspace_id, conversation_id, str(session["user_id"]),
+                        json.dumps({"note_id": str(row["id"])}),
+                    )
         if row is None:
             raise HTTPException(status_code=404, detail="whatsapp_internal_note_not_found")
         return {"note_id": str(row["id"]), "deleted": True}
