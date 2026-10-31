@@ -237,6 +237,8 @@ export default function DashboardPage() {
   const whatsappSavedViewsSequenceRef = useRef(0);
   const whatsappSLAActionSequenceRef = useRef(0);
   const whatsappSLALoadSequenceRef = useRef(0);
+  const whatsappDeadLetterLoadSequenceRef = useRef(0);
+  const whatsappDeadLetterLoadLockRef = useRef(false);
   const whatsappBusyCountRef = useRef(0);
   const whatsappBusyEpochRef = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -518,6 +520,7 @@ export default function DashboardPage() {
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
     setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
     setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
+    whatsappDeadLetterLoadSequenceRef.current += 1; whatsappDeadLetterLoadLockRef.current = false;
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappDeadLetterOffset(25); setWhatsappDeadLetterHasMore(false); setWhatsappDeadLetterLoadingMore(false); setWhatsappSavedViews([]);
     setWhatsappFilterStatus(""); setWhatsappFilterPriority(""); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
     setWhatsappSelectedSavedView(""); setWhatsappSavedViewName(""); setWhatsappSavedViewsUnavailable(false); setWhatsappSLAUnavailable(false); setWhatsappSLAWarningMinutes(15); setWhatsappSLABreachMinutes(60);
@@ -1840,17 +1843,19 @@ export default function DashboardPage() {
   }
 
   async function loadMoreWhatsAppDeadLetterEvents() {
-    if (!workspaceId || !csrf || !whatsappDeadLetterHasMore || whatsappDeadLetterLoadingMore) return;
+    if (!workspaceId || !csrf || !whatsappDeadLetterHasMore || whatsappDeadLetterLoadLockRef.current) return;
     const requestedWorkspaceId = workspaceId;
     const requestedOffset = whatsappDeadLetterOffset;
     const requestedToken = csrf;
+    const requestedSequence = ++whatsappDeadLetterLoadSequenceRef.current;
+    whatsappDeadLetterLoadLockRef.current = true;
     setWhatsappDeadLetterLoadingMore(true);
     try {
       const result = await api<{ items: WhatsAppWebhookEvent[]; next_offset?: number | null; has_more?: boolean }>(
         "/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&state=dead_letter&limit=25&offset=" + requestedOffset,
         requestedToken,
       );
-      if (requestedWorkspaceId !== workspaceId) return;
+      if (requestedWorkspaceId !== workspaceId || requestedSequence !== whatsappDeadLetterLoadSequenceRef.current) return;
       setWhatsappDeadLetterEvents(current => {
         const known = new Set(current.map(event => event.id));
         return [...current, ...(result.items || []).filter(event => !known.has(event.id))];
@@ -1858,9 +1863,14 @@ export default function DashboardPage() {
       setWhatsappDeadLetterOffset(result.next_offset ?? requestedOffset + (result.items || []).length);
       setWhatsappDeadLetterHasMore(Boolean(result.has_more));
     } catch (err) {
-      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "More webhook events could not be loaded.");
+      if (requestedWorkspaceId === workspaceId && requestedSequence === whatsappDeadLetterLoadSequenceRef.current) {
+        setError(err instanceof Error ? err.message : "More webhook events could not be loaded.");
+      }
     } finally {
-      if (requestedWorkspaceId === workspaceId) setWhatsappDeadLetterLoadingMore(false);
+      if (requestedSequence === whatsappDeadLetterLoadSequenceRef.current) {
+        whatsappDeadLetterLoadLockRef.current = false;
+        if (requestedWorkspaceId === workspaceId) setWhatsappDeadLetterLoadingMore(false);
+      }
     }
   }
 
