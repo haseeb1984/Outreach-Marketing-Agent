@@ -413,7 +413,7 @@ async def paddle_webhook(request: Request):
     if event_type not in {
         "subscription.created", "subscription.updated", "subscription.canceled",
         "subscription.past_due", "subscription.paused", "subscription.resumed",
-        "subscription.activated",
+        "subscription.activated", "subscription.trialing",
     }:
         # Acknowledge unrelated, correctly signed notifications without granting access.
         return {"received": True, "outcome": "ignored"}
@@ -448,6 +448,8 @@ async def paddle_webhook(request: Request):
         status = "cancelled"
     elif event_type == "subscription.paused":
         status = "paused"
+    elif event_type == "subscription.trialing":
+        status = "trialing"
     elif event_type in {"subscription.activated", "subscription.resumed"}:
         status = "active"
     if status is None:
