@@ -7,7 +7,7 @@ constructing a VerifiedBillingEvent. Raw payloads and credentials are never stor
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 from typing import Any, Mapping
 import json
@@ -228,7 +228,7 @@ class BillingLifecycleStore:
         """Hash the normalized verified transaction snapshot for event-ID replay safety."""
         payload = {
             "provider": "paddle", "event_id": event_id,
-            "event_created_at": event_created_at.isoformat(),
+            "event_created_at": event_created_at.astimezone(timezone.utc).isoformat(),
             "transaction_id": transaction_id, "workspace_id": workspace_id,
             "subscription_id": subscription_id, "invoice_number": invoice_number,
             "status": status, "currency_code": currency_code, "total_minor": total_minor,
@@ -308,10 +308,10 @@ class BillingLifecycleStore:
             "provider_customer_id": event.provider_customer_id,
             "provider_subscription_id": event.provider_subscription_id,
             "plan_slug": event.plan_slug,
-            "event_created_at": event.event_created_at.isoformat(),
+            "event_created_at": event.event_created_at.astimezone(timezone.utc).isoformat(),
             "subscription_status": event.subscription_status,
-            "period_starts_at": event.period_starts_at.isoformat(),
-            "period_ends_at": event.period_ends_at.isoformat(),
+            "period_starts_at": event.period_starts_at.astimezone(timezone.utc).isoformat(),
+            "period_ends_at": event.period_ends_at.astimezone(timezone.utc).isoformat(),
             "entitlements": dict(event.entitlements),
         }
         canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False)
