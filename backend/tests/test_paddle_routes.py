@@ -524,3 +524,63 @@ def test_paddle_transaction_webhook_persists_only_signature_verified_normalized_
         "currency_code": "USD",
         "total_minor": "2599",
     }
+
+
+def test_paddle_subscription_trialing_webhook_updates_subscription_status(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    captured = {}
+
+    class BillingStore:
+        async def apply_verified_event(self, event):
+            captured["event"] = event
+            return {"outcome": "applied"}
+
+    async def fake_effective_plans(request, *, include_inactive=False):
+        return {
+            "starter": {
+                "price_id": "pri_trialing",
+                "entitlements": {
+                    "ai_draft_generations": {"enabled": True, "monthly_limit": 10},
+                    "email_sends": {"enabled": True, "monthly_limit": 10},
+                    "website_audits": {"enabled": True, "monthly_limit": 10},
+                    "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+                    "prospect_research": {"enabled": True, "monthly_limit": 10},
+                },
+            }
+        }
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    monkeypatch.setattr(paddle_routes, "_effective_plans", fake_effective_plans)
+    with TestClient(app) as client:
+        app.state.billing_lifecycle_store = BillingStore()
+        payload = {
+            "event_id": "evt_subscription_trialing",
+            "event_type": "subscription.trialing",
+            "occurred_at": "2026-10-31T12:00:00Z",
+            "data": {
+                "id": "sub_trialing_route",
+                "status": "trialing",
+                "custom_data": {"workspace_id": "workspace-trialing"},
+                "items": [{"price": {"id": "pri_trialing"}, "quantity": 1}],
+                "current_billing_period": {
+                    "starts_at": "2026-10-31T12:00:00Z",
+                    "ends_at": "2026-11-30T12:00:00Z",
+                },
+            },
+        }
+        body = json.dumps(payload).encode()
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "applied"}
+    assert captured["event"].subscription_status == "trialing"
+    assert captured["event"].workspace_id == "workspace-trialing"
+    assert captured["event"].provider_subscription_id == "sub_trialing_route"
