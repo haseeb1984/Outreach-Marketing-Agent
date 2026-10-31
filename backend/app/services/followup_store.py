@@ -174,8 +174,8 @@ class FollowupStore:
                         reason = "prospect_archived"
                     elif row["stage"] == "replied":
                         reason = "prospect_replied"
-                    elif row["stage"] == "do_not_contact":
-                        reason = "prospect_suppressed"
+                    elif row["stage"] in {"do_not_contact", "disqualified", "converted"}:
+                        reason = "prospect_suppressed" if row["stage"] == "do_not_contact" else "prospect_no_longer_eligible"
                     elif not isinstance(row["evidence_url"], str) or not row["evidence_url"].lower().startswith("https://"):
                         reason = "verified_source_evidence_required"
                     elif row["channel"] == "email" and (not row["contact_email"] or row["email_suppressed"]):
