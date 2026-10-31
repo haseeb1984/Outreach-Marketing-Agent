@@ -75,9 +75,12 @@ class ConversationStore:
                 WHERE q.workspace_id=$1 AND q.prospect_id=$2
                   AND q.status IN ('sent','delivered','read','failed','uncertain')
             )
-            SELECT * FROM all_messages
-            ORDER BY occurred_at ASC,id ASC
-            LIMIT $3 OFFSET $4""", workspace_id, prospect_id, limit, offset)
+            SELECT * FROM (
+                SELECT * FROM all_messages
+                ORDER BY occurred_at DESC,id DESC
+                LIMIT $3 OFFSET $4
+            ) latest_page
+            ORDER BY occurred_at ASC,id ASC""", workspace_id, prospect_id, limit, offset)
         result = []
         for row in rows:
             item = dict(row)
