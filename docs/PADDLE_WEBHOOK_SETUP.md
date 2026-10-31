@@ -1,6 +1,6 @@
 # Paddle webhook setup
 
-The existing Paddle router accepts signed subscription lifecycle events at `POST /api/v1/billing/paddle/webhook`. It verifies the raw-body `Paddle-Signature` HMAC with a five-minute timestamp window, maps the signed workspace and plan metadata, and persists the event through the idempotent billing lifecycle store.
+The existing Paddle router accepts signed subscription lifecycle events at `POST /api/v1/billing/paddle/webhook`. It verifies the raw-body `Paddle-Signature` HMAC with a five-minute timestamp window, maps the signed workspace and plan metadata, and persists the event through the idempotent billing lifecycle store. It also records `transaction.completed` and `transaction.payment_failed` notifications as sanitized transaction history.
 
 ## Required environment
 
@@ -31,5 +31,5 @@ Example shape (replace with real recurring price IDs and reviewed limits):
 - Use encrypted deployment secrets; never commit API keys, webhook secrets or real customer data.
 - Checkout metadata carries `workspace_id` and `plan_id`. The signed webhook must map the declared plan to the configured Paddle price ID before updating entitlements.
 - Duplicate events are idempotent; stale subscription snapshots must not overwrite newer state.
-- Verify valid signatures, invalid signatures, stale timestamps, duplicate deliveries, out-of-order events, trialing, cancellation, past-due state and unknown plan IDs in sandbox.
+- Subscribe to `transaction.completed` and `transaction.payment_failed` as well as the subscription events above. Paddle may also emit `transaction.past_due` and `transaction.updated`; the current adapter acknowledges these as unrelated notifications and does not persist them as separate transaction-history updates. Verify valid signatures, invalid signatures, stale timestamps, duplicate deliveries, out-of-order events, trialing, cancellation, past-due state and unknown plan IDs in sandbox.
 - Do not enable live billing until merchant eligibility, policies, database migrations, operational alerts and a real sandbox lifecycle are accepted.
