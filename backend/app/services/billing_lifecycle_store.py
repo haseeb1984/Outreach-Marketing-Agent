@@ -247,9 +247,11 @@ class BillingLifecycleStore:
             prior["transaction_id"] == transaction_id
             and prior["event_created_at"] == event_created_at
             and prior["workspace_id"] == workspace_id
-            and BillingLifecycleStore._same_transaction_identity(
-                prior, subscription_id=subscription_id, invoice_number=invoice_number
-            )
+            # A repeated provider event ID must describe the exact same nullable
+            # identity fields. Partial matching is appropriate for later events,
+            # but would hide payload collisions on the idempotency key.
+            and prior["provider_subscription_id"] == subscription_id
+            and prior["invoice_number"] == invoice_number
         )
 
     @staticmethod
