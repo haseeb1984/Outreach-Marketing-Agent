@@ -124,17 +124,55 @@ class DeliveryStore:
 
     async def finish(self,*,workspace_id: str,delivery_id: UUID,error_code: str|None=None)->bool:
         async with self._pool.acquire() as c:
-            if error_code is None:
-                result=await c.execute("""UPDATE outreach_deliveries SET status='sent',sent_at=now(),updated_at=now()
-                  WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id)
-            elif error_code == "delivery_outcome_unknown":
-                # SMTP/network failures can happen after a provider accepted the message.
-                # Keep this terminal and visible; blindly retrying could send duplicates.
-                result=await c.execute("""UPDATE outreach_deliveries SET status='uncertain',error_code=$3,updated_at=now()
-                  WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
-            else:
-                result=await c.execute("""UPDATE outreach_deliveries SET status='failed',error_code=$3,updated_at=now()
-                  WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
+            async with c.transaction():
+                if error_code is None:
+                    result=await c.execute("""UPDATE outreach_deliveries SET status='sent',sent_at=now(),updated_at=now()
+                      WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id)
+                    if result.endswith(" 1"):
+                        # Advance only the enrollment whose human-approved follow-up draft
+                        # was actually delivered. The next step remains approval-gated.
+                        await c.execute(
+                            """UPDATE outreach_followup_enrollments e
+                               SET status=CASE WHEN nxt.delay_minutes IS NULL THEN 'completed' ELSE 'active' END,
+                                   current_step=e.current_step+1,current_draft_id=NULL,last_delivery_id=$1,
+                                   next_run_at=CASE WHEN nxt.delay_minutes IS NULL THEN NULL
+                                                    ELSE now()+(nxt.delay_minutes * interval '1 minute') END,
+                                   last_error_code=NULL,updated_at=now()
+                               FROM outreach_deliveries d
+                               LEFT JOIN outreach_followup_steps nxt
+                                 ON nxt.sequence_id=(SELECT sequence_id FROM outreach_followup_enrollments
+                                                     WHERE workspace_id=$2 AND current_draft_id=d.draft_id
+                                                       AND status='awaiting_approval' LIMIT 1)
+                                AND nxt.step_number=(SELECT current_step+1 FROM outreach_followup_enrollments
+                                                     WHERE workspace_id=$2 AND current_draft_id=d.draft_id
+                                                       AND status='awaiting_approval' LIMIT 1)
+                               WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
+                                 AND e.current_draft_id=d.draft_id AND e.status='awaiting_approval'""",
+                            delivery_id,workspace_id,
+                        )
+                elif error_code == "delivery_outcome_unknown":
+                    # An ambiguous provider outcome must stop the sequence for operator review.
+                    result=await c.execute("""UPDATE outreach_deliveries SET status='uncertain',error_code=$3,updated_at=now()
+                      WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
+                    await c.execute(
+                        """UPDATE outreach_followup_enrollments e SET status='paused',
+                           last_error_code='followup_delivery_uncertain',updated_at=now()
+                           FROM outreach_deliveries d
+                           WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
+                             AND e.current_draft_id=d.draft_id AND e.status='awaiting_approval'""",
+                        delivery_id,workspace_id,
+                    )
+                else:
+                    result=await c.execute("""UPDATE outreach_deliveries SET status='failed',error_code=$3,updated_at=now()
+                      WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
+                    await c.execute(
+                        """UPDATE outreach_followup_enrollments e SET status='paused',
+                           last_error_code='followup_delivery_failed',updated_at=now()
+                           FROM outreach_deliveries d
+                           WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
+                             AND e.current_draft_id=d.draft_id AND e.status='awaiting_approval'""",
+                        delivery_id,workspace_id,
+                    )
         return result.endswith(" 1")
 
     async def reconcile_stale_processing(self, *, workspace_id: str, older_than_seconds: int = 900, limit: int = 100) -> int:
