@@ -250,9 +250,21 @@ async def process_pending_whatsapp_events(
                                                  AND (opted_in_at IS NULL OR opted_in_at <= $5)""",
                                             workspace_id, account_id, wa_id, provider_id, inbound_at,
                                         )
-                                        # Cancel queued (not yet dispatched) drafts for this contact.
-                                        # The future dispatcher must still re-check policy immediately before send.
+                                        # Opt-out terminates every WhatsApp follow-up for this contact now.
+                                        # Preserve current_draft_id for audit/history; never schedule another step.
                                         if prospect:
+                                            await conn.execute(
+                                                """UPDATE outreach_followup_enrollments e
+                                                   SET status='stopped_opt_out',next_run_at=NULL,paused_next_run_at=NULL,
+                                                       pause_reason=NULL,last_error_code='whatsapp_contact_opted_out',updated_at=now()
+                                                   FROM outreach_followup_sequences s
+                                                   WHERE s.id=e.sequence_id AND s.workspace_id=e.workspace_id
+                                                     AND e.workspace_id=$1 AND e.prospect_id=$2 AND s.channel='whatsapp'
+                                                     AND e.status IN ('active','awaiting_approval','paused')""",
+                                                workspace_id, prospect["id"],
+                                            )
+                                            # Cancel queued (not yet dispatched) drafts for this contact.
+                                            # The future dispatcher must still re-check policy immediately before send.
                                             await conn.execute(
                                                 """WITH cancelled AS (
                                                        UPDATE whatsapp_outbound_deliveries
@@ -354,7 +366,20 @@ async def process_pending_whatsapp_events(
                                         workspace_id, account_id, target_status,
                                         _timestamp(status.get("timestamp")), provider_id, event_received_at,
                                     )
-                                    if updated_delivery and target_status in {"delivered", "read"}:
+                                    if updated_delivery and target_status == "failed":
+                                        # A provider-confirmed failure pauses this exact follow-up.
+                                        # It must never advance or be blindly retried by the scheduler.
+                                        await conn.execute(
+                                            """UPDATE outreach_followup_enrollments
+                                               SET status='paused',pause_reason='delivery_failed',
+                                                   paused_next_run_at=next_run_at,next_run_at=NULL,
+                                                   last_error_code='whatsapp_provider_delivery_failed',
+                                                   updated_at=now()
+                                               WHERE workspace_id=$1 AND current_draft_id=$2
+                                                 AND status='awaiting_approval'""",
+                                            workspace_id, updated_delivery["draft_id"],
+                                        )
+                                    elif updated_delivery and target_status in {"delivered", "read"}:
                                         await conn.execute(
                                             """WITH target AS (
                                                    SELECT e.id,e.sequence_id,e.current_step

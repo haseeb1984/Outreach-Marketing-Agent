@@ -123,8 +123,33 @@ class FollowupStore:
                     raise LookupError("followup_target_not_found")
                 if row["status"] != "active" or row["campaign_status"] != "active":
                     raise ValueError("followup_sequence_or_campaign_not_active")
-                if row["archived_at"] is not None or row["stage"] in {"replied", "do_not_contact"}:
+                if row["archived_at"] is not None or row["stage"] in {"replied", "do_not_contact", "disqualified", "converted"}:
                     raise ValueError("followup_prospect_ineligible")
+                if row["channel"] == "email":
+                    suppressed = await conn.fetchval(
+                        """SELECT COALESCE(email_suppressed,FALSE)
+                           FROM outreach_contact_controls
+                           WHERE workspace_id=$1 AND prospect_id=$2""",
+                        workspace_id, prospect_id,
+                    )
+                    if suppressed:
+                        raise ValueError("followup_email_contact_suppressed")
+                if row["channel"] == "whatsapp":
+                    phone = await conn.fetchval(
+                        """SELECT contact_phone_e164 FROM crm_prospects
+                           WHERE id=$1 AND workspace_id=$2""",
+                        prospect_id, workspace_id,
+                    )
+                    if phone:
+                        wa_id = "".join(ch for ch in str(phone) if ch.isdigit())
+                        opted_out = await conn.fetchval(
+                            """SELECT EXISTS(SELECT 1 FROM whatsapp_contact_preferences
+                               WHERE workspace_id=$1 AND wa_id=$2 AND opted_out_at IS NOT NULL
+                                 AND (opted_in_at IS NULL OR opted_out_at >= opted_in_at))""",
+                            workspace_id, wa_id,
+                        )
+                        if opted_out:
+                            raise ValueError("followup_whatsapp_contact_opted_out")
                 first = await conn.fetchval(
                     "SELECT delay_minutes FROM outreach_followup_steps WHERE sequence_id=$1 AND step_number=1",
                     sequence_id,

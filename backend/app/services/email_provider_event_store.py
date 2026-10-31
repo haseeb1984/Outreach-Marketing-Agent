@@ -108,6 +108,19 @@ class EmailProviderEventStore:
                         delivery["workspace_id"], delivery["prospect_id"],
                         suppression_reason, occurred_at, delivery["created_by"],
                     )
+                    # Suppression is terminal for every email follow-up in this workspace.
+                    # Clear scheduling immediately; retain current_draft_id for operator traceability.
+                    await conn.execute(
+                        """UPDATE outreach_followup_enrollments e
+                           SET status='stopped_opt_out',next_run_at=NULL,paused_next_run_at=NULL,
+                               pause_reason=NULL,last_error_code=$3,updated_at=now()
+                           FROM outreach_followup_sequences s
+                           WHERE s.id=e.sequence_id AND s.workspace_id=e.workspace_id
+                             AND e.workspace_id=$1 AND e.prospect_id=$2 AND s.channel='email'
+                             AND e.status IN ('active','awaiting_approval','paused')""",
+                        delivery["workspace_id"], delivery["prospect_id"],
+                        "email_" + suppression_reason,
+                    )
                     # Stop all queued email sends to this contact, not just this campaign.
                     await conn.execute(
                         """UPDATE outreach_deliveries q
@@ -151,6 +164,16 @@ class EmailProviderEventStore:
                            email_suppressed_at=COALESCE(outreach_contact_controls.email_suppressed_at,EXCLUDED.email_suppressed_at),
                            updated_at=now()""",
                     workspace_id, prospect_id, occurred_at, prospect["created_by"],
+                )
+                await conn.execute(
+                    """UPDATE outreach_followup_enrollments e
+                       SET status='stopped_opt_out',next_run_at=NULL,paused_next_run_at=NULL,
+                           pause_reason=NULL,last_error_code='email_unsubscribe',updated_at=now()
+                       FROM outreach_followup_sequences s
+                       WHERE s.id=e.sequence_id AND s.workspace_id=e.workspace_id
+                         AND e.workspace_id=$1 AND e.prospect_id=$2 AND s.channel='email'
+                         AND e.status IN ('active','awaiting_approval','paused')""",
+                    workspace_id, prospect_id,
                 )
                 await conn.execute(
                     """UPDATE outreach_deliveries q SET status='cancelled',
