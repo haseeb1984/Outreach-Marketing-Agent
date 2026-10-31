@@ -344,7 +344,7 @@ async def get_whatsapp_inbox_sla_summary(
                          + make_interval(secs => COALESCE(response_pause.paused_seconds,0))
                          + make_interval(mins => COALESCE(policy.breach_minutes,60)))
                          OR (response.sent_at IS NULL AND now() < inbound.received_at
-                         + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                         + make_interval(secs => COALESCE(response_pause.paused_seconds,0))
                          + make_interval(mins => COALESCE(policy.warning_minutes,15)))))::int AS within_sla,
                      count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NOT NULL)::int AS paused
                    FROM whatsapp_conversations c
