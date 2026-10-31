@@ -1142,6 +1142,7 @@ export default function DashboardPage() {
   async function updateCampaign(event: FormEvent<HTMLFormElement>, campaign: Campaign) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     const form = new FormData(event.currentTarget);
     const status = String(form.get("status") || "draft");
     if (status === "archived" && !window.confirm("Archive campaign " + campaign.name + "? New drafts and queued sends will be blocked; existing history is retained.")) return;
@@ -1153,7 +1154,6 @@ export default function DashboardPage() {
       target_customer_profile: String(form.get("target_customer_profile") || "").trim(),
       status,
     };
-    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/campaigns/" + encodeURIComponent(campaign.id), csrf, { method: "PATCH", body: JSON.stringify(payload) });
@@ -1181,7 +1181,7 @@ export default function DashboardPage() {
       setNotice("Campaign created. No outreach has been sent.");
       await refresh(requestedWorkspaceId, csrf);
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Campaign could not be created."); }
-    finally { setBusy(false); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createFollowupSequence(event: FormEvent<HTMLFormElement>) {
@@ -1224,8 +1224,10 @@ export default function DashboardPage() {
 
   async function loadFollowupEnrollments(sequence: FollowupSequence) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     try {
-      const result = await api<{ items: FollowupEnrollment[] }>("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enrollments?workspace_id=" + encodeURIComponent(workspaceId), csrf);
+      const result = await api<{ items: FollowupEnrollment[] }>("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enrollments?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
       setFollowupEnrollments(current => ({ ...current, [sequence.id]: result.items || [] }));
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up enrollments could not be loaded."); }
   }
