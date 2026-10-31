@@ -1146,37 +1146,41 @@ export default function DashboardPage() {
     const status = String(form.get("status") || "draft");
     if (status === "archived" && !window.confirm("Archive campaign " + campaign.name + "? New drafts and queued sends will be blocked; existing history is retained.")) return;
     const payload = {
-      workspace_id: workspaceId,
+      workspace_id: requestedWorkspaceId,
       name: String(form.get("name") || "").trim(),
       client_business: String(form.get("client_business") || "").trim(),
       client_offer: String(form.get("client_offer") || "").trim(),
       target_customer_profile: String(form.get("target_customer_profile") || "").trim(),
       status,
     };
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/campaigns/" + encodeURIComponent(campaign.id), csrf, { method: "PATCH", body: JSON.stringify(payload) });
+      if (requestedWorkspaceId !== workspaceId) return;
       if (status === "archived") setSelectedCampaign(current => current === campaign.id ? "" : current);
       setNotice("Campaign settings saved.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Campaign could not be updated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Campaign could not be updated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/campaigns", csrf, { method: "POST", body: JSON.stringify({
-        workspace_id: workspaceId, name: campaignName, client_business: businessName,
+        workspace_id: requestedWorkspaceId, name: campaignName, client_business: businessName,
         client_offer: offer, target_customer_profile: targetProfile,
       }) });
+      if (requestedWorkspaceId !== workspaceId) return;
       setCampaignName(""); setBusinessName(""); setOffer(""); setTargetProfile("");
       setNotice("Campaign created. No outreach has been sent.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Campaign could not be created."); }
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Campaign could not be created."); }
     finally { setBusy(false); }
   }
 
@@ -1186,31 +1190,35 @@ export default function DashboardPage() {
     let steps: unknown;
     try { steps = JSON.parse(followupStepsJson); } catch { setError("Follow-up steps must be valid JSON."); return; }
     if (!Array.isArray(steps) || !steps.length || steps.length > 10) { setError("Provide between 1 and 10 follow-up steps."); return; }
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const created = await api<FollowupSequence>("/api/v1/campaigns/" + encodeURIComponent(followupCampaignId) + "/follow-up-sequences", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, name: followupName, channel: followupChannel, steps }),
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, name: followupName, channel: followupChannel, steps }),
       });
       await api("/api/v1/follow-up-sequences/" + encodeURIComponent(created.id), csrf, {
-        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, status: "active" }),
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, status: "active" }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setFollowupName(""); setNotice("Follow-up sequence created and activated. Each due step creates a draft for human approval; nothing is sent automatically.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up sequence could not be created."); }
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up sequence could not be created."); }
     finally { setBusy(false); }
   }
 
   async function enrollFollowup(sequence: FollowupSequence) {
     if (!workspaceId || !csrf || !followupProspectId) { setError("Choose a prospect before enrolling."); return; }
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enroll", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, prospect_id: followupProspectId }),
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, prospect_id: followupProspectId }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Prospect enrolled. The scheduler will create the next follow-up draft when its delay is due.");
       await loadFollowupEnrollments(sequence);
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Prospect could not be enrolled."); }
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect could not be enrolled."); }
     finally { setBusy(false); }
   }
 
@@ -1219,32 +1227,36 @@ export default function DashboardPage() {
     try {
       const result = await api<{ items: FollowupEnrollment[] }>("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enrollments?workspace_id=" + encodeURIComponent(workspaceId), csrf);
       setFollowupEnrollments(current => ({ ...current, [sequence.id]: result.items || [] }));
-    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up enrollments could not be loaded."); }
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up enrollments could not be loaded."); }
   }
 
   async function setFollowupStatus(sequence: FollowupSequence, status: string) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id), csrf, {
-        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, status }),
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, status }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Follow-up sequence " + status + ".");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up sequence could not be updated."); }
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up sequence could not be updated."); }
     finally { setBusy(false); }
   }
 
   async function setFollowupEnrollmentStatus(sequence: FollowupSequence, enrollment: FollowupEnrollment, status: string) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/follow-up-enrollments/" + encodeURIComponent(enrollment.id), csrf, {
-        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, status }),
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, status }),
       });
       await loadFollowupEnrollments(sequence);
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Follow-up enrollment " + status + ".");
-    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up enrollment could not be updated."); }
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up enrollment could not be updated."); }
     finally { setBusy(false); }
   }
 
@@ -1256,15 +1268,17 @@ export default function DashboardPage() {
       setError("Enter a resolution reason (at least 12 characters) and an HTTPS evidence URL.");
       return;
     }
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/follow-up-enrollments/" + encodeURIComponent(enrollment.id) + "/resolve-delivery", csrf, {
         method: "POST",
-        body: JSON.stringify({ workspace_id: workspaceId, delivery_id: enrollment.current_delivery_id, outcome, reason: reason.trim(), evidence_url: evidenceUrl.trim() }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, delivery_id: enrollment.current_delivery_id, outcome, reason: reason.trim(), evidence_url: evidenceUrl.trim() }),
       });
       await loadFollowupEnrollments(sequence);
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(outcome === "delivered" ? "Provider-confirmed delivery recorded; the sequence advanced safely." : "Non-delivery recorded; the enrollment was stopped without retrying the old delivery.");
-    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up delivery resolution could not be completed."); }
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up delivery resolution could not be completed."); }
     finally { setBusy(false); }
   }
 
