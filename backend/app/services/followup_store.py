@@ -266,6 +266,59 @@ class FollowupStore:
                     created += 1
         return {"drafts_created": created, "stopped": stopped, "skipped": skipped}
 
+    async def list_enrollments(self, *, workspace_id: str, sequence_id: UUID, limit: int = 100,
+                            offset: int = 0) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 200 or not 0 <= offset <= 100000:
+            raise ValueError("pagination_out_of_range")
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT e.id,e.workspace_id,e.sequence_id,e.prospect_id,e.current_step,e.status,
+                          e.next_run_at,e.paused_next_run_at,e.current_draft_id,e.last_delivery_id,
+                          e.last_error_code,e.created_at,e.updated_at,p.name AS prospect_name,p.company
+                   FROM outreach_followup_enrollments e
+                   JOIN crm_prospects p ON p.id=e.prospect_id AND p.workspace_id=e.workspace_id
+                   WHERE e.workspace_id=$1 AND e.sequence_id=$2
+                   ORDER BY e.created_at DESC,e.id LIMIT $3 OFFSET $4""",
+                workspace_id, sequence_id, limit, offset,
+            )
+            return [self._serialize(dict(row)) for row in rows]
+
+    async def set_enrollment_status(self, *, workspace_id: str, enrollment_id: UUID,
+                                    status: str) -> dict[str, Any] | None:
+        if status not in {"active", "paused", "archived"}:
+            raise ValueError("followup_enrollment_status_invalid")
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                if status == "paused":
+                    row = await conn.fetchrow(
+                        """UPDATE outreach_followup_enrollments SET status='paused',
+                           paused_next_run_at=next_run_at,next_run_at=NULL,updated_at=now()
+                           WHERE id=$1 AND workspace_id=$2 AND status IN ('active','awaiting_approval')
+                           RETURNING id,status,current_draft_id""",
+                        enrollment_id, workspace_id,
+                    )
+                elif status == "active":
+                    row = await conn.fetchrow(
+                        """UPDATE outreach_followup_enrollments SET
+                           status=CASE WHEN current_draft_id IS NOT NULL THEN 'awaiting_approval' ELSE 'active' END,
+                           next_run_at=CASE WHEN current_draft_id IS NOT NULL THEN NULL
+                                            ELSE COALESCE(paused_next_run_at,now()) END,
+                           paused_next_run_at=NULL,updated_at=now()
+                           WHERE id=$1 AND workspace_id=$2 AND status='paused'
+                           RETURNING id,status,current_draft_id""",
+                        enrollment_id, workspace_id,
+                    )
+                else:
+                    row = await conn.fetchrow(
+                        """UPDATE outreach_followup_enrollments SET status='archived',
+                           next_run_at=NULL,paused_next_run_at=NULL,updated_at=now()
+                           WHERE id=$1 AND workspace_id=$2 AND status NOT IN ('completed','stopped_replied',
+                             'stopped_opt_out','stopped_ineligible','stopped_rejected','archived')
+                           RETURNING id,status,current_draft_id""",
+                        enrollment_id, workspace_id,
+                    )
+                return self._serialize(dict(row)) if row else None
+
     async def advance_after_delivery(self, *, workspace_id: str, draft_id: UUID, delivery_id: UUID) -> bool:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
