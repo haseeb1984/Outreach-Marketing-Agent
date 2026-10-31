@@ -11,6 +11,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import asyncpg
+
+from app.db.migrations import apply_migrations
 import pytest
 
 from app.services.auth_security import hash_password, verify_password
@@ -37,12 +39,7 @@ async def _exercise_password_reset() -> None:
     database_url = os.environ["OMA_TEST_DATABASE_URL"]
     connection = await asyncpg.connect(database_url)
     try:
-        await _ensure_schema_migrations(connection)
-        migrations = Path(__file__).resolve().parents[1] / "migrations"
-        migration_files = sorted(migrations.glob("[0-9][0-9][0-9]_*.sql"))
-        assert migration_files, "repository migration directory must not be empty"
-        for migration_path in migration_files:
-            await connection.execute(migration_path.read_text(encoding="utf-8"))
+        await apply_migrations(database_url)
 
         # Verify workspace-owned delivery references cascade instead of blocking tenant deletion.
         cascade_constraints = await connection.fetch(
@@ -161,18 +158,7 @@ async def _exercise_workspace_authorization() -> None:
     database_url = os.environ["OMA_TEST_DATABASE_URL"]
     connection = await asyncpg.connect(database_url)
     try:
-        await _ensure_schema_migrations(connection)
-        migrations = Path(__file__).resolve().parents[1] / "migrations"
-        for migration_name in (
-            "001_workspace_domain_verification.sql",
-            "002_workspace_jobs.sql",
-            "003_authentication_foundation.sql",
-            "004_auth_rate_limits.sql",
-            "005_session_csrf_tokens.sql",
-            "006_password_reset_tokens.sql",
-            "007_crm_prospects.sql",
-        ):
-            await connection.execute((migrations / migration_name).read_text(encoding="utf-8"))
+        await apply_migrations(database_url)
 
         await connection.execute(
             """TRUNCATE TABLE outreach_contact_controls, outreach_draft_events, outreach_drafts, outreach_campaigns, auth_rate_limit_buckets, security_audit_events,
