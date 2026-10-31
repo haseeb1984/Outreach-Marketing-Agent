@@ -165,7 +165,7 @@ async def process_pending_whatsapp_events(
                     if account is None:
                         await conn.execute(
                             """UPDATE meta_whatsapp_webhook_events
-                               SET processed_at=now(), processing_error_code='unmapped_or_inactive_phone'
+                               SET processed_at=now(), processing_started_at=NULL, processing_error_code='unmapped_or_inactive_phone'
                                WHERE id=$1""",
                             event["id"],
                         )
@@ -421,7 +421,7 @@ async def process_pending_whatsapp_events(
 
                     await conn.execute(
                         """UPDATE meta_whatsapp_webhook_events
-                           SET processed_at=now(), processing_error_code=NULL WHERE id=$1""",
+                           SET processed_at=now(), processing_started_at=NULL, processing_error_code=NULL WHERE id=$1""",
                         event["id"],
                     )
                     processed += 1
@@ -435,7 +435,7 @@ async def process_pending_whatsapp_events(
                 try:
                     async with pool.acquire() as conn:
                         await conn.execute(
-                            "UPDATE meta_whatsapp_webhook_events SET attempts=attempts+1, processing_error_code='worker_processing_failed' WHERE id=$1 AND processed_at IS NULL",
+                            "UPDATE meta_whatsapp_webhook_events SET attempts=attempts+1, processing_started_at=NULL, dead_lettered_at=CASE WHEN attempts+1 >= 8 THEN COALESCE(dead_lettered_at,now()) ELSE dead_lettered_at END, processing_error_code=CASE WHEN attempts+1 >= 8 THEN 'worker_retry_exhausted' ELSE 'worker_processing_failed' END WHERE id=$1 AND processed_at IS NULL",
                             last_event_id,
                         )
                 except Exception:
