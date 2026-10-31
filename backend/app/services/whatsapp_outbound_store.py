@@ -85,6 +85,8 @@ class WhatsAppOutboundStore:
                     raise ValueError("prospect_archived")
                 if draft["stage"] == "do_not_contact":
                     raise ValueError("contact_suppressed")
+                if draft["stage"] in {"replied", "converted", "disqualified"}:
+                    raise ValueError("contact_no_longer_eligible")
                 if (
                     draft["whatsapp_opt_in_at"] is None
                     or not draft["whatsapp_opt_in_evidence_url"]
