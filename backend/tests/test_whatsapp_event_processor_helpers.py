@@ -127,3 +127,14 @@ def test_failed_status_rank_is_lower_than_positive_delivery_evidence():
     assert "WHEN 'failed' THEN 0" in source
     assert "WHEN 'delivered' THEN 2" in source
     assert "WHEN 'read' THEN 3" in source
+
+
+def test_phone_mapping_requires_exactly_one_workspace_prospect():
+    from uuid import uuid4
+    from app.services.whatsapp_event_processor import _unique_prospect_id
+
+    prospect_id = uuid4()
+    assert _unique_prospect_id([{"id": prospect_id}]) == prospect_id
+    assert _unique_prospect_id([]) is None
+    assert _unique_prospect_id([{"id": prospect_id}, {"id": uuid4()}]) is None
+    assert _unique_prospect_id([{}]) is None
