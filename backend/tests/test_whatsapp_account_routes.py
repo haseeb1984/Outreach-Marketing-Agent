@@ -183,3 +183,45 @@ def test_whatsapp_activity_feed_preserves_invalid_cursor_response(monkeypatch):
         )
     assert response.status_code == 422
     assert response.json()["detail"] == "invalid_before_activity_id"
+
+
+def test_whatsapp_sla_summary_distinguishes_late_completed_responses(monkeypatch):
+    connection = FakeConnection(
+        {"overdue": 1, "at_risk": 2, "breached": 3, "within_sla": 4, "paused": 0},
+        [],
+    )
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.auth_rate_limiter = FakeLimiter()
+        app.state.db_pool = FakePool(connection)
+        client.cookies.set("__Host-oma_session", "session-token")
+        response = client.get(
+            "/api/v1/integrations/whatsapp/inbox/sla/summary",
+            params={"workspace_id": "workspace-1"},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["breached"] == 3
+    query, args = connection.fetchrow_calls[0]
+    assert "response.sent_at >" in query
+    assert "AS breached" in query
+    assert args == ("workspace-1",)
+
+
+def test_whatsapp_conversation_sla_state_checks_response_deadline(monkeypatch):
+    connection = FakeConnection(None, [])
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.auth_rate_limiter = FakeLimiter()
+        app.state.db_pool = FakePool(connection)
+        client.cookies.set("__Host-oma_session", "session-token")
+        response = client.get(
+            "/api/v1/integrations/whatsapp/inbox/conversations",
+            params={"workspace_id": "workspace-1"},
+        )
+    assert response.status_code == 200, response.text
+    query, args = connection.fetch_calls[0]
+    assert "response.sent_at <=" in query
+    assert "THEN 'breached'" in query
+    assert args[0] == "workspace-1"
