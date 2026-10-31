@@ -450,6 +450,8 @@ class FollowupStore:
                     if delivery is None or delivery["status"] not in {"failed", "uncertain", "delivered", "read"}:
                         raise ValueError("followup_delivery_not_recoverable")
                     provider_status = delivery["status"]
+                if outcome == "not_delivered" and enrollment["channel"] == "whatsapp" and provider_status in {"delivered", "read"}:
+                    raise ValueError("provider_confirms_delivery")
                 if outcome == "delivered":
                     if enrollment["channel"] == "email" and provider_status != "delivered":
                         raise ValueError("provider_delivery_confirmation_required")
