@@ -31,6 +31,10 @@ class FakeConnection:
         self.args = None
         self.query = None
 
+    @asynccontextmanager
+    async def transaction(self):
+        yield
+
     async def fetchrow(self, query, *args):
         self.query, self.args = query, args
         return {
