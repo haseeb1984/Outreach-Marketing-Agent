@@ -1217,6 +1217,7 @@ export default function DashboardPage() {
       const created = await api<FollowupSequence>("/api/v1/campaigns/" + encodeURIComponent(followupCampaignId) + "/follow-up-sequences", csrf, {
         method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, name: followupName, channel: followupChannel, steps }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       await api("/api/v1/follow-up-sequences/" + encodeURIComponent(created.id), csrf, {
         method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, status: "active" }),
       });
@@ -1238,6 +1239,7 @@ export default function DashboardPage() {
       if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Prospect enrolled. The scheduler will create the next follow-up draft when its delay is due.");
       await loadFollowupEnrollments(sequence);
+      if (requestedWorkspaceId !== workspaceId) return;
       await refresh(requestedWorkspaceId, csrf);
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect could not be enrolled."); }
     finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
@@ -1276,6 +1278,7 @@ export default function DashboardPage() {
       await api("/api/v1/follow-up-enrollments/" + encodeURIComponent(enrollment.id), csrf, {
         method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, status }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       await loadFollowupEnrollments(sequence);
       if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Follow-up enrollment " + status + ".");
