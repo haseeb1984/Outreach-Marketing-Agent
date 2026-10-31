@@ -17,7 +17,7 @@ Never put these values in source control, browser code, URLs, logs, or user-visi
 - `POST /api/v1/billing/paddle/webhook`: verifies `Paddle-Signature` over the exact raw body with HMAC-SHA256 and a bounded timestamp window before processing supported subscription lifecycle events. Configure this exact HTTPS URL as a Paddle notification destination.
 - `GET /api/v1/billing/entitlements`: existing authenticated, read-only status endpoint.
 
-Subscribe the notification destination to at least `subscription.created`, `subscription.updated`, `subscription.activated`, `subscription.resumed`, `subscription.paused`, `subscription.past_due`, and `subscription.canceled`. Paddle propagates transaction custom data to the subscription, which is how the signed event is linked to the server-created workspace checkout.
+Subscribe the notification destination to at least `subscription.created`, `subscription.updated`, `subscription.trialing`, `subscription.activated`, `subscription.resumed`, `subscription.paused`, `subscription.past_due`, and `subscription.canceled`. Paddle propagates transaction custom data to the subscription, which is how the signed event is linked to the server-created workspace checkout.
 
 ## Safety properties and remaining release gates
 
