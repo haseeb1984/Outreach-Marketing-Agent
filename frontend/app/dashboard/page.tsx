@@ -759,16 +759,23 @@ export default function DashboardPage() {
 
   async function loadWhatsAppSavedViews() {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++whatsappMutationSequenceRef.current;
     try {
       const result = await api<{ items: WhatsAppSavedView[] }>(
-        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(workspaceId), csrf,
+        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf,
       );
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSavedViews(result.items || []);
-    } catch (err) { setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded."); }
+    } catch (err) {
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded.");
+    }
   }
 
   async function saveWhatsAppCurrentView() {
     if (!workspaceId || !csrf || !whatsappSavedViewName.trim()) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++whatsappMutationSequenceRef.current;
     const filters: WhatsAppSavedView["filters"] = {};
     if (whatsappFilterStatus) filters.inbox_status = whatsappFilterStatus;
     if (whatsappFilterPriority) filters.priority = whatsappFilterPriority;
@@ -779,56 +786,70 @@ export default function DashboardPage() {
     setWhatsappInboxBusy(true); setError("");
     try {
       const saved = await api<WhatsAppSavedView>(
-        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf, { method: "POST", body: JSON.stringify({ name: whatsappSavedViewName.trim(), filters }) },
       );
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSavedViews(items => [...items.filter(item => item.id !== saved.id && item.name.toLowerCase() !== saved.name.toLowerCase()), saved]);
       setWhatsappSelectedSavedView(saved.id); setWhatsappSavedViewName("");
       setNotice("Inbox view saved to your workspace account.");
-    } catch (err) { setError(err instanceof Error ? err.message : "Inbox view could not be saved."); }
-    finally { setWhatsappInboxBusy(false); }
+    } catch (err) {
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Inbox view could not be saved.");
+    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
   }
 
   async function applyWhatsAppSavedView(viewId: string) {
-    setWhatsappSelectedSavedView(viewId);
     const view = whatsappSavedViews.find(item => item.id === viewId);
-    if (!view) return;
+    if (!view || !workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++whatsappMutationSequenceRef.current;
+    setWhatsappSelectedSavedView(viewId);
     setWhatsappFilterStatus(view.filters.inbox_status || "");
     setWhatsappFilterPriority(view.filters.priority || "");
     setWhatsappFilterSearch(view.filters.search || "");
     setWhatsappFilterAssignee(view.filters.assigned_to_me ? "me" : view.filters.unassigned ? "unassigned" : view.filters.assigned_to_user_id ? "user:"+view.filters.assigned_to_user_id : "all");
-    const params = new URLSearchParams({ workspace_id: workspaceId, limit: "50" });
+    const params = new URLSearchParams({ workspace_id: requestedWorkspaceId, limit: "50" });
     if (view.filters.inbox_status) params.set("inbox_status", view.filters.inbox_status);
     if (view.filters.priority) params.set("priority", view.filters.priority);
     if (view.filters.search) params.set("search", view.filters.search);
     if (view.filters.assigned_to_me) params.set("assigned_to_me", "true");
     if (view.filters.unassigned) params.set("unassigned", "true");
     if (view.filters.assigned_to_user_id) params.set("assigned_to_user_id", view.filters.assigned_to_user_id);
-    if (!workspaceId || !csrf) return;
     setWhatsappInboxBusy(true);
     try {
       const result = await api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?"+params.toString(),csrf);
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappConversations(result.items || []);
       await loadWhatsAppSLA();
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setSelectedWhatsAppBulkIds([]);
-    } catch (err) { setError(err instanceof Error ? err.message : "Saved inbox view could not be applied."); }
-    finally { setWhatsappInboxBusy(false); }
+    } catch (err) {
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Saved inbox view could not be applied.");
+    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
   }
 
   async function deleteWhatsAppSavedView(viewId: string) {
     if (!workspaceId || !csrf || !window.confirm("Delete this saved inbox view?")) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++whatsappMutationSequenceRef.current;
+    setWhatsappInboxBusy(true); setError("");
     try {
       await api<{ deleted: boolean }>(
-        "/api/v1/integrations/whatsapp/inbox/saved-views/"+encodeURIComponent(viewId)+"?workspace_id="+encodeURIComponent(workspaceId),
+        "/api/v1/integrations/whatsapp/inbox/saved-views/"+encodeURIComponent(viewId)+"?workspace_id="+encodeURIComponent(requestedWorkspaceId),
         csrf,{method:"DELETE"},
       );
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSavedViews(items=>items.filter(item=>item.id!==viewId));
       if (whatsappSelectedSavedView===viewId) setWhatsappSelectedSavedView("");
-    } catch (err) { setError(err instanceof Error ? err.message : "Saved view could not be deleted."); }
+    } catch (err) {
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Saved view could not be deleted.");
+    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
   }
 
   async function applyWhatsAppBulkUpdate() {
     if (!workspaceId || !csrf || !selectedWhatsAppBulkIds.length) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++whatsappMutationSequenceRef.current;
     const patch: Record<string, string | null> = {};
     if (whatsappBulkAssignee !== "__unchanged__") patch.assigned_to_user_id = whatsappBulkAssignee || null;
     if (whatsappBulkStatus) patch.inbox_status = whatsappBulkStatus;
@@ -837,31 +858,38 @@ export default function DashboardPage() {
     setWhatsappInboxBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ updated_count: number; items: WhatsAppConversation[] }>(
-        "/api/v1/integrations/whatsapp/inbox/conversations/bulk-update?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/integrations/whatsapp/inbox/conversations/bulk-update?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf, { method: "POST", body: JSON.stringify({ conversation_ids: selectedWhatsAppBulkIds, ...patch }) },
       );
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       const byId = new Map(result.items.map(item => [item.id, item]));
       setWhatsappConversations(items => items.map(item => byId.has(item.id) ? { ...item, ...byId.get(item.id)! } : item));
       setSelectedWhatsAppBulkIds([]);
       setWhatsappBulkAssignee("__unchanged__"); setWhatsappBulkStatus(""); setWhatsappBulkPriority("");
       setNotice(result.updated_count + " WhatsApp conversations updated.");
-    } catch (err) { setError(err instanceof Error ? err.message : "Bulk conversation update failed."); }
-    finally { setWhatsappInboxBusy(false); }
+    } catch (err) {
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Bulk conversation update failed.");
+    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
   }
 
   async function addWhatsAppInternalNote() {
     if (!workspaceId || !csrf || !selectedWhatsAppConversation || !whatsappNoteDraft.trim()) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedConversationId = selectedWhatsAppConversation;
+    const requestedSequence = ++whatsappMutationSequenceRef.current;
     setWhatsappInboxBusy(true); setError(""); setNotice("");
     try {
       const note = await api<WhatsAppInternalNote>(
-        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(selectedWhatsAppConversation) +
-        "/notes?workspace_id=" + encodeURIComponent(workspaceId), csrf,
+        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(requestedConversationId) +
+        "/notes?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf,
         { method: "POST", body: JSON.stringify({ body: whatsappNoteDraft.trim() }) },
       );
+      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId || requestedConversationId !== selectedWhatsAppConversation) return;
       setWhatsappNotes(items => [...items, note]); setWhatsappNoteDraft("");
       setNotice("Internal note added. It was not sent to the WhatsApp contact.");
-    } catch (err) { setError(err instanceof Error ? err.message : "Internal note could not be saved."); }
-    finally { setWhatsappInboxBusy(false); }
+    } catch (err) {
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId && requestedConversationId === selectedWhatsAppConversation) setError(err instanceof Error ? err.message : "Internal note could not be saved.");
+    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
   }
 
   async function openWhatsAppConversation(conversation: WhatsAppConversation) {
