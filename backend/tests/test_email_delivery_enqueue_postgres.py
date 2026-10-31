@@ -11,6 +11,8 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import asyncpg
+
+from app.db.migrations import apply_migrations
 import pytest
 
 from app.services.delivery_store import DeliveryStore
@@ -35,15 +37,7 @@ async def _exercise_email_enqueue_lifecycle() -> None:
 
     connection = await asyncpg.connect(database_url)
     try:
-        await connection.execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations "
-            "(version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())"
-        )
-        migrations = Path(__file__).resolve().parents[1] / "migrations"
-        migration_files = sorted(migrations.glob("[0-9][0-9][0-9]_*.sql"))
-        assert migration_files, "repository migration directory must not be empty"
-        for migration_path in migration_files:
-            await connection.execute(migration_path.read_text(encoding="utf-8"))
+        await apply_migrations(database_url)
 
         await connection.execute("INSERT INTO workspaces (id) VALUES ($1),($2)", workspace_id, other_workspace_id)
         for actor, suffix in ((actor_id, "a"), (other_actor_id, "b")):
