@@ -112,6 +112,9 @@ export default function DashboardPage() {
   const [whatsappFilterSearch, setWhatsappFilterSearch] = useState("");
   const [whatsappFilterAssignee, setWhatsappFilterAssignee] = useState("all");
   const [whatsappSavedViews, setWhatsappSavedViews] = useState<WhatsAppSavedView[]>([]);
+  const [whatsappSLAWarningMinutes, setWhatsappSLAWarningMinutes] = useState(15);
+  const [whatsappSLABreachMinutes, setWhatsappSLABreachMinutes] = useState(60);
+  const [whatsappSLASummary, setWhatsappSLASummary] = useState({ overdue: 0, at_risk: 0, within_sla: 0 });
   const [whatsappSavedViewName, setWhatsappSavedViewName] = useState("");
   const [whatsappSelectedSavedView, setWhatsappSelectedSavedView] = useState("");
   const [selectedWhatsAppBulkIds, setSelectedWhatsAppBulkIds] = useState<string[]>([]);
@@ -656,6 +659,7 @@ export default function DashboardPage() {
     try {
       const result = await api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?"+params.toString(),csrf);
       setWhatsappConversations(result.items || []);
+      await loadWhatsAppSLA();
       setSelectedWhatsAppBulkIds([]);
     } catch (err) { setError(err instanceof Error ? err.message : "Saved inbox view could not be applied."); }
     finally { setWhatsappInboxBusy(false); }
@@ -1390,6 +1394,36 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function loadWhatsAppSLA() {
+    if (!workspaceId || !csrf) return;
+    try {
+      const [policy, summary] = await Promise.all([
+        api<{warning_minutes:number;breach_minutes:number}>("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(workspaceId),csrf),
+        api<{overdue:number;at_risk:number;within_sla:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(workspaceId),csrf),
+      ]);
+      setWhatsappSLAWarningMinutes(policy.warning_minutes);
+      setWhatsappSLABreachMinutes(policy.breach_minutes);
+      setWhatsappSLASummary(summary);
+    } catch { /* SLA metadata remains unavailable without blocking inbox use. */ }
+  }
+
+  async function saveWhatsAppSLAPolicy() {
+    if (!workspaceId || !csrf || whatsappSLABreachMinutes <= whatsappSLAWarningMinutes) {
+      setError("SLA breach threshold must be greater than the warning threshold.");
+      return;
+    }
+    setWhatsappInboxBusy(true); setError("");
+    try {
+      await api("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(workspaceId),csrf,{
+        method:"PUT",body:JSON.stringify({warning_minutes:whatsappSLAWarningMinutes,breach_minutes:whatsappSLABreachMinutes}),
+      });
+      setNotice("WhatsApp first-response SLA policy saved.");
+      await loadWhatsAppSLA();
+      await applyWhatsAppInboxFilters();
+    } catch(err) { setError(err instanceof Error ? err.message : "Could not save WhatsApp SLA policy."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
   async function applyWhatsAppInboxFilters() {
     if (!workspaceId || !csrf) return;
     setWhatsappInboxBusy(true);
@@ -2057,6 +2091,15 @@ export default function DashboardPage() {
                     <button className="button" type="button" disabled={whatsappInboxBusy} onClick={applyWhatsAppInboxFilters}>Apply filters</button>
                     <button className="button secondary" type="button" disabled={whatsappInboxBusy} onClick={clearWhatsAppInboxFilters}>Clear</button>
                   </div>
+                </div>
+                <div className="stack" style={{border:"1px solid var(--border)",borderRadius:"0.75rem",padding:"0.75rem",marginBottom:"0.75rem"}}>
+                  <strong>First-response SLA</strong>
+                  <span className="fine">Overdue: {whatsappSLASummary.overdue} · At risk: {whatsappSLASummary.at_risk} · Within SLA: {whatsappSLASummary.within_sla}</span>
+                  {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="grid grid-2">
+                    <label>Warning after (minutes)<input className="input" type="number" min="1" max="1440" value={whatsappSLAWarningMinutes} onChange={event=>setWhatsappSLAWarningMinutes(Number(event.target.value))}/></label>
+                    <label>Overdue after (minutes)<input className="input" type="number" min="2" max="10080" value={whatsappSLABreachMinutes} onChange={event=>setWhatsappSLABreachMinutes(Number(event.target.value))}/></label>
+                    <button className="button secondary" type="button" disabled={whatsappInboxBusy || whatsappSLABreachMinutes<=whatsappSLAWarningMinutes} onClick={saveWhatsAppSLAPolicy}>Save SLA policy</button>
+                  </div>}
                 </div>
                 {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="stack" style={{border:"1px solid var(--border)",borderRadius:"0.75rem",padding:"0.75rem",marginBottom:"0.75rem"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
