@@ -78,8 +78,8 @@ class CampaignStore:
             data = dict(row)
             if data.get("stage") == "do_not_contact":
                 raise ValueError("contact_suppressed")
-            if data.get("stage") == "replied":
-                raise ValueError("contact_replied")
+            if data.get("stage") in {"replied", "converted", "disqualified"}:
+                raise ValueError("contact_no_longer_eligible")
             if channel == "email":
                 if not data.get("contact_email"):
                     raise ValueError("prospect_email_required")
@@ -131,8 +131,8 @@ class CampaignStore:
                 p = dict(prospect)
                 if p.get("stage") == "do_not_contact":
                     raise ValueError("contact_suppressed")
-                if p.get("stage") == "replied":
-                    raise ValueError("contact_replied")
+                if p.get("stage") in {"replied", "converted", "disqualified"}:
+                    raise ValueError("contact_no_longer_eligible")
                 controls = await conn.fetchrow("SELECT * FROM outreach_contact_controls WHERE workspace_id=$1 AND prospect_id=$2", workspace_id, prospect_id)
                 if channel == "email":
                     if not p.get("contact_email"):
@@ -267,8 +267,8 @@ class CampaignStore:
                     raise ValueError("campaign_paused")
                 if current["stage"] == "do_not_contact":
                     raise ValueError("contact_suppressed")
-                if current["stage"] == "replied":
-                    raise ValueError("contact_replied")
+                if current["stage"] in {"replied", "converted", "disqualified"}:
+                    raise ValueError("contact_no_longer_eligible")
                 if current["channel"] == "email":
                     if not current["contact_email"]:
                         raise ValueError("prospect_email_required")
