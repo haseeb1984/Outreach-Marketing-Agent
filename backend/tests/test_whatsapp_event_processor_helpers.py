@@ -138,3 +138,13 @@ def test_phone_mapping_requires_exactly_one_workspace_prospect():
     assert _unique_prospect_id([]) is None
     assert _unique_prospect_id([{"id": prospect_id}, {"id": uuid4()}]) is None
     assert _unique_prospect_id([{}]) is None
+
+
+def test_event_processor_uses_safe_prospect_id_after_unique_mapping():
+    import inspect
+    from app.services import whatsapp_event_processor
+
+    source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
+    assert 'prospect["id"]' not in source
+    assert "if prospect_id:" in source
+    assert "workspace_id, account_id, prospect_id," in source
