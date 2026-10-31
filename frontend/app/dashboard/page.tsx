@@ -439,6 +439,7 @@ export default function DashboardPage() {
         setWorkspaces(result.items || []);
         setWorkspaceName(result.items?.[0]?.name || "");
         const first = result.items?.[0]?.id || "";
+        workspaceIdRef.current = first;
         setWorkspaceId(first);
         if (first) await loadWorkspaceData(first, session.csrf_token);
         const sessionList = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", session.csrf_token);
@@ -581,6 +582,7 @@ export default function DashboardPage() {
       const switchSequence = ++workspaceSwitchSequenceRef.current;
       resetWorkspaceScopedState();
       setWorkspaces(current => [...current, { id: created.workspace_id, name: created.name, role: created.role }]);
+      workspaceIdRef.current = created.workspace_id;
       setWorkspaceId(created.workspace_id);
       setWorkspaceName(created.name);
       setNewWorkspaceName("");
@@ -809,11 +811,11 @@ export default function DashboardPage() {
       const result = await api<{ items: WhatsAppSavedView[] }>(
         "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(requestedWorkspaceId), token,
       );
-      if (requestedSequence !== whatsappSavedViewsSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
+      if (requestedSequence !== whatsappSavedViewsSequenceRef.current || requestedWorkspaceId !== workspaceIdRef.current) return;
       setWhatsappSavedViews(result.items || []);
       setWhatsappSavedViewsUnavailable(false);
     } catch (err) {
-      if (requestedSequence === whatsappSavedViewsSequenceRef.current && requestedWorkspaceId === workspaceId) {
+      if (requestedSequence === whatsappSavedViewsSequenceRef.current && requestedWorkspaceId === workspaceIdRef.current) {
         setWhatsappSavedViewsUnavailable(true);
         setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded.");
       }
@@ -1839,13 +1841,13 @@ export default function DashboardPage() {
         api<{warning_minutes:number;breach_minutes:number}>("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(requestedWorkspaceId),token),
         api<{overdue:number;at_risk:number;within_sla:number;paused:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(requestedWorkspaceId),token),
       ]);
-      if (requestedSequence !== whatsappSLALoadSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
+      if (requestedSequence !== whatsappSLALoadSequenceRef.current || requestedWorkspaceId !== workspaceIdRef.current) return;
       setWhatsappSLAWarningMinutes(policy.warning_minutes);
       setWhatsappSLABreachMinutes(policy.breach_minutes);
       setWhatsappSLASummary(summary);
       setWhatsappSLAUnavailable(false);
     } catch {
-      if (requestedSequence === whatsappSLALoadSequenceRef.current && requestedWorkspaceId === workspaceId) setWhatsappSLAUnavailable(true);
+      if (requestedSequence === whatsappSLALoadSequenceRef.current && requestedWorkspaceId === workspaceIdRef.current) setWhatsappSLAUnavailable(true);
     }
   }
 
@@ -2290,7 +2292,7 @@ export default function DashboardPage() {
       </nav>}
       {loading ? <section className="card" aria-live="polite">Loading secure workspace data…</section> : <>
         {!workspaces.length && <section className="card" role="status"><h2>Start with a workspace</h2><p>Create a workspace below to keep prospects, campaigns, approvals and provider connections organized in one secure place.</p></section>}
-        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; const switchSequence=++workspaceSwitchSequenceRef.current; resetWorkspaceScopedState(); setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); setLoading(Boolean(id)); try { if (id) await refresh(id, csrf); } finally { if (workspaceSwitchSequenceRef.current===switchSequence) setLoading(false); } }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
+        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; const switchSequence=++workspaceSwitchSequenceRef.current; resetWorkspaceScopedState(); workspaceIdRef.current=id; setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); setLoading(Boolean(id)); try { if (id) await refresh(id, csrf); } finally { if (workspaceSwitchSequenceRef.current===switchSequence) setLoading(false); } }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
           <form onSubmit={createWorkspace}><div className="field"><label htmlFor="new-workspace-name">Create another workspace</label><input id="new-workspace-name" required maxLength={160} value={newWorkspaceName} onChange={e=>setNewWorkspaceName(e.target.value)} placeholder="Client or business workspace name" /></div><button className="button secondary" type="submit" disabled={busy || !csrf}>Create workspace</button></form>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
