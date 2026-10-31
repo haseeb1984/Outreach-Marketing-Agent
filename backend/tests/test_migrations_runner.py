@@ -98,6 +98,33 @@ def test_runner_skips_migrations_already_in_the_ledger(
     assert connection.closed
 
 
+def test_sql_splitter_preserves_dollar_quoted_function_bodies_and_comments():
+    sql = """-- semicolon ; in comment
+CREATE TABLE sample (value TEXT DEFAULT ';');
+CREATE FUNCTION sample_fn() RETURNS trigger LANGUAGE plpgsql AS $body$
+BEGIN
+    NEW.value := 'a;b';
+    RETURN NEW;
+END;
+$body$;
+DO $
+BEGIN
+    PERFORM 1;
+END;
+$;
+"""
+    statements = migrations._split_sql_statements(sql)
+    assert len(statements) == 3
+    assert "DEFAULT ';'" in statements[0]
+    assert "$body$" in statements[1]
+    assert "PERFORM 1;" in statements[2]
+
+
+def test_sql_splitter_rejects_unterminated_dollar_quote():
+    with pytest.raises(ValueError, match="unterminated"):
+        migrations._split_sql_statements("DO $ BEGIN PERFORM 1;")
+
+
 def test_runner_rejects_missing_database_url_before_connecting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
