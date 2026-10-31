@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import UUID
 
@@ -248,7 +249,7 @@ class FollowupStore:
                            VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'pending_approval',$9)
                            RETURNING id""",
                         row["workspace_id"], row["campaign_id"], row["prospect_id"], row["channel"],
-                        subject, body, row["evidence_url"], row["verified_facts"] or "[]", row["created_by"],
+                        subject, body, row["evidence_url"], json.dumps(row["verified_facts"] or []), row["created_by"],
                     )
                     await conn.execute(
                         """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type,note)
