@@ -290,7 +290,17 @@ class FollowupStore:
             rows = await conn.fetch(
                 """SELECT e.id,e.workspace_id,e.sequence_id,e.prospect_id,e.current_step,e.status,
                           e.next_run_at,e.paused_next_run_at,e.pause_reason,e.current_draft_id,e.last_delivery_id,
-                          e.last_whatsapp_delivery_id,e.last_error_code,e.created_at,e.updated_at,p.name AS prospect_name,p.company
+                          e.last_whatsapp_delivery_id,e.last_error_code,e.created_at,e.updated_at,p.name AS prospect_name,p.company,
+                          COALESCE(
+                            (SELECT q.id FROM outreach_deliveries q
+                             WHERE q.workspace_id=e.workspace_id AND q.draft_id=e.current_draft_id
+                               AND q.channel='email' AND q.status IN ('failed','uncertain')
+                             ORDER BY q.queued_at DESC LIMIT 1),
+                            (SELECT w.id FROM whatsapp_outbound_deliveries w
+                             WHERE w.workspace_id=e.workspace_id AND w.draft_id=e.current_draft_id
+                               AND w.status IN ('failed','uncertain','delivered','read')
+                             ORDER BY w.queued_at DESC LIMIT 1)
+                          ) AS current_delivery_id
                    FROM outreach_followup_enrollments e
                    JOIN crm_prospects p ON p.id=e.prospect_id AND p.workspace_id=e.workspace_id
                    WHERE e.workspace_id=$1 AND e.sequence_id=$2
