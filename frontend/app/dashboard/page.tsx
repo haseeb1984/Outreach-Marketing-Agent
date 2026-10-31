@@ -885,6 +885,7 @@ export default function DashboardPage() {
       setWhatsappConversations(nextConversations);
       if (requestedDetailSequence === whatsappDetailSequenceRef.current && selectedWhatsAppConversation && !nextConversations.some(item => item.id === selectedWhatsAppConversation)) {
         whatsappDetailSequenceRef.current += 1;
+        whatsappInternalNoteSequenceRef.current += 1;
         setSelectedWhatsAppConversation("");
         setWhatsappMessages([]);
         setWhatsappNotes([]);
@@ -966,6 +967,9 @@ export default function DashboardPage() {
   async function openWhatsAppConversation(conversation: WhatsAppConversation) {
     if (!workspaceId || !csrf) return;
     const requestSequence = ++whatsappDetailSequenceRef.current;
+    // A pending note write belongs to the previous thread; invalidate it before
+    // switching the selected conversation and its detail panels.
+    whatsappInternalNoteSequenceRef.current += 1;
     const requestedWorkspaceId = workspaceId;
     const requestedCsrf = csrf;
     // Switch the visible conversation immediately so the previous contact's
@@ -1939,6 +1943,7 @@ export default function DashboardPage() {
     setWhatsappFilterAssignee("all");
     setWhatsappSelectedSavedView("");
     whatsappDetailSequenceRef.current += 1;
+    whatsappInternalNoteSequenceRef.current += 1;
     setSelectedWhatsAppConversation("");
     setWhatsappMessages([]);
     setWhatsappNotes([]);
