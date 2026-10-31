@@ -1068,6 +1068,7 @@ export default function DashboardPage() {
   async function updateProject(event: FormEvent<HTMLFormElement>, project: Project) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     const form = new FormData(event.currentTarget);
     const value = (key: string) => String(form.get(key) || "");
     setBusy(true); setError(""); setNotice("");
@@ -1075,7 +1076,7 @@ export default function DashboardPage() {
       await api("/api/v1/projects/" + encodeURIComponent(project.id), csrf, {
         method: "PATCH",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           name: value("name"),
           website_url: value("website_url") || null,
           business_model: value("business_model"),
@@ -1088,49 +1089,54 @@ export default function DashboardPage() {
           competitors: value("competitors").split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean).slice(0, 20),
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Project settings updated.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Project settings could not be updated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project settings could not be updated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function archiveProject(project: Project) {
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
     if (!window.confirm("Archive project " + project.name + "? It will disappear from the active project list; existing workspace records are not deleted.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/projects/" + encodeURIComponent(project.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/projects/" + encodeURIComponent(project.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Project archived. Its historical campaign and CRM records remain in the workspace.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Project could not be archived.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project could not be archived.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const competitors = projectCompetitors.split(String.fromCharCode(10)).map(item => item.trim()).filter(Boolean).slice(0, 20);
       await api("/api/v1/projects", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId, name: projectName, website_url: projectWebsite || null,
+          workspace_id: requestedWorkspaceId, name: projectName, website_url: projectWebsite || null,
           business_model: projectBusinessModel, target_market: projectMarket, language: projectLanguage,
           audience: projectAudience, offer: projectOffer, conversion_goal: projectGoal,
           brand_voice: projectBrandVoice, competitors,
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setProjectName(""); setProjectWebsite(""); setProjectBusinessModel(""); setProjectMarket("");
       setProjectLanguage(""); setProjectAudience(""); setProjectOffer(""); setProjectGoal("");
       setProjectBrandVoice(""); setProjectCompetitors("");
       setNotice("Project profile saved. Website ownership verification is a separate step.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Project could not be saved.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project could not be saved.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function updateCampaign(event: FormEvent<HTMLFormElement>, campaign: Campaign) {
