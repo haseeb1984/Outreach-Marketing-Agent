@@ -964,9 +964,11 @@ export default function DashboardPage() {
       setWhatsappActivity((activity.items || []).slice().reverse());
       setWhatsappNoteDraft("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
+      if (requestSequence === whatsappDetailSequenceRef.current && requestedWorkspaceId === workspaceId) {
+        setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
+      }
     } finally {
-      if (requestSequence === whatsappDetailSequenceRef.current) setWhatsappInboxBusy(false);
+      if (requestSequence === whatsappDetailSequenceRef.current && requestedWorkspaceId === workspaceId) setWhatsappInboxBusy(false);
     }
   }
 
