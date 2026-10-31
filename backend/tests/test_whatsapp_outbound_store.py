@@ -315,3 +315,17 @@ def test_expired_claims_become_uncertain_and_are_not_requeued():
     assert "worker_lease_expired" in query
     assert "status='queued'" not in query
     assert args == (10,)
+
+
+def test_outbound_route_replays_existing_queue_before_mutable_policy_checks():
+    from pathlib import Path
+
+    route_source = (
+        Path(__file__).resolve().parents[1] / "app" / "api" / "whatsapp_outbound_routes.py"
+    ).read_text(encoding="utf-8")
+    replay_position = route_source.index("find_by_idempotency_key(")
+    policy_position = route_source.index("WhatsAppSendPolicy(pool).evaluate(")
+    assert replay_position < policy_position
+    replay_block = route_source[replay_position:policy_position]
+    assert '"policy_reason": "idempotent_replay"' in replay_block
+    assert "whatsapp_idempotency_conflict" in replay_block
