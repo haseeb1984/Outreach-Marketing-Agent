@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 type Workspace = { id: string; name: string; role: string };
 type Prospect = { id: string; name: string; company: string; role?: string | null; contact_email?: string | null; contact_phone_e164?: string | null; website_url: string; evidence_url: string; fit_reason: string; stage: string; notes?: string | null; email_suppressed?: boolean; whatsapp_opt_in_documented?: boolean; whatsapp_opt_in_account_id?: string | null };
 type Campaign = { id: string; name: string; client_business: string; client_offer: string; target_customer_profile: string; status?: string };
+type FollowupSequence = { id: string; campaign_id: string; name: string; channel: string; status: string; enrollment_count?: number; active_count?: number; awaiting_approval_count?: number };
+type FollowupEnrollment = { id: string; prospect_id: string; prospect_name?: string; company?: string; current_step: number; status: string; next_run_at?: string | null; current_draft_id?: string | null; last_error_code?: string | null };
 type Draft = { id: string; subject?: string; body?: string; channel?: string; status: string; prospect_name?: string };
 type DraftEvent = { event_type: string; note?: string | null; actor_id?: string | null; created_at?: string | null };
 type Plan = { id: string; name: string; description: string; display_price: string | null; currency: string | null; billing_interval: string | null; checkout_available: boolean };
@@ -176,6 +178,13 @@ export default function DashboardPage() {
   const [auditBusy, setAuditBusy] = useState(false);
   const [growthReviewResult, setGrowthReviewResult] = useState<GrowthReviewResult | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [followupSequences, setFollowupSequences] = useState<FollowupSequence[]>([]);
+  const [followupEnrollments, setFollowupEnrollments] = useState<Record<string, FollowupEnrollment[]>>({});
+  const [followupName, setFollowupName] = useState("");
+  const [followupCampaignId, setFollowupCampaignId] = useState("");
+  const [followupChannel, setFollowupChannel] = useState("email");
+  const [followupStepsJson, setFollowupStepsJson] = useState("[{\\"delay_minutes\\":0,\\"subject_template\\":\\"Following up with {{first_name}}\\",\\"body_template\\":\\"Hi {{first_name}}, I wanted to follow up on my earlier note. Would a short conversation be useful?\\"},{\\"delay_minutes\\":4320,\\"subject_template\\":\\"One final note for {{company}}\\",\\"body_template\\":\\"Hi {{first_name}}, one final follow-up from me. If this is not relevant, no action is needed.\\"}]");
+  const [followupProspectId, setFollowupProspectId] = useState("");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [draftEvents, setDraftEvents] = useState<Record<string, DraftEvent[]>>({});
   const [draftHistoryOpen, setDraftHistoryOpen] = useState<Record<string, boolean>>({});
@@ -233,6 +242,9 @@ export default function DashboardPage() {
     ]);
     setProspects(p.items || []);
     setCampaigns(c.items || []);
+    const followupResult = await Promise.allSettled([api<{ items: FollowupSequence[] }>("/api/v1/follow-up-sequences?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    setFollowupSequences(followupResult[0].status === "fulfilled" ? (followupResult[0].value.items || []) : []);
+    setFollowupEnrollments({});
     setDrafts(d.items || []);
     setDeliveries(deliveryResult.items || []);
     const replyInboxResult = await Promise.allSettled([
@@ -970,6 +982,74 @@ export default function DashboardPage() {
       setNotice("Campaign created. No outreach has been sent.");
       await refresh(workspaceId, csrf);
     } catch (err) { setError(err instanceof Error ? err.message : "Campaign could not be created."); }
+    finally { setBusy(false); }
+  }
+
+  async function createFollowupSequence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !followupCampaignId) return;
+    let steps: unknown;
+    try { steps = JSON.parse(followupStepsJson); } catch { setError("Follow-up steps must be valid JSON."); return; }
+    if (!Array.isArray(steps) || !steps.length || steps.length > 10) { setError("Provide between 1 and 10 follow-up steps."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const created = await api<FollowupSequence>("/api/v1/campaigns/" + encodeURIComponent(followupCampaignId) + "/follow-up-sequences", csrf, {
+        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, name: followupName, channel: followupChannel, steps }),
+      });
+      await api("/api/v1/follow-up-sequences/" + encodeURIComponent(created.id), csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, status: "active" }),
+      });
+      setFollowupName(""); setNotice("Follow-up sequence created and activated. Each due step creates a draft for human approval; nothing is sent automatically.");
+      await refresh(workspaceId, csrf);
+    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up sequence could not be created."); }
+    finally { setBusy(false); }
+  }
+
+  async function enrollFollowup(sequence: FollowupSequence) {
+    if (!workspaceId || !csrf || !followupProspectId) { setError("Choose a prospect before enrolling."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enroll", csrf, {
+        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, prospect_id: followupProspectId }),
+      });
+      setNotice("Prospect enrolled. The scheduler will create the next follow-up draft when its delay is due.");
+      await loadFollowupEnrollments(sequence);
+      await refresh(workspaceId, csrf);
+    } catch (err) { setError(err instanceof Error ? err.message : "Prospect could not be enrolled."); }
+    finally { setBusy(false); }
+  }
+
+  async function loadFollowupEnrollments(sequence: FollowupSequence) {
+    if (!workspaceId || !csrf) return;
+    try {
+      const result = await api<{ items: FollowupEnrollment[] }>("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enrollments?workspace_id=" + encodeURIComponent(workspaceId), csrf);
+      setFollowupEnrollments(current => ({ ...current, [sequence.id]: result.items || [] }));
+    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up enrollments could not be loaded."); }
+  }
+
+  async function setFollowupStatus(sequence: FollowupSequence, status: string) {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id), csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, status }),
+      });
+      setNotice("Follow-up sequence " + status + ".");
+      await refresh(workspaceId, csrf);
+    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up sequence could not be updated."); }
+    finally { setBusy(false); }
+  }
+
+  async function setFollowupEnrollmentStatus(sequence: FollowupSequence, enrollment: FollowupEnrollment, status: string) {
+    if (!workspaceId || !csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/follow-up-enrollments/" + encodeURIComponent(enrollment.id), csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, status }),
+      });
+      await loadFollowupEnrollments(sequence);
+      setNotice("Follow-up enrollment " + status + ".");
+    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up enrollment could not be updated."); }
     finally { setBusy(false); }
   }
 
@@ -1977,6 +2057,27 @@ export default function DashboardPage() {
           </form></article>
         </section>
         <section className="section"><h2>Campaigns</h2><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span><details><summary>Edit campaign settings</summary><form onSubmit={event=>updateCampaign(event,c)}><div className="field"><label htmlFor={"campaign-edit-name-"+c.id}>Campaign name</label><input id={"campaign-edit-name-"+c.id} name="name" required maxLength={200} defaultValue={c.name} /></div><div className="field"><label htmlFor={"campaign-edit-business-"+c.id}>Business / client</label><input id={"campaign-edit-business-"+c.id} name="client_business" required maxLength={240} defaultValue={c.client_business} /></div><div className="field"><label htmlFor={"campaign-edit-offer-"+c.id}>Offer</label><textarea id={"campaign-edit-offer-"+c.id} name="client_offer" required maxLength={2000} defaultValue={c.client_offer} /></div><div className="field"><label htmlFor={"campaign-edit-audience-"+c.id}>Target customer profile</label><textarea id={"campaign-edit-audience-"+c.id} name="target_customer_profile" required maxLength={2000} defaultValue={c.target_customer_profile} /></div><div className="field"><label htmlFor={"campaign-edit-status-"+c.id}>Status</label><select id={"campaign-edit-status-"+c.id} name="status" defaultValue={c.status || "draft"}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></div><button className="button secondary" type="submit" disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Save campaign</button></form></details></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div></section>
+        <section className="section" aria-labelledby="followups-title">
+          <h2 id="followups-title">Campaign follow-up sequences</h2>
+          <p className="fine">Build timed email or WhatsApp follow-ups. When a step is due, the scheduler creates a draft for review. Every step still requires approval and a separate queue action; this automation never sends without those gates.</p>
+          <article className="card">
+            <h3>Create a follow-up sequence</h3>
+            <form onSubmit={createFollowupSequence}>
+              <div className="field"><label htmlFor="followup-campaign">Campaign</label><select id="followup-campaign" required value={followupCampaignId} onChange={event=>setFollowupCampaignId(event.target.value)}><option value="">Choose an active campaign</option>{campaigns.filter(c=>c.status==="active").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <div className="field"><label htmlFor="followup-name">Sequence name</label><input id="followup-name" required maxLength={200} value={followupName} onChange={event=>setFollowupName(event.target.value)} placeholder="Three-touch follow-up" /></div>
+              <div className="field"><label htmlFor="followup-channel">Channel</label><select id="followup-channel" value={followupChannel} onChange={event=>setFollowupChannel(event.target.value)}><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></div>
+              <div className="field"><label htmlFor="followup-steps">Steps (JSON; 1–10 steps)</label><textarea id="followup-steps" rows={8} maxLength={30000} value={followupStepsJson} onChange={event=>setFollowupStepsJson(event.target.value)} /><p className="fine">Allowed placeholders: {{'{{first_name}}'}}, {{'{{company}}'}}, {{'{{business}}'}}, {{'{{offer}}'}}. Delay is minutes after enrollment for step 1, then after the previous confirmed delivery. Email steps require a subject template.</p></div>
+              <button className="button" type="submit" disabled={busy || !workspaceId || !csrf || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") || !campaigns.some(c=>c.id===followupCampaignId && c.status==="active")}>Create and activate sequence</button>
+            </form>
+          </article>
+          <div className="cards">{followupSequences.length ? followupSequences.map(sequence=><article className="card" key={sequence.id}>
+            <h3>{sequence.name}</h3><p className="fine">{sequence.channel.toUpperCase()} · {sequence.status} · {sequence.enrollment_count || 0} enrolled · {sequence.active_count || 0} active · {sequence.awaiting_approval_count || 0} awaiting approval</p>
+            <div className="actions"><button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupStatus(sequence,sequence.status==="active"?"paused":"active")}>{sequence.status==="active"?"Pause sequence":"Activate / resume"}</button><button className="button secondary" type="button" disabled={busy} onClick={()=>loadFollowupEnrollments(sequence)}>View enrollments</button></div>
+            <div className="field"><label htmlFor={"followup-prospect-"+sequence.id}>Enroll prospect</label><select id={"followup-prospect-"+sequence.id} value={followupProspectId} onChange={event=>setFollowupProspectId(event.target.value)}><option value="">Choose prospect</option>{prospects.map(prospect=><option key={prospect.id} value={prospect.id}>{prospect.name} · {prospect.company}</option>)}</select></div>
+            <button className="button secondary" type="button" disabled={busy || !followupProspectId || sequence.status!=="active" || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>enrollFollowup(sequence)}>Enroll prospect</button>
+            {followupEnrollments[sequence.id] && <div><h4>Enrollments</h4>{followupEnrollments[sequence.id].length ? followupEnrollments[sequence.id].map(enrollment=><div key={enrollment.id} style={{borderTop:"1px solid var(--border)",padding:"0.65rem 0"}}><strong>{enrollment.prospect_name || enrollment.company || enrollment.prospect_id}</strong><p className="fine">Step {enrollment.current_step} · {enrollment.status}{enrollment.next_run_at?" · next " + new Date(enrollment.next_run_at).toLocaleString():""}{enrollment.last_error_code?" · " + enrollment.last_error_code:""}</p>{["active","awaiting_approval"].includes(enrollment.status) && <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupEnrollmentStatus(sequence,enrollment,"paused")}>Pause prospect</button>}{enrollment.status==="paused" && <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupEnrollmentStatus(sequence,enrollment,"active")}>Resume prospect</button>}</div>) : <p className="fine">No enrollments yet.</p>}</div>}
+          </article>) : <article className="card"><p>No follow-up sequences yet. Create one under an active campaign.</p></article>}</div>
+        </section>
         <section className="section" aria-labelledby="website-audit-title"><h2 id="website-audit-title">Website growth audit</h2>
           <article className="card">
             <p className="fine">Read-only crawl for websites you own or are authorized to audit. Workspace admin verification is required before scanning a domain.</p>
