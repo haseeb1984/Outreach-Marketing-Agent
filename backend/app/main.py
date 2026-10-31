@@ -137,6 +137,7 @@ from app.api.meta_whatsapp_webhook_routes import router as meta_whatsapp_webhook
 from app.api.whatsapp_account_routes import router as whatsapp_account_router
 from app.api.whatsapp_inbox_routes import router as whatsapp_inbox_router
 from app.api.whatsapp_outbound_routes import router as whatsapp_outbound_router
+from app.api.followup_routes import router as followup_router
 
 app.include_router(auth_router)
 app.include_router(prospect_router)
@@ -166,6 +167,7 @@ app.include_router(meta_whatsapp_webhook_router)
 app.include_router(whatsapp_account_router)
 app.include_router(whatsapp_inbox_router)
 app.include_router(whatsapp_outbound_router)
+app.include_router(followup_router)
 
 PUBLIC_PAGES = [
     ("/", "Outreach Marketing Agent"),
@@ -297,6 +299,9 @@ async def readiness() -> Response:
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='language_code')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='lease_token')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='lease_expires_at')
+                      AND to_regclass('public.outreach_followup_sequences') IS NOT NULL
+                      AND to_regclass('public.outreach_followup_steps') IS NOT NULL
+                      AND to_regclass('public.outreach_followup_enrollments') IS NOT NULL
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
@@ -346,7 +351,8 @@ async def readiness() -> Response:
                             '045_whatsapp_conversation_activity.sql',
                             '046_whatsapp_inbox_saved_views.sql',
                             '047_whatsapp_inbox_sla_policies.sql',
-                            '048_whatsapp_inbox_sla_pause_resume.sql'
+                            '048_whatsapp_inbox_sla_pause_resume.sql',
+                             '049_campaign_followup_sequences.sql'
                           )) = 48
                      AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversations') IS NOT NULL"""
