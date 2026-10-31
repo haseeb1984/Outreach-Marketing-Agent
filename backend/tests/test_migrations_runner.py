@@ -99,30 +99,26 @@ def test_runner_skips_migrations_already_in_the_ledger(
 
 
 def test_sql_splitter_preserves_dollar_quoted_function_bodies_and_comments():
-    sql = """-- semicolon ; in comment
-CREATE TABLE sample (value TEXT DEFAULT ';');
-CREATE FUNCTION sample_fn() RETURNS trigger LANGUAGE plpgsql AS $body$
-BEGIN
-    NEW.value := 'a;b';
-    RETURN NEW;
-END;
-$body$;
-DO $
-BEGIN
-    PERFORM 1;
-END;
-$;
-"""
+    dollar = "$" + "$"
+    tagged = "$body$"
+    sql = (
+        "-- semicolon ; in comment\\n"
+        "CREATE TABLE sample (value TEXT DEFAULT ';');\\n"
+        "CREATE FUNCTION sample_fn() RETURNS trigger LANGUAGE plpgsql AS " + tagged + "\\n"
+        "BEGIN\\n    NEW.value := 'a;b';\\n    RETURN NEW;\\nEND;\\n"
+        + tagged + ";\\n"
+        "DO " + dollar + "\\nBEGIN\\n    PERFORM 1;\\nEND;\\n" + dollar + ";\\n"
+    )
     statements = migrations._split_sql_statements(sql)
     assert len(statements) == 3
     assert "DEFAULT ';'" in statements[0]
-    assert "$body$" in statements[1]
+    assert tagged in statements[1]
     assert "PERFORM 1;" in statements[2]
 
 
 def test_sql_splitter_rejects_unterminated_dollar_quote():
     with pytest.raises(ValueError, match="unterminated"):
-        migrations._split_sql_statements("DO $ BEGIN PERFORM 1;")
+        migrations._split_sql_statements("DO " + "$" + "$" + " BEGIN PERFORM 1;")
 
 
 def test_runner_rejects_missing_database_url_before_connecting(
