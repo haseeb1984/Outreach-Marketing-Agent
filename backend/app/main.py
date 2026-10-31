@@ -353,7 +353,7 @@ async def readiness() -> Response:
                             '047_whatsapp_inbox_sla_policies.sql',
                             '048_whatsapp_inbox_sla_pause_resume.sql',
                              '049_campaign_followup_sequences.sql'
-                          )) = 48
+                          )) = 49
                      AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversations') IS NOT NULL"""
             )
