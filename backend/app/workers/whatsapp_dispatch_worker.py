@@ -281,6 +281,7 @@ async def process_claimed_delivery(
                 workspace_id=workspace_id,
                 draft_id=UUID(str(delivery["draft_id"])),
                 delivery_id=delivery_id,
+                channel="whatsapp",
             )
         except Exception:
             logger.error("WhatsApp follow-up advancement failed; operator reconciliation required")
