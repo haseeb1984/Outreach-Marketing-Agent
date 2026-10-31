@@ -305,7 +305,7 @@ async def update_whatsapp_inbox_sla_policy(
                      updated_by=EXCLUDED.updated_by,updated_at=now()
                    RETURNING warning_minutes,breach_minutes,updated_at""",
                 workspace_id, payload.warning_minutes, payload.breach_minutes,
-                str(session["user_id"]),
+                UUID(str(session["user_id"])),
             )
         return _serialize(dict(row))
     except Exception:
