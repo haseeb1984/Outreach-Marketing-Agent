@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 from typing import Any, Mapping
 import json
 import re
@@ -40,31 +41,35 @@ class BillingLifecycleStore:
     async def apply_verified_event(self, event: VerifiedBillingEvent) -> dict[str, str]:
         """Deduplicate an already-verified event and apply only newer snapshots."""
         self._validate(event)
-        entitlements_json = json.dumps(dict(event.entitlements), separators=(",", ":"))
+        entitlements_json = json.dumps(dict(event.entitlements), separators=(",", ":"), sort_keys=True, allow_nan=False)
+        event_fingerprint = self._event_fingerprint(event)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 inserted = await conn.fetchrow(
                     """INSERT INTO billing_provider_events
                        (provider,provider_event_id,workspace_id,provider_subscription_id,
-                        event_created_at,outcome)
-                       VALUES ($1,$2,$3,$4,$5,'stale')
+                        event_created_at,outcome,event_fingerprint)
+                       VALUES ($1,$2,$3,$4,$5,'stale',$6)
                        ON CONFLICT (provider,provider_event_id) DO NOTHING
                        RETURNING id""",
                     event.provider, event.event_id, event.workspace_id,
-                    event.provider_subscription_id, event.event_created_at,
+                    event.provider_subscription_id, event.event_created_at, event_fingerprint,
                 )
                 if inserted is None:
                     # Provider event IDs are the idempotency key. Do not silently
                     # acknowledge an ID collision that points at a different tenant,
                     # subscription, or event timestamp.
                     prior_event = await conn.fetchrow(
-                        """SELECT workspace_id,provider_subscription_id,event_created_at
+                        """SELECT workspace_id,provider_subscription_id,event_created_at,event_fingerprint
                            FROM billing_provider_events
                            WHERE provider=$1 AND provider_event_id=$2 FOR UPDATE""",
                         event.provider, event.event_id,
                     )
                     if prior_event is None or not self._same_event_identity(prior_event, event):
                         raise ValueError("billing_event_identity_conflict")
+                    if (prior_event["event_fingerprint"] is not None
+                            and prior_event["event_fingerprint"] != event_fingerprint):
+                        raise ValueError("billing_event_payload_conflict")
                     return {"outcome": "duplicate"}
 
                 current = await conn.fetchrow(
@@ -267,6 +272,25 @@ class BillingLifecycleStore:
                  or invoice_number is None
                  or prior["invoice_number"] == invoice_number)
         )
+
+    @staticmethod
+    def _event_fingerprint(event: VerifiedBillingEvent) -> str:
+        """Hash the normalized verified snapshot to prevent event-ID payload mutation."""
+        payload = {
+            "provider": event.provider,
+            "event_id": event.event_id,
+            "workspace_id": event.workspace_id,
+            "provider_customer_id": event.provider_customer_id,
+            "provider_subscription_id": event.provider_subscription_id,
+            "plan_slug": event.plan_slug,
+            "event_created_at": event.event_created_at.isoformat(),
+            "subscription_status": event.subscription_status,
+            "period_starts_at": event.period_starts_at.isoformat(),
+            "period_ends_at": event.period_ends_at.isoformat(),
+            "entitlements": dict(event.entitlements),
+        }
+        canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _same_event_identity(prior: Mapping[str, Any], event: VerifiedBillingEvent) -> bool:
