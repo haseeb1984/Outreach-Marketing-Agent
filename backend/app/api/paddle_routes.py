@@ -375,11 +375,17 @@ async def paddle_webhook(request: Request):
         raise HTTPException(status_code=400, detail="invalid_webhook_payload")
 
     event_type = payload.get("event_type")
-    if event_type in {"transaction.completed", "transaction.payment_failed", "transaction.past_due"}:
+    if event_type in {"transaction.completed", "transaction.payment_failed", "transaction.past_due", "transaction.updated"}:
         data = payload.get("data")
         if not isinstance(data, dict):
             raise HTTPException(status_code=400, detail="invalid_transaction_event")
         transaction_id, subscription_id = data.get("id"), data.get("subscription_id")
+        # Paddle emits transaction.updated after processing to enrich the transaction
+        # (notably with invoice_number). Only fold it into this ledger when its
+        # status is one of the financial states this product persists; draft/ready/
+        # billed/canceled updates must not be misrepresented as paid or past due.
+        if event_type == "transaction.updated" and data.get("status") not in {"completed", "past_due"}:
+            return {"received": True, "outcome": "ignored"}
         custom_data = data.get("custom_data")
         workspace_id = custom_data.get("workspace_id") if isinstance(custom_data, dict) else None
         pool = getattr(request.app.state, "db_pool", None)
@@ -401,7 +407,12 @@ async def paddle_webhook(request: Request):
                 event_id=payload["event_id"], event_created_at=occurred_at,
                 transaction_id=transaction_id, workspace_id=workspace_id,
                 subscription_id=subscription_id, invoice_number=data.get("invoice_number"),
-                status=("completed" if event_type == "transaction.completed" else "past_due" if event_type == "transaction.past_due" else "payment_failed"),
+                status=(
+                    "completed" if event_type == "transaction.completed"
+                    else "past_due" if event_type == "transaction.past_due"
+                    else "payment_failed" if event_type == "transaction.payment_failed"
+                    else data["status"]
+                ),
                 currency_code=data.get("currency_code"), total_minor=total_minor)
         except HTTPException:
             raise
