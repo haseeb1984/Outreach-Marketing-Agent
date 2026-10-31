@@ -15,9 +15,10 @@ concurrency:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 4
     steps:
-      - name: Dispatch due email deliveries
+      - name: Validate scheduler configuration
+        id: validate
         env:
           BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -26,31 +27,77 @@ jobs:
           test -n "$BACKEND_BASE_URL" || { echo "BACKEND_BASE_URL secret is required"; exit 1; }
           test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is required"; exit 1; }
           case "$BACKEND_BASE_URL" in https://*) ;; *) echo "BACKEND_BASE_URL must use HTTPS"; exit 1 ;; esac
-          curl --fail-with-body --silent --show-error \
+          python - <<'PY'
+          import os
+          import sys
+          if len(os.environ["CRON_SECRET"].encode("utf-8")) < 32:
+              print("CRON_SECRET must contain at least 32 bytes.", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+      - name: Dispatch due email deliveries
+        id: email_delivery
+        if: steps.validate.outcome == 'success'
+        continue-on-error: true
+        env:
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 45 \
             --request POST \
             --header "Authorization: Bearer $CRON_SECRET" \
             --header "Content-Type: application/json" \
             "$BACKEND_BASE_URL/api/v1/deliveries/process-due?limit=25"
 
       - name: Process verified Meta WhatsApp webhook events
+        id: inbox_events
+        if: steps.validate.outcome == 'success'
+        continue-on-error: true
         env:
           BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \
+          curl --fail-with-body --silent --show-error --max-time 45 \
             --request POST \
             --header "Authorization: Bearer $CRON_SECRET" \
             --header "Content-Type: application/json" \
             "$BACKEND_BASE_URL/api/v1/integrations/whatsapp/inbox/webhook-events/process-pending-system?batch_size=50"
+
       - name: Dispatch approved WhatsApp queue (only when explicitly enabled server-side)
+        id: whatsapp_dispatch
+        if: steps.validate.outcome == 'success'
+        continue-on-error: true
         env:
           BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \
+          curl --fail-with-body --silent --show-error --max-time 45 \
             --request POST \
             --header "Authorization: Bearer $CRON_SECRET" \
             --header "Content-Type: application/json" \
             "$BACKEND_BASE_URL/api/v1/integrations/whatsapp/outbound/process-queued?limit=10"
+
+      - name: Report scheduler task results
+        if: always()
+        env:
+          VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
+          EMAIL_OUTCOME: ${{ steps.email_delivery.outcome }}
+          INBOX_OUTCOME: ${{ steps.inbox_events.outcome }}
+          WHATSAPP_OUTCOME: ${{ steps.whatsapp_dispatch.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for task in "configuration:$VALIDATE_OUTCOME" "email:$EMAIL_OUTCOME" "whatsapp_inbox:$INBOX_OUTCOME" "whatsapp_dispatch:$WHATSAPP_OUTCOME"; do
+            name="${task%%:*}"
+            outcome="${task#*:}"
+            if [ "$outcome" = "success" ]; then
+              echo "$name: success"
+            else
+              echo "::error::$name: ${outcome:-unknown}"
+              failed=1
+            fi
+          done
+          exit "$failed"
