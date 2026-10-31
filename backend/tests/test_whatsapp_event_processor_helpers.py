@@ -116,3 +116,14 @@ def test_workspace_scoped_worker_only_claims_active_accounts_for_that_workspace(
     assert "EXISTS" in captured["query"]
     assert "a.workspace_id=$1 AND a.status='active'" in captured["query"]
     assert captured["args"] == ("workspace-a",)
+
+
+def test_failed_status_rank_is_lower_than_positive_delivery_evidence():
+    import inspect
+    from app.services import whatsapp_event_processor
+
+    source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
+    assert "WHEN 'sent' THEN 1" in source
+    assert "WHEN 'failed' THEN 0" in source
+    assert "WHEN 'delivered' THEN 2" in source
+    assert "WHEN 'read' THEN 3" in source
