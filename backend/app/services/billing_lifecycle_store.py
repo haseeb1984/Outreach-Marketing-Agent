@@ -253,7 +253,7 @@ class BillingLifecycleStore:
     def _validate_transaction(*, event_id: str, event_created_at: datetime, transaction_id: str,
         workspace_id: str, subscription_id: str | None, invoice_number: str | None,
         status: str, currency_code: str | None, total_minor: str | None) -> None:
-        if status not in {"completed", "payment_failed"}:
+        if status not in {"completed", "payment_failed", "past_due"}:
             raise ValueError("invalid_transaction_status")
         for name, value, maximum in (("event_id", event_id, 300),
             ("transaction_id", transaction_id, 120), ("workspace_id", workspace_id, 200)):
