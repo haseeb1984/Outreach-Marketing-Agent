@@ -2012,10 +2012,11 @@ export default function DashboardPage() {
 
   async function startCheckout() {
     if (!workspaceId || !csrf || !selectedPlan) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ checkout_url: string }>("/api/v1/billing/paddle/checkout", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, plan_id: selectedPlan }),
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, plan_id: selectedPlan }),
       });
       const checkoutUrl = new URL(result.checkout_url);
       const allowedCheckoutHosts = new Set(["sandbox-checkout.paddle.com", "checkout.paddle.com"]);
@@ -2024,16 +2025,17 @@ export default function DashboardPage() {
       }
       window.location.assign(checkoutUrl.toString());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout could not be started.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Checkout could not be started.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function openBillingPortal() {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ portal_url: string }>(
-        "/api/v1/billing/paddle/portal?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/billing/paddle/portal?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf,
         { method: "POST", body: "{}" },
       );
@@ -2044,44 +2046,49 @@ export default function DashboardPage() {
       }
       window.location.assign(portalUrl.toString());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Billing portal could not be opened.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Billing portal could not be opened.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function refreshIntegrationStatus() {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setIntegrationBusy(true);
     try {
       const result = await api<{ email: { configuration_complete: boolean; missing_fields: string[]; connection_tested?: boolean }; whatsapp: { configuration_complete: boolean; missing_fields: string[]; live_send_enabled: boolean; reason?: string }; ai_outreach?: { configured: boolean; model?: string | null; generation_mode: string; human_approval_required: boolean; automatic_send: boolean } }>(
-        "/api/v1/integrations/status?workspace_id=" + encodeURIComponent(workspaceId), csrf
+        "/api/v1/integrations/status?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setIntegrationStatus(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Provider status could not be loaded.");
-    } finally { setIntegrationBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Provider status could not be loaded.");
+    } finally { if (requestedWorkspaceId === workspaceId) setIntegrationBusy(false); }
   }
 
   async function testSmtpConnection() {
     if (!workspaceId || !csrf || !window.confirm("Test the configured SMTP TLS connection and authentication? No email will be sent.")) return;
+    const requestedWorkspaceId = workspaceId;
     setIntegrationBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/integrations/smtp/test?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
+      await api("/api/v1/integrations/smtp/test?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "POST" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("SMTP TLS connection and authentication succeeded. No email was sent.");
       await refreshIntegrationStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "SMTP connection test failed.");
-    } finally { setIntegrationBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "SMTP connection test failed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setIntegrationBusy(false); }
   }
 
   async function enqueueGrowthScanNow() {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/workspace-jobs/website-growth-scan", csrf, {
         method: "POST",
         headers: { "Idempotency-Key": "dashboard-scan-" + window.crypto.randomUUID() },
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           start_url: scheduleStartUrl.trim(),
           business_type: scheduleBusinessType.trim(),
           target_market: scheduleTargetMarket.trim(),
@@ -2090,38 +2097,44 @@ export default function DashboardPage() {
           max_depth: 2,
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("One-off website-growth scan queued. The scan worker must be running before a report can finish.");
+      if (requestedWorkspaceId !== workspaceId) return;
       setGrowthJobReport(null);
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Website-growth scan could not be queued.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Website-growth scan could not be queued.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function openGrowthJobReport(job: GrowthJob) {
     if (!workspaceId || !csrf || job.status !== "succeeded") return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const detail = await api<{ id: string; status: string; result: unknown }>(
-        "/api/v1/workspace-jobs/" + encodeURIComponent(job.id) + "?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/workspace-jobs/" + encodeURIComponent(job.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf,
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setGrowthJobReport({ id: detail.id, result: detail.result });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Completed website-growth report loaded.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Growth scan report could not be loaded.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Growth scan report could not be loaded.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createGrowthSchedule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/workspace-growth-schedules", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           start_url: scheduleStartUrl.trim(),
           business_type: scheduleBusinessType.trim(),
           target_market: scheduleTargetMarket.trim(),
@@ -2131,39 +2144,45 @@ export default function DashboardPage() {
           max_depth: 2,
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Recurring website-growth scan scheduled. The scheduler and scan worker must both be running for scans to execute.");
+      if (requestedWorkspaceId !== workspaceId) return;
       setScheduleStartUrl(""); setScheduleBusinessType(""); setScheduleTargetMarket(""); setScheduleQueries("");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Growth schedule could not be created.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Growth schedule could not be created.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function changeGrowthScheduleStatus(schedule: GrowthSchedule, status: "active" | "paused") {
     if (!workspaceId || !csrf || schedule.status === status) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/workspace-growth-schedules/" + encodeURIComponent(schedule.id), csrf, {
         method: "PATCH",
-        body: JSON.stringify({ workspace_id: workspaceId, status }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, status }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(status === "paused" ? "Recurring scan paused. Already queued jobs are not cancelled." : "Recurring scan resumed.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Growth schedule could not be updated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Growth schedule could not be updated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function deleteGrowthSchedule(schedule: GrowthSchedule) {
     if (!workspaceId || !csrf || !window.confirm("Delete this recurring scan schedule? Jobs already queued will remain in the queue.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/workspace-growth-schedules/" + encodeURIComponent(schedule.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/workspace-growth-schedules/" + encodeURIComponent(schedule.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Recurring scan schedule deleted.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Growth schedule could not be deleted.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Growth schedule could not be deleted.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function deleteAccount() {
@@ -2171,6 +2190,7 @@ export default function DashboardPage() {
     if (!window.confirm("Permanently delete this account? Your sign-in will stop and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
     const confirmation = window.prompt("Type DELETE MY ACCOUNT to confirm this irreversible action.");
     if (confirmation !== "DELETE MY ACCOUNT") {
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Account deletion was not confirmed; no changes were made.");
       return;
     }
@@ -2180,8 +2200,8 @@ export default function DashboardPage() {
       router.replace("/login?account_deleted=1");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Account deletion could not be completed.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Account deletion could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function logout() {
