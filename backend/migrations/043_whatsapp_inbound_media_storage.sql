@@ -6,6 +6,15 @@ ALTER TABLE whatsapp_inbound_messages
     ADD COLUMN IF NOT EXISTS media_size BIGINT,
     ADD COLUMN IF NOT EXISTS media_downloaded_at TIMESTAMPTZ;
 
-ALTER TABLE whatsapp_inbound_messages
-    ADD CONSTRAINT whatsapp_inbound_media_size_positive
-    CHECK (media_size IS NULL OR media_size BETWEEN 1 AND 16777216);
+DO $
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid='whatsapp_inbound_messages'::regclass
+          AND conname='whatsapp_inbound_media_size_positive'
+    ) THEN
+        ALTER TABLE whatsapp_inbound_messages
+            ADD CONSTRAINT whatsapp_inbound_media_size_positive
+            CHECK (media_size IS NULL OR media_size BETWEEN 1 AND 16777216);
+    END IF;
+END $;
