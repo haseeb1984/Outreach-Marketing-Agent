@@ -23,7 +23,7 @@ class EmailProviderEventStore:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 delivery = await conn.fetchrow(
-                    """SELECT q.id,q.workspace_id,q.provider_status,q.provider_status_at,
+                    """SELECT q.id,q.draft_id,q.workspace_id,q.provider_status,q.provider_status_at,
                               p.id AS prospect_id,p.contact_email,p.created_by
                        FROM outreach_deliveries q
                        JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
@@ -57,6 +57,35 @@ class EmailProviderEventStore:
                          AND (provider_status_at IS NULL OR provider_status_at <= $3)""",
                     delivery_id, event_type, occurred_at, delivery["workspace_id"],
                 )
+
+                if event_type == "delivered":
+                    # A provider's signed delivered callback is authoritative. Advance the
+                    # matching follow-up once; current_draft_id is the idempotency guard.
+                    await conn.execute(
+                        """WITH target AS (
+                               SELECT e.id,e.sequence_id,e.current_step
+                               FROM outreach_followup_enrollments e
+                               WHERE e.workspace_id=$1 AND e.current_draft_id=$2
+                                 AND e.status IN ('awaiting_approval','paused')
+                                 AND (e.status='awaiting_approval' OR e.pause_reason IN ('delivery_failed','delivery_uncertain'))
+                               FOR UPDATE
+                           ), next_step AS (
+                               SELECT t.id,t.current_step+1 AS step_number,
+                                      st.delay_minutes
+                               FROM target t
+                               LEFT JOIN outreach_followup_steps st
+                                 ON st.sequence_id=t.sequence_id AND st.step_number=t.current_step+1
+                           )
+                           UPDATE outreach_followup_enrollments e
+                           SET status=CASE WHEN n.delay_minutes IS NULL THEN 'completed' ELSE 'active' END,
+                               current_step=CASE WHEN n.delay_minutes IS NULL THEN e.current_step ELSE n.step_number END,
+                               current_draft_id=NULL,last_delivery_id=$3,
+                               next_run_at=CASE WHEN n.delay_minutes IS NULL THEN NULL
+                                                ELSE now()+(n.delay_minutes * interval '1 minute') END,
+                               paused_next_run_at=NULL,pause_reason=NULL,last_error_code=NULL,updated_at=now()
+                           FROM next_step n WHERE e.id=n.id""",
+                        delivery["workspace_id"], delivery["draft_id"], delivery_id,
+                    )
 
                 suppression_reason = {
                     "bounced": "hard_bounce",
