@@ -28,7 +28,7 @@ class DeliveryStore:
                 if d["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not d["contact_email"]: raise ValueError("prospect_email_required")
                 if d["email_suppressed"] or d["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
-                if d["stage"] == "replied": raise ValueError("contact_replied")
+                if d["stage"] in {"replied", "converted", "disqualified"}: raise ValueError("contact_no_longer_eligible")
                 if email_account_id is not None:
                     account = await c.fetchrow("SELECT status FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2 FOR SHARE", email_account_id, workspace_id)
                     if account is None or account["status"] != "active": raise LookupError("email_account_not_available")
@@ -112,7 +112,7 @@ class DeliveryStore:
                 if r["archived_at"] is not None: raise ValueError("prospect_archived")
                 if not r["contact_email"]: raise ValueError("prospect_email_required")
                 if r["email_suppressed"] or r["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
-                if r["stage"] == "replied": raise ValueError("contact_replied")
+                if r["stage"] in {"replied", "converted", "disqualified"}: raise ValueError("contact_no_longer_eligible")
                 if r["email_account_id"] is not None and r["email_account_status"] != "active":
                     raise ValueError("email_account_not_available")
                 await c.execute("""UPDATE outreach_deliveries SET status='processing',attempt_count=attempt_count+1,
