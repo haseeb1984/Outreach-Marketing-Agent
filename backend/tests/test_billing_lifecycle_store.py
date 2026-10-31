@@ -144,3 +144,29 @@ def test_transaction_optional_identifiers_and_currency_are_strictly_validated(fi
     with pytest.raises(ValueError, match=error):
         # Exercise the same boundary validation without opening a database connection.
         BillingLifecycleStore._validate_transaction(**values)
+
+def test_duplicate_transaction_event_must_match_original_workspace_and_transaction_identity():
+    prior = {
+        "transaction_id": "txn_123",
+        "event_created_at": NOW,
+        "workspace_id": "workspace-1",
+        "provider_subscription_id": "sub_123",
+        "invoice_number": "INV-123",
+    }
+    kwargs = {
+        "transaction_id": "txn_123",
+        "event_created_at": NOW,
+        "workspace_id": "workspace-1",
+        "subscription_id": "sub_123",
+        "invoice_number": "INV-123",
+    }
+    assert BillingLifecycleStore._same_transaction_event_identity(prior, **kwargs)
+    assert not BillingLifecycleStore._same_transaction_event_identity(
+        {**prior, "workspace_id": "workspace-2"}, **kwargs
+    )
+    assert not BillingLifecycleStore._same_transaction_event_identity(
+        {**prior, "transaction_id": "txn_other"}, **kwargs
+    )
+    assert not BillingLifecycleStore._same_transaction_event_identity(
+        {**prior, "invoice_number": "INV-OTHER"}, **kwargs
+    )
