@@ -1287,40 +1287,46 @@ export default function DashboardPage() {
   async function createDomainChallenge(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !domainName.trim()) return;
+    const requestedWorkspaceId = workspaceId;
     setDomainBusy(true); setError(""); setNotice(""); setDomainChallenge(null);
     try {
       const result = await api<DomainChallenge>("/api/v1/domains/challenges", csrf, {
         method: "POST",
-        body: JSON.stringify({ workspace_id: workspaceId, domain: domainName.trim() }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, domain: domainName.trim() }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setDomainChallenge(result);
       setNotice("DNS record created. Publish the record exactly as shown, then verify it.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Domain challenge could not be created.");
-    } finally { setDomainBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Domain challenge could not be created.");
+    } finally { if (requestedWorkspaceId === workspaceId) setDomainBusy(false); }
   }
 
   async function verifyDomain() {
     if (!workspaceId || !csrf || !domainChallenge) return;
+    const requestedWorkspaceId = workspaceId;
     setDomainBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/domains/verify", csrf, {
         method: "POST",
-        body: JSON.stringify({ workspace_id: workspaceId, domain: domainChallenge.domain }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, domain: domainChallenge.domain }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setAuditUrl("https://" + domainChallenge.domain + "/");
       setDomainChallenge(null);
       setNotice("Domain verified. Run a bounded read-only audit on the verified host.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Domain verification could not be completed.");
-    } finally { setDomainBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Domain verification could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setDomainBusy(false); }
   }
 
   async function openSavedAudit(reportId: string) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setAuditBusy(true); setError(""); setNotice("");
     try {
-      const result = await api<{ report_id: string; workspace_id: string; start_url: string; status: string; created_at: string; report: WebsiteAudit["report"] & GrowthReviewReport }>("/api/v1/website-audits/" + encodeURIComponent(reportId) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf);
+      const result = await api<{ report_id: string; workspace_id: string; start_url: string; status: string; created_at: string; report: WebsiteAudit["report"] & GrowthReviewReport }>("/api/v1/website-audits/" + encodeURIComponent(reportId) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
       if (result.report.report_type === "website_growth_review") {
         setAuditReport(null);
         setGrowthReviewResult({
@@ -1337,56 +1343,62 @@ export default function DashboardPage() {
         setAuditReport(result as WebsiteAudit);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Saved website audit could not be opened.");
-    } finally { setAuditBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Saved website audit could not be opened.");
+    } finally { if (requestedWorkspaceId === workspaceId) setAuditBusy(false); }
   }
 
   async function runWebsiteAudit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !auditUrl.trim()) return;
+    const requestedWorkspaceId = workspaceId;
     setAuditBusy(true); setError(""); setNotice(""); setAuditReport(null);
     try {
       const result = await api<WebsiteAudit>("/api/v1/website-audits", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           start_url: auditUrl.trim(),
           max_pages: 5,
           idempotency_key: "site-audit-" + crypto.randomUUID(),
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
+      if (requestedWorkspaceId !== workspaceId) return;
       setAuditReport(result);
       setNotice(result.notice || "Read-only audit completed.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Website audit could not be completed.");
-    } finally { setAuditBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Website audit could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setAuditBusy(false); }
   }
 
   async function searchProspects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !researchQuery.trim()) return;
+    const requestedWorkspaceId = workspaceId;
     setResearchBusy(true); setError(""); setNotice(""); setResearchResults([]);
     try {
       const result = await api<{ items: ResearchResult[]; notice?: string }>("/api/v1/research/prospects/search", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           query: researchQuery.trim(),
           count: 10,
           idempotency_key: "research-" + crypto.randomUUID(),
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setResearchResults(result.items || []);
       setNotice(result.notice || "Research results loaded for human review.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Public-web research could not be completed.");
-    } finally { setResearchBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Public-web research could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setResearchBusy(false); }
   }
 
   async function runProjectGrowthReview(event: FormEvent<HTMLFormElement>, project: Project) {
     event.preventDefault();
     if (!workspaceId || !csrf || !project.website_url) return;
+    const requestedWorkspaceId = workspaceId;
     const form = new FormData(event.currentTarget);
     const targetQueries = String(form.get("target_queries") || "").split(/[\r\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!targetQueries.length) { setError("Enter at least one target search query."); return; }
@@ -1394,35 +1406,39 @@ export default function DashboardPage() {
     try {
       const result = await api<GrowthReviewResult>("/api/v1/website-audits/growth-review", csrf, {
         method: "POST",
-        body: JSON.stringify({ workspace_id: workspaceId, project_id: project.id, target_queries: targetQueries, max_pages: 8, idempotency_key: "growth-review-" + crypto.randomUUID() }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, project_id: project.id, target_queries: targetQueries, max_pages: 8, idempotency_key: "growth-review-" + crypto.randomUUID() }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setGrowthReviewResult(result);
       setNotice(result.notice);
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Website growth review could not be completed.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Website growth review could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createProspect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/prospects", csrf, { method: "POST", body: JSON.stringify({
-        workspace_id: workspaceId, name: prospectName, company: prospectCompany,
+        workspace_id: requestedWorkspaceId, name: prospectName, company: prospectCompany,
         contact_email: prospectEmail || null, contact_phone_e164: prospectPhone || null, website_url: prospectWebsite,
         evidence_url: evidenceUrl, fit_reason: fitReason, verified_facts: [],
       }) });
+      if (requestedWorkspaceId !== workspaceId) return;
       setProspectName(""); setProspectCompany(""); setProspectEmail(""); setProspectPhone(""); setProspectWebsite(""); setEvidenceUrl(""); setFitReason("");
       setNotice("Prospect saved with its evidence URL.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Prospect could not be saved."); }
-    finally { setBusy(false); }
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect could not be saved."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
 
   async function importProspectsCsv(event: React.ChangeEvent<HTMLInputElement>) {
+    const requestedWorkspaceId = workspaceId;
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file || !workspaceId || !csrf) return;
@@ -1430,14 +1446,15 @@ export default function DashboardPage() {
     setBusy(true); setError(""); setNotice("");
     try {
       const csvText = await file.text();
-      const result = await api<{ created: number; duplicates: number; invalid_count: number; invalid: Array<{row:number;reason:string}> }>("/api/v1/prospects/import.csv?workspace_id="+encodeURIComponent(workspaceId), csrf, {
+      const result = await api<{ created: number; duplicates: number; invalid_count: number; invalid: Array<{row:number;reason:string}> }>("/api/v1/prospects/import.csv?workspace_id="+encodeURIComponent(requestedWorkspaceId), csrf, {
         method: "POST", headers: { "Content-Type": "text/csv" }, body: csvText,
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("CSV import finished: "+result.created+" added, "+result.duplicates+" duplicate evidence rows skipped, "+result.invalid_count+" invalid rows skipped.");
       if (result.invalid.length) setError("Invalid CSV rows: "+result.invalid.map(item=>item.row).join(", "));
       await loadCrmPage(0);
-    } catch (err) { setError(err instanceof Error ? err.message : "CSV import could not be completed."); }
-    finally { setBusy(false); }
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "CSV import could not be completed."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function loadCrmPage(nextOffset: number) {
