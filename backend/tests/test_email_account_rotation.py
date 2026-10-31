@@ -35,6 +35,10 @@ class FakeConnection:
     async def transaction(self):
         yield
 
+    async def execute(self, query, *args):
+        self.query, self.args = query, args
+        return "UPDATE 0"
+
     async def fetchrow(self, query, *args):
         self.query, self.args = query, args
         return {
