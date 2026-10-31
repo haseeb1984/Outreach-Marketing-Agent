@@ -979,6 +979,8 @@ async def list_whatsapp_conversation_activity(
                 item["details"] = json.loads(item["details"])
             items.append(item)
         return {"items": items, "limit": limit, "has_more": has_more}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_activity_unavailable") from None
 
