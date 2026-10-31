@@ -183,3 +183,27 @@ def test_delivery_settlement_reports_quota_failure_without_undoing_delivery_succ
     ))
 
     assert result == (True, False)
+
+
+def test_email_retry_can_recover_a_reserved_preclaim_attempt_without_releasing_winner():
+ from app.api import delivery_routes
+ due_src=inspect.getsource(delivery_routes.process_due_deliveries)
+ send_src=inspect.getsource(delivery_routes.send_delivery)
+ assert 'reservation_replayed = reservation.get("reason") == "idempotent_replay"' in due_src
+ assert 'reservation.get("status") != "reserved"' in due_src
+ assert 'reservation.get("reason") == "idempotent_replay" and data is None' in due_src
+ assert 'if not reservation_replayed:' in send_src
+ assert 'reservation.get("status") == "consumed"' in send_src
+
+
+def test_stale_email_delivery_recovery_consumes_matching_reserved_quota_atomically():
+ from pathlib import Path
+ source=(Path(__file__).resolve().parents[1] / "app" / "services" / "delivery_store.py").read_text(encoding="utf-8")
+ start=source.index("    async def reconcile_stale_processing(")
+ end=source.index("    @staticmethod",start)
+ recovery=source[start:end]
+ assert "WITH stale AS" in recovery
+ assert "status='uncertain'" in recovery
+ assert "UPDATE feature_usage_reservations" in recovery
+ assert "'delivery-send:' || m.id::text" in recovery
+ assert "r.status='reserved'" in recovery
