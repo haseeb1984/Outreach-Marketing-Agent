@@ -383,7 +383,7 @@ export default function DashboardPage() {
     if (failedSections.length) setError("Some workspace sections could not load (" + failedSections.join(", ") + "). Other sections remain available; use Refresh to retry.");
     // Load secondary inbox controls with the selected workspace so saved views and SLA
     // thresholds are immediately available after first load and every workspace switch.
-    await Promise.all([loadWhatsAppSavedViews(), loadWhatsAppSLA()]);
+    await Promise.all([loadWhatsAppSavedViews(selectedId, token), loadWhatsAppSLA(selectedId, token)]);
   }, []);
 
   const refresh = useCallback(async (selectedId = workspaceId, token = csrf) => {
@@ -801,13 +801,13 @@ export default function DashboardPage() {
     finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
   }
 
-  async function loadWhatsAppSavedViews() {
-    if (!workspaceId || !csrf) return;
-    const requestedWorkspaceId = workspaceId;
+  async function loadWhatsAppSavedViews(selectedWorkspaceId = workspaceId, token = csrf) {
+    if (!selectedWorkspaceId || !token) return;
+    const requestedWorkspaceId = selectedWorkspaceId;
     const requestedSequence = ++whatsappSavedViewsSequenceRef.current;
     try {
       const result = await api<{ items: WhatsAppSavedView[] }>(
-        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf,
+        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(requestedWorkspaceId), token,
       );
       if (requestedSequence !== whatsappSavedViewsSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSavedViews(result.items || []);
@@ -1830,14 +1830,14 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setWhatsappInboxBusy(false); }
   }
 
-  async function loadWhatsAppSLA() {
-    if (!workspaceId || !csrf) return;
-    const requestedWorkspaceId = workspaceId;
+  async function loadWhatsAppSLA(selectedWorkspaceId = workspaceId, token = csrf) {
+    if (!selectedWorkspaceId || !token) return;
+    const requestedWorkspaceId = selectedWorkspaceId;
     const requestedSequence = ++whatsappSLALoadSequenceRef.current;
     try {
       const [policy, summary] = await Promise.all([
-        api<{warning_minutes:number;breach_minutes:number}>("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(requestedWorkspaceId),csrf),
-        api<{overdue:number;at_risk:number;within_sla:number;paused:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(requestedWorkspaceId),csrf),
+        api<{warning_minutes:number;breach_minutes:number}>("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(requestedWorkspaceId),token),
+        api<{overdue:number;at_risk:number;within_sla:number;paused:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(requestedWorkspaceId),token),
       ]);
       if (requestedSequence !== whatsappSLALoadSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSLAWarningMinutes(policy.warning_minutes);
