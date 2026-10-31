@@ -375,6 +375,9 @@ export default function DashboardPage() {
     if (webhookDeadLetterResult.status === "rejected") failedSections.push("webhook events");
     if (entitlementResults.some(result => result.status === "rejected")) failedSections.push("billing entitlements");
     if (failedSections.length) setError("Some workspace sections could not load (" + failedSections.join(", ") + "). Other sections remain available; use Refresh to retry.");
+    // Load secondary inbox controls with the selected workspace so saved views and SLA
+    // thresholds are immediately available after first load and every workspace switch.
+    await Promise.all([loadWhatsAppSavedViews(), loadWhatsAppSLA()]);
   }, []);
 
   const refresh = useCallback(async (selectedId = workspaceId, token = csrf) => {
