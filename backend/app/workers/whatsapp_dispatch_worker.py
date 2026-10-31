@@ -303,6 +303,8 @@ async def process_claimed_delivery(
         except Exception:
             await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason="followup_advancement_failed")
             logger.error("WhatsApp follow-up advancement failed; operator reconciliation required")
+    else:
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason="sent_state_persistence_lost")
     return "sent" if completed else "sent_lease_completion_lost"
 
 
