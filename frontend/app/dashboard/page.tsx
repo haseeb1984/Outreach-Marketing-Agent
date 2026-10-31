@@ -1203,7 +1203,7 @@ export default function DashboardPage() {
       setFollowupName(""); setNotice("Follow-up sequence created and activated. Each due step creates a draft for human approval; nothing is sent automatically.");
       await refresh(requestedWorkspaceId, csrf);
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up sequence could not be created."); }
-    finally { setBusy(false); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function enrollFollowup(sequence: FollowupSequence) {
@@ -1219,7 +1219,7 @@ export default function DashboardPage() {
       await loadFollowupEnrollments(sequence);
       await refresh(requestedWorkspaceId, csrf);
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect could not be enrolled."); }
-    finally { setBusy(false); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function loadFollowupEnrollments(sequence: FollowupSequence) {
@@ -1244,7 +1244,7 @@ export default function DashboardPage() {
       setNotice("Follow-up sequence " + status + ".");
       await refresh(requestedWorkspaceId, csrf);
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up sequence could not be updated."); }
-    finally { setBusy(false); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function setFollowupEnrollmentStatus(sequence: FollowupSequence, enrollment: FollowupEnrollment, status: string) {
@@ -1259,7 +1259,7 @@ export default function DashboardPage() {
       if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Follow-up enrollment " + status + ".");
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up enrollment could not be updated."); }
-    finally { setBusy(false); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function resolveFollowupDelivery(sequence: FollowupSequence, enrollment: FollowupEnrollment, outcome: "delivered" | "not_delivered") {
@@ -1281,7 +1281,7 @@ export default function DashboardPage() {
       if (requestedWorkspaceId !== workspaceId) return;
       setNotice(outcome === "delivered" ? "Provider-confirmed delivery recorded; the sequence advanced safely." : "Non-delivery recorded; the enrollment was stopped without retrying the old delivery.");
     } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Follow-up delivery resolution could not be completed."); }
-    finally { setBusy(false); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createDomainChallenge(event: FormEvent<HTMLFormElement>) {
