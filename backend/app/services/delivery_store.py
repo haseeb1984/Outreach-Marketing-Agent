@@ -140,12 +140,7 @@ class DeliveryStore:
                                    last_error_code=NULL,updated_at=now()
                                FROM outreach_deliveries d
                                LEFT JOIN outreach_followup_steps nxt
-                                 ON nxt.sequence_id=(SELECT sequence_id FROM outreach_followup_enrollments
-                                                     WHERE workspace_id=$2 AND current_draft_id=d.draft_id
-                                                       AND status='awaiting_approval' LIMIT 1)
-                                AND nxt.step_number=(SELECT current_step+1 FROM outreach_followup_enrollments
-                                                     WHERE workspace_id=$2 AND current_draft_id=d.draft_id
-                                                       AND status='awaiting_approval' LIMIT 1)
+                                 ON nxt.sequence_id=e.sequence_id AND nxt.step_number=e.current_step+1
                                WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
                                  AND e.current_draft_id=d.draft_id AND e.status='awaiting_approval'""",
                             delivery_id,workspace_id,
