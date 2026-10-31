@@ -5,7 +5,7 @@ ALTER TABLE whatsapp_conversations
     ADD COLUMN IF NOT EXISTS sla_paused_seconds INTEGER NOT NULL DEFAULT 0
       CHECK (sla_paused_seconds >= 0);
 
-DO $
+DO $migration$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
@@ -16,7 +16,7 @@ BEGIN
             ADD CONSTRAINT whatsapp_conversations_sla_pause_reason_check
             CHECK (sla_pause_reason IS NULL OR length(sla_pause_reason) BETWEEN 1 AND 500);
     END IF;
-END $;
+END $migration$;
 
 ALTER TABLE whatsapp_conversation_activity
     DROP CONSTRAINT IF EXISTS whatsapp_conversation_activity_event_type_check;
