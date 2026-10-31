@@ -207,3 +207,11 @@ def test_stale_email_delivery_recovery_consumes_matching_reserved_quota_atomical
  assert "UPDATE feature_usage_reservations" in recovery
  assert "'delivery-send:' || m.id::text" in recovery
  assert "r.status='reserved'" in recovery
+
+
+def test_concurrent_email_claim_loser_never_releases_the_winning_reservation():
+ from app.api import delivery_routes
+ due_src=inspect.getsource(delivery_routes.process_due_deliveries)
+ send_src=inspect.getsource(delivery_routes.send_delivery)
+ assert 'str(exc) != "delivery_not_queued"' in due_src
+ assert 'str(exc) != "delivery_not_queued"' in send_src
