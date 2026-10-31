@@ -978,21 +978,17 @@ export default function DashboardPage() {
     setWhatsappInboxBusy(true);
     setError("");
     try {
-      const result = await api<{ items: WhatsAppMessage[] }>(
-        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
-        "/messages?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=100",
-        requestedCsrf,
-      );
+      const conversationPath = "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id);
+      const [result, notes, activity] = await Promise.all([
+        api<{ items: WhatsAppMessage[] }>(conversationPath + "/messages?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=100", requestedCsrf),
+        api<{ items: WhatsAppInternalNote[] }>(conversationPath + "/notes?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50", requestedCsrf),
+        api<{ items: WhatsAppActivity[] }>(conversationPath + "/activity?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50", requestedCsrf),
+      ]);
       if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
+      // Commit the detail panels together so messages, notes and activity always
+      // belong to the same conversation snapshot.
       setWhatsappMessages((result.items || []).slice().reverse());
-      const notes = await api<{ items: WhatsAppInternalNote[] }>(
-        "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
-        "/notes?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50", requestedCsrf,
-      );
-      if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappNotes((notes.items || []).slice().reverse());
-      const activity = await api<{ items: WhatsAppActivity[] }>("/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) + "/activity?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50", requestedCsrf);
-      if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappActivity((activity.items || []).slice().reverse());
     } catch (err) {
       if (requestSequence === whatsappDetailSequenceRef.current && requestedWorkspaceId === workspaceId) {
