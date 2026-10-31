@@ -152,15 +152,21 @@ class BillingLifecycleStore:
             workspace_id=workspace_id, subscription_id=subscription_id, invoice_number=invoice_number,
             status=status, currency_code=currency_code, total_minor=total_minor,
         )
+        event_fingerprint = self._transaction_event_fingerprint(
+            event_id=event_id, event_created_at=event_created_at, transaction_id=transaction_id,
+            workspace_id=workspace_id, subscription_id=subscription_id, invoice_number=invoice_number,
+            status=status, currency_code=currency_code, total_minor=total_minor,
+        )
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 inserted = await conn.fetchrow(
-                    """INSERT INTO billing_transaction_events(provider,provider_event_id,transaction_id,event_created_at)
-                       VALUES ('paddle',$1,$2,$3) ON CONFLICT(provider,provider_event_id) DO NOTHING
-                       RETURNING provider_event_id""", event_id, transaction_id, event_created_at)
+                    """INSERT INTO billing_transaction_events
+                       (provider,provider_event_id,transaction_id,event_created_at,event_fingerprint)
+                       VALUES ('paddle',$1,$2,$3,$4) ON CONFLICT(provider,provider_event_id) DO NOTHING
+                       RETURNING provider_event_id""", event_id, transaction_id, event_created_at, event_fingerprint)
                 if inserted is None:
                     prior = await conn.fetchrow(
-                        """SELECT e.transaction_id,e.event_created_at,t.workspace_id,
+                        """SELECT e.transaction_id,e.event_created_at,e.event_fingerprint,t.workspace_id,
                                   t.provider_subscription_id,t.invoice_number
                            FROM billing_transaction_events e
                            LEFT JOIN billing_transactions t
@@ -173,6 +179,9 @@ class BillingLifecycleStore:
                         invoice_number=invoice_number,
                     ):
                         raise ValueError("billing_transaction_event_identity_conflict")
+                    if (prior["event_fingerprint"] is not None
+                            and prior["event_fingerprint"] != event_fingerprint):
+                        raise ValueError("billing_transaction_event_payload_conflict")
                     return {"outcome": "duplicate"}
                 row = await conn.fetchrow(
                     """INSERT INTO billing_transactions
@@ -210,6 +219,22 @@ class BillingLifecycleStore:
                         raise ValueError("billing_transaction_identity_conflict")
                     return {"outcome": "stale"}
                 return {"outcome": "applied"}
+
+    @staticmethod
+    def _transaction_event_fingerprint(*, event_id: str, event_created_at: datetime,
+        transaction_id: str, workspace_id: str, subscription_id: str | None,
+        invoice_number: str | None, status: str, currency_code: str | None,
+        total_minor: str | None) -> str:
+        """Hash the normalized verified transaction snapshot for event-ID replay safety."""
+        payload = {
+            "provider": "paddle", "event_id": event_id,
+            "event_created_at": event_created_at.isoformat(),
+            "transaction_id": transaction_id, "workspace_id": workspace_id,
+            "subscription_id": subscription_id, "invoice_number": invoice_number,
+            "status": status, "currency_code": currency_code, "total_minor": total_minor,
+        }
+        canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _validate_transaction(*, event_id: str, event_created_at: datetime, transaction_id: str,
