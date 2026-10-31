@@ -239,6 +239,7 @@ export default function DashboardPage() {
   const whatsappSLALoadSequenceRef = useRef(0);
   const whatsappDeadLetterLoadSequenceRef = useRef(0);
   const whatsappDeadLetterLoadLockRef = useRef(false);
+  const crmLoadSequenceRef = useRef(0);
   const whatsappBusyCountRef = useRef(0);
   const whatsappBusyEpochRef = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -263,6 +264,7 @@ export default function DashboardPage() {
 
   const loadWorkspaceData = useCallback(async (selectedId: string, token: string) => {
     if (!selectedId) return;
+    crmLoadSequenceRef.current += 1;
     whatsappDeadLetterLoadSequenceRef.current += 1;
     whatsappDeadLetterLoadLockRef.current = false;
     setWhatsappDeadLetterLoadingMore(false);
@@ -504,6 +506,7 @@ export default function DashboardPage() {
     whatsappSavedViewsSequenceRef.current += 1;
     whatsappSLAActionSequenceRef.current += 1;
     whatsappSLALoadSequenceRef.current += 1;
+    crmLoadSequenceRef.current += 1;
     setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setCrmOffset(0); setCrmTotal(0);
     setResearchQuery(""); setResearchResults([]); setResearchBusy(false);
     setDomainName(""); setDomainChallenge(null); setDomainBusy(false);
@@ -1571,17 +1574,21 @@ export default function DashboardPage() {
   async function loadCrmPage(nextOffset: number) {
     if (!workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
+    const requestedToken = csrf;
+    const requestedSequence = ++crmLoadSequenceRef.current;
     setBusy(true); setError("");
     try {
-      const params = new URLSearchParams({ workspace_id: requestedWorkspaceId, limit: String(crmPageSize), offset: String(nextOffset) });
+      const params = new URLSearchParams({ workspace_id: requestedWorkspaceId, limit: String(crmPageSize), offset: String(Math.max(0, nextOffset)) });
       if (prospectSearch.trim()) params.set("search", prospectSearch.trim());
       if (prospectStageFilter !== "all") params.set("stage", prospectStageFilter);
-      const result = await api<{ items: Prospect[]; total: number; offset: number }>("/api/v1/prospects?" + params.toString(), csrf);
-      if (requestedWorkspaceId !== workspaceId) return;
+      const result = await api<{ items: Prospect[]; total: number; offset: number }>("/api/v1/prospects?" + params.toString(), requestedToken);
+      if (requestedWorkspaceId !== workspaceId || requestedSequence !== crmLoadSequenceRef.current) return;
       setProspects(result.items || []); setCrmOffset(result.offset || 0); setCrmTotal(result.total || 0);
     } catch (err) {
-      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "CRM search could not be completed.");
-    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
+      if (requestedWorkspaceId === workspaceId && requestedSequence === crmLoadSequenceRef.current) setError(err instanceof Error ? err.message : "CRM search could not be completed.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId && requestedSequence === crmLoadSequenceRef.current) setBusy(false);
+    }
   }
 
   async function searchCrmProspects(event: FormEvent<HTMLFormElement>) {
