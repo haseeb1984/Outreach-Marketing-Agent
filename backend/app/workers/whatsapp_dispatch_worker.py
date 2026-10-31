@@ -274,6 +274,16 @@ async def process_claimed_delivery(
         workspace_id=workspace_id, reservation_id=reservation_id,
         outcome="sent", provider_message_id=message_id,
     )
+    if completed:
+        try:
+            from app.services.followup_store import FollowupStore
+            await FollowupStore(pool).advance_after_delivery(
+                workspace_id=workspace_id,
+                draft_id=UUID(str(delivery["draft_id"])),
+                delivery_id=delivery_id,
+            )
+        except Exception:
+            logger.error("WhatsApp follow-up advancement failed; operator reconciliation required")
     return "sent" if completed else "sent_lease_completion_lost"
 
 
