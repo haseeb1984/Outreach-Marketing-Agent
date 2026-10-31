@@ -135,3 +135,51 @@ def test_template_catalogue_rejects_non_member_workspace(monkeypatch):
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
     assert connection.fetchrow_calls == []
+
+
+class FakeActivityConnection:
+    def __init__(self, existence_results):
+        self.existence_results = iter(existence_results)
+
+    async def fetchval(self, query, *args):
+        return next(self.existence_results)
+
+    async def fetch(self, query, *args):
+        return []
+
+
+def test_whatsapp_activity_feed_preserves_not_found_response(monkeypatch):
+    connection = FakeActivityConnection([False])
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.auth_rate_limiter = FakeLimiter()
+        app.state.db_pool = FakePool(connection)
+        client.cookies.set("__Host-oma_session", "session-token")
+        response = client.get(
+            "/api/v1/integrations/whatsapp/inbox/conversations/"
+            "00000000-0000-0000-0000-000000000001/activity",
+            params={"workspace_id": "workspace-1"},
+        )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "whatsapp_conversation_not_found"
+
+
+def test_whatsapp_activity_feed_preserves_invalid_cursor_response(monkeypatch):
+    connection = FakeActivityConnection([True, False])
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.auth_rate_limiter = FakeLimiter()
+        app.state.db_pool = FakePool(connection)
+        client.cookies.set("__Host-oma_session", "session-token")
+        response = client.get(
+            "/api/v1/integrations/whatsapp/inbox/conversations/"
+            "00000000-0000-0000-0000-000000000001/activity",
+            params={
+                "workspace_id": "workspace-1",
+                "before_id": "00000000-0000-0000-0000-000000000002",
+            },
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_before_activity_id"
