@@ -222,3 +222,24 @@ def test_verified_transaction_event_fingerprint_covers_all_mutable_fields():
                          ("total_minor", "1001"), ("invoice_number", "INV-124"),
                          ("subscription_id", None), ("workspace_id", "workspace-2")):
         assert fingerprint != BillingLifecycleStore._transaction_event_fingerprint(**{**base, field: value})
+
+
+def test_subscription_fingerprint_normalizes_equivalent_timezone_offsets():
+    offset = timezone(timedelta(hours=5))
+    equivalent = event(
+        event_created_at=NOW.astimezone(offset),
+        period_starts_at=(NOW - timedelta(days=1)).astimezone(offset),
+        period_ends_at=(NOW + timedelta(days=29)).astimezone(offset),
+    )
+    assert BillingLifecycleStore._event_fingerprint(event()) == BillingLifecycleStore._event_fingerprint(equivalent)
+
+
+def test_transaction_fingerprint_normalizes_equivalent_timezone_offsets():
+    values = {
+        "event_id": "evt_tx_123", "event_created_at": NOW,
+        "transaction_id": "txn_123", "workspace_id": "workspace-1",
+        "subscription_id": "sub_123", "invoice_number": "INV-123",
+        "status": "completed", "currency_code": "USD", "total_minor": "1000",
+    }
+    equivalent = {**values, "event_created_at": NOW.astimezone(timezone(timedelta(hours=5)))}
+    assert BillingLifecycleStore._transaction_event_fingerprint(**values) == BillingLifecycleStore._transaction_event_fingerprint(**equivalent)
