@@ -30,6 +30,10 @@ class WhatsAppConversationBulkUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
 
 
+class WhatsAppConversationSLAPause(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class WhatsAppInboxSLAPolicyUpdate(BaseModel):
     warning_minutes: int = Field(default=15, ge=1, le=1440)
     breach_minutes: int = Field(default=60, ge=2, le=10080)
@@ -101,16 +105,24 @@ async def list_whatsapp_conversations(
                           m.received_at AS last_message_at,
                           inbound.received_at AS sla_started_at,
                           response.sent_at AS sla_first_response_at,
+                          c.sla_paused_at,
+                          c.sla_pause_reason,
                           CASE
                             WHEN c.inbox_status='resolved' THEN 'resolved'
                             WHEN inbound.received_at IS NULL THEN 'not_applicable'
                             WHEN response.sent_at IS NOT NULL THEN 'met'
-                            WHEN now() >= inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)) THEN 'overdue'
-                            WHEN now() >= inbound.received_at + make_interval(mins => COALESCE(policy.warning_minutes,15)) THEN 'at_risk'
+                            WHEN c.sla_paused_at IS NOT NULL THEN 'paused'
+                            WHEN now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0) +
+                              CASE WHEN c.sla_paused_at IS NOT NULL THEN EXTRACT(EPOCH FROM now()-c.sla_paused_at)::int ELSE 0 END) +
+                              make_interval(mins => COALESCE(policy.breach_minutes,60)) THEN 'overdue'
+                            WHEN now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
+                              make_interval(mins => COALESCE(policy.warning_minutes,15)) THEN 'at_risk'
                             ELSE 'within_sla'
                           END AS sla_state,
                           CASE WHEN inbound.received_at IS NOT NULL
-                            THEN inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60))
+                            THEN inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0) +
+                              CASE WHEN c.sla_paused_at IS NOT NULL THEN EXTRACT(EPOCH FROM now()-c.sla_paused_at)::int ELSE 0 END) +
+                              make_interval(mins => COALESCE(policy.breach_minutes,60))
                             ELSE NULL END AS sla_due_at
                    FROM whatsapp_conversations c
                    JOIN workspace_whatsapp_accounts a
@@ -159,6 +171,65 @@ async def list_whatsapp_conversations(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_list_unavailable") from None
+
+
+@router.post("/conversations/{conversation_id}/sla/pause")
+async def pause_whatsapp_conversation_sla(conversation_id: UUID, payload: WhatsAppConversationSLAPause,
+    request: Request, workspace_id: str = Query(min_length=1, max_length=200)) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="admin")
+    reason = payload.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="whatsapp_sla_pause_reason_required")
+    try:
+        async with _pool(request).acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE whatsapp_conversations SET sla_paused_at=now(),sla_pause_reason=$3,updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND sla_paused_at IS NULL AND inbox_status <> 'resolved'
+                       RETURNING id,sla_paused_at,sla_pause_reason""",
+                    conversation_id,workspace_id,reason)
+                if row is None:
+                    exists = await conn.fetchval("SELECT 1 FROM whatsapp_conversations WHERE id=$1 AND workspace_id=$2",conversation_id,workspace_id)
+                    if not exists: raise HTTPException(status_code=404,detail="whatsapp_conversation_not_found")
+                    raise HTTPException(status_code=409,detail="whatsapp_sla_not_pauseable")
+                await conn.execute(
+                    """INSERT INTO whatsapp_conversation_activity(workspace_id,conversation_id,actor_user_id,event_type,details)
+                       VALUES($1,$2,$3,'sla_paused',$4::jsonb)""",
+                    workspace_id,conversation_id,str(session["user_id"]),json.dumps({"reason":reason}))
+        return _serialize(dict(row))
+    except HTTPException: raise
+    except Exception: raise HTTPException(status_code=503,detail="whatsapp_sla_pause_unavailable") from None
+
+
+@router.post("/conversations/{conversation_id}/sla/resume")
+async def resume_whatsapp_conversation_sla(conversation_id: UUID, request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200)) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="admin")
+    try:
+        async with _pool(request).acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE whatsapp_conversations SET
+                         sla_paused_seconds=COALESCE(sla_paused_seconds,0)+GREATEST(0,EXTRACT(EPOCH FROM now()-sla_paused_at)::int),
+                         sla_paused_at=NULL,sla_pause_reason=NULL,updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND sla_paused_at IS NOT NULL
+                       RETURNING id,sla_paused_seconds,sla_paused_at""",
+                    conversation_id,workspace_id)
+                if row is None:
+                    exists = await conn.fetchval("SELECT 1 FROM whatsapp_conversations WHERE id=$1 AND workspace_id=$2",conversation_id,workspace_id)
+                    if not exists: raise HTTPException(status_code=404,detail="whatsapp_conversation_not_found")
+                    raise HTTPException(status_code=409,detail="whatsapp_sla_not_paused")
+                await conn.execute(
+                    """INSERT INTO whatsapp_conversation_activity(workspace_id,conversation_id,actor_user_id,event_type,details)
+                       VALUES($1,$2,$3,'sla_resumed',$4::jsonb)""",
+                    workspace_id,conversation_id,str(session["user_id"]),json.dumps({"total_paused_seconds":row["sla_paused_seconds"]}))
+        return _serialize(dict(row))
+    except HTTPException: raise
+    except Exception: raise HTTPException(status_code=503,detail="whatsapp_sla_resume_unavailable") from None
 
 
 @router.get("/sla/policy")
@@ -306,16 +377,18 @@ async def get_whatsapp_inbox_sla_summary(request: Request,
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT
-                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
-                    AND response.sent_at IS NULL AND now() >= inbound.received_at +
+                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL AND inbound.received_at IS NOT NULL
+                    AND response.sent_at IS NULL AND now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
                     make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS overdue,
-                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
-                    AND response.sent_at IS NULL AND now() >= inbound.received_at +
+                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL AND inbound.received_at IS NOT NULL
+                    AND response.sent_at IS NULL AND now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
                     make_interval(mins => COALESCE(policy.warning_minutes,15))
-                    AND now() < inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS at_risk,
-                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
-                    AND (response.sent_at IS NOT NULL OR now() < inbound.received_at +
-                    make_interval(mins => COALESCE(policy.warning_minutes,15))))::int AS within_sla
+                    AND now() < inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
+                    make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS at_risk,
+                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL AND inbound.received_at IS NOT NULL
+                    AND (response.sent_at IS NOT NULL OR now() < inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
+                    make_interval(mins => COALESCE(policy.warning_minutes,15))))::int AS within_sla,
+                  count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NOT NULL)::int AS paused
                 FROM whatsapp_conversations c
                 LEFT JOIN LATERAL (SELECT received_at FROM whatsapp_inbound_messages
                   WHERE conversation_id=c.id AND workspace_id=c.workspace_id
