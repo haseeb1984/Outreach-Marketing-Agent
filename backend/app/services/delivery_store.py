@@ -178,11 +178,11 @@ class DeliveryStore:
         return result.endswith(" 1")
 
     async def reconcile_stale_processing(self, *, workspace_id: str, older_than_seconds: int = 900, limit: int = 100) -> int:
-        """Move one workspace's abandoned sends to an operator-visible uncertain state.
+        """Mark abandoned sends uncertain and atomically consume their reserved quota.
 
-        Never automatically requeue a timed-out send: the provider may have accepted it
-        before the worker disappeared. A bounded tenant-scoped update avoids cross-workspace
-        changes and a large table-wide lock.
+        Never automatically requeue a timed-out send: SMTP may have accepted it
+        before the worker disappeared. The reservation key is deterministic per
+        delivery, so recovery can settle it without storing a second foreign key.
         """
         if not isinstance(workspace_id, str) or not workspace_id.strip() or len(workspace_id) > 200:
             raise ValueError("workspace_id_invalid")
@@ -191,7 +191,7 @@ class DeliveryStore:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
             raise ValueError("reconciliation_limit_out_of_range")
         async with self._pool.acquire() as c:
-            result = await c.execute(
+            recovered = await c.fetchval(
                 """WITH stale AS (
                        SELECT id
                        FROM outreach_deliveries
@@ -202,22 +202,27 @@ class DeliveryStore:
                        ORDER BY processing_at ASC, id
                        FOR UPDATE SKIP LOCKED
                        LIMIT $3
+                   ), marked AS (
+                       UPDATE outreach_deliveries AS q
+                       SET status='uncertain',
+                           error_code='worker_lost_outcome_unknown',
+                           updated_at=now()
+                       FROM stale
+                       WHERE q.id=stale.id AND q.workspace_id=$1 AND q.status='processing'
+                       RETURNING q.id,q.workspace_id
+                   ), settled AS (
+                       UPDATE feature_usage_reservations r
+                       SET status='consumed',updated_at=now()
+                       FROM marked m
+                       WHERE r.workspace_id=m.workspace_id
+                         AND r.idempotency_key='delivery-send:' || m.id::text
+                         AND r.status='reserved'
+                       RETURNING r.id
                    )
-                   UPDATE outreach_deliveries AS q
-                   SET status='uncertain',
-                       error_code='worker_lost_outcome_unknown',
-                       updated_at=now()
-                   FROM stale
-                   WHERE q.id=stale.id AND q.workspace_id=$1 AND q.status='processing'""",
-                workspace_id,
-                older_than_seconds,
-                limit,
+                   SELECT count(*) FROM marked""",
+                workspace_id, older_than_seconds, limit,
             )
-        # asyncpg command tags end with the affected row count.
-        try:
-            return int(result.rsplit(" ", 1)[-1])
-        except (AttributeError, ValueError):
-            return 0
+        return int(recovered or 0)
 
     @staticmethod
     def _serialize(r: dict[str,Any])->dict[str,Any]:
