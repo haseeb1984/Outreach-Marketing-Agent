@@ -327,7 +327,11 @@ class FollowupStore:
                     )
                 return self._serialize(dict(row)) if row else None
 
-    async def advance_after_delivery(self, *, workspace_id: str, draft_id: UUID, delivery_id: UUID) -> bool:
+    async def advance_after_delivery(self, *, workspace_id: str, draft_id: UUID, delivery_id: UUID,
+                                    channel: str = "email") -> bool:
+        if channel not in {"email", "whatsapp"}:
+            raise ValueError("followup_delivery_channel_invalid")
+        delivery_column = "last_whatsapp_delivery_id" if channel == "whatsapp" else "last_delivery_id"
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 enrollment = await conn.fetchrow(
@@ -346,15 +350,15 @@ class FollowupStore:
                 )
                 if delay is None:
                     await conn.execute(
-                        """UPDATE outreach_followup_enrollments SET status='completed',current_draft_id=NULL,
-                           last_delivery_id=$2,next_run_at=NULL,updated_at=now() WHERE id=$1""",
+                        f"""UPDATE outreach_followup_enrollments SET status='completed',current_draft_id=NULL,
+                           {delivery_column}=$2,next_run_at=NULL,updated_at=now() WHERE id=$1""",
                         enrollment["id"], delivery_id,
                     )
                 else:
                     await conn.execute(
-                        """UPDATE outreach_followup_enrollments SET status='active',current_step=$2,
-                           current_draft_id=NULL,last_delivery_id=$3,next_run_at=now()+($4 * interval '1 minute'),
-                           updated_at=now() WHERE id=$1""",
+                        f"""UPDATE outreach_followup_enrollments SET status='active',current_step=$2,
+                           current_draft_id=NULL,{delivery_column}=$3,
+                           next_run_at=now()+($4 * interval '1 minute'),updated_at=now() WHERE id=$1""",
                         enrollment["id"], next_step, delivery_id, delay,
                     )
                 return True
