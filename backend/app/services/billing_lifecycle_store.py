@@ -142,30 +142,11 @@ class BillingLifecycleStore:
         invoice_number: str | None, status: str, currency_code: str | None,
         total_minor: str | None) -> dict[str, str]:
         """Persist sanitized invoice state from a signature-verified Paddle transaction event."""
-        if status not in {"completed", "payment_failed"}:
-            raise ValueError("invalid_transaction_status")
-        for name, value, maximum in (("event_id", event_id, 300),
-            ("transaction_id", transaction_id, 120), ("workspace_id", workspace_id, 200)):
-            if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-                raise ValueError(f"invalid_{name}")
-        if subscription_id is not None and (
-            not isinstance(subscription_id, str) or not subscription_id.strip()
-            or len(subscription_id) > 120
-        ):
-            raise ValueError("invalid_subscription_id")
-        if invoice_number is not None and (
-            not isinstance(invoice_number, str) or not invoice_number.strip()
-            or len(invoice_number) > 120
-        ):
-            raise ValueError("invalid_invoice_number")
-        if currency_code is not None and (
-            not isinstance(currency_code, str) or re.fullmatch(r"[A-Z]{3}", currency_code) is None
-        ):
-            raise ValueError("invalid_currency_code")
-        if total_minor is not None and (not isinstance(total_minor, str) or not total_minor.isdigit() or len(total_minor) > 20):
-            raise ValueError("invalid_transaction_total")
-        if not isinstance(event_created_at, datetime) or event_created_at.tzinfo is None:
-            raise ValueError("timezone_required")
+        self._validate_transaction(
+            event_id=event_id, event_created_at=event_created_at, transaction_id=transaction_id,
+            workspace_id=workspace_id, subscription_id=subscription_id, invoice_number=invoice_number,
+            status=status, currency_code=currency_code, total_minor=total_minor,
+        )
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 inserted = await conn.fetchrow(
@@ -215,6 +196,38 @@ class BillingLifecycleStore:
                         raise ValueError("billing_transaction_identity_conflict")
                     return {"outcome": "stale"}
                 return {"outcome": "applied"}
+
+    @staticmethod
+    def _validate_transaction(*, event_id: str, event_created_at: datetime, transaction_id: str,
+        workspace_id: str, subscription_id: str | None, invoice_number: str | None,
+        status: str, currency_code: str | None, total_minor: str | None) -> None:
+        if status not in {"completed", "payment_failed"}:
+            raise ValueError("invalid_transaction_status")
+        for name, value, maximum in (("event_id", event_id, 300),
+            ("transaction_id", transaction_id, 120), ("workspace_id", workspace_id, 200)):
+            if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+                raise ValueError(f"invalid_{name}")
+        if subscription_id is not None and (
+            not isinstance(subscription_id, str) or not subscription_id.strip()
+            or len(subscription_id) > 120
+        ):
+            raise ValueError("invalid_subscription_id")
+        if invoice_number is not None and (
+            not isinstance(invoice_number, str) or not invoice_number.strip()
+            or len(invoice_number) > 120
+        ):
+            raise ValueError("invalid_invoice_number")
+        if currency_code is not None and (
+            not isinstance(currency_code, str) or re.fullmatch(r"[A-Z]{3}", currency_code) is None
+        ):
+            raise ValueError("invalid_currency_code")
+        if total_minor is not None and (
+            not isinstance(total_minor, str) or not total_minor.isdigit() or len(total_minor) > 20
+        ):
+            raise ValueError("invalid_transaction_total")
+        if (not isinstance(event_created_at, datetime) or event_created_at.tzinfo is None
+            or event_created_at.utcoffset() is None):
+            raise ValueError("timezone_required")
 
     @staticmethod
     def _same_transaction_identity(
