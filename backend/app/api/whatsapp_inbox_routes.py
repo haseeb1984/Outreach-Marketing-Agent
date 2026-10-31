@@ -485,7 +485,7 @@ async def list_whatsapp_messages(
                            WHERE id=$3 AND workspace_id=$1 AND conversation_id=$2
                          )
                        ORDER BY received_at DESC,id DESC LIMIT $4""",
-                    workspace_id, conversation_id, before_id, limit,
+                    workspace_id, conversation_id, before_id, limit + 1,
                 )
             else:
                 rows = await conn.fetch(
@@ -495,13 +495,14 @@ async def list_whatsapp_messages(
                        FROM whatsapp_inbound_messages
                        WHERE workspace_id=$1 AND conversation_id=$2
                        ORDER BY received_at DESC,id DESC LIMIT $3""",
-                    workspace_id, conversation_id, limit,
+                    workspace_id, conversation_id, limit + 1,
                 )
-        items = [_serialize(dict(row)) for row in rows]
+        has_more = len(rows) > limit
+        items = [_serialize(dict(row)) for row in rows[:limit]]
         for item in items:
             if isinstance(item.get("media_metadata"), str):
                 item["media_metadata"] = json.loads(item["media_metadata"])
-        return {"items": items, "limit": limit, "has_more": len(items) == limit}
+        return {"items": items, "limit": limit, "has_more": has_more}
     except HTTPException:
         raise
     except Exception:
@@ -968,15 +969,16 @@ async def list_whatsapp_conversation_activity(
                        WHERE id=$4 AND workspace_id=$1 AND conversation_id=$2
                      ))
                    ORDER BY a.created_at DESC,a.id DESC LIMIT $3""",
-                workspace_id, conversation_id, limit, before_id,
+                workspace_id, conversation_id, limit + 1, before_id,
             )
+        has_more = len(rows) > limit
         items = []
-        for row in rows:
+        for row in rows[:limit]:
             item = _serialize(dict(row))
             if isinstance(item.get("details"), str):
                 item["details"] = json.loads(item["details"])
             items.append(item)
-        return {"items": items, "limit": limit, "has_more": len(items) == limit}
+        return {"items": items, "limit": limit, "has_more": has_more}
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_activity_unavailable") from None
 
@@ -1003,9 +1005,10 @@ async def list_whatsapp_conversation_notes(
                    FROM whatsapp_conversation_notes n
                    WHERE n.workspace_id=$1 AND n.conversation_id=$2
                    ORDER BY n.created_at DESC,n.id DESC LIMIT $3""",
-                workspace_id, conversation_id, limit,
+                workspace_id, conversation_id, limit + 1,
             )
-        return {"items": [_serialize(dict(row)) for row in rows], "limit": limit}
+        has_more = len(rows) > limit
+        return {"items": [_serialize(dict(row)) for row in rows[:limit]], "limit": limit, "has_more": has_more}
     except HTTPException:
         raise
     except Exception:
