@@ -225,6 +225,7 @@ export default function DashboardPage() {
   const replyDraftSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
   const whatsappMutationSequenceRef = useRef(0);
+  const whatsappSLALoadSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -455,6 +456,7 @@ export default function DashboardPage() {
     replyDraftSequenceRef.current += 1;
     whatsappDetailSequenceRef.current += 1;
     whatsappMutationSequenceRef.current += 1;
+    whatsappSLALoadSequenceRef.current += 1;
     setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setCrmOffset(0); setCrmTotal(0);
     setResearchQuery(""); setResearchResults([]); setResearchBusy(false);
     setDomainName(""); setDomainChallenge(null); setDomainBusy(false);
@@ -1310,6 +1312,7 @@ export default function DashboardPage() {
         method: "POST",
         body: JSON.stringify({ workspace_id: requestedWorkspaceId, delivery_id: enrollment.current_delivery_id, outcome, reason: reason.trim(), evidence_url: evidenceUrl.trim() }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       await loadFollowupEnrollments(sequence);
       if (requestedWorkspaceId !== workspaceId) return;
       setNotice(outcome === "delivered" ? "Provider-confirmed delivery recorded; the sequence advanced safely." : "Non-delivery recorded; the enrollment was stopped without retrying the old delivery.");
@@ -1812,18 +1815,19 @@ export default function DashboardPage() {
   async function loadWhatsAppSLA() {
     if (!workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++whatsappSLALoadSequenceRef.current;
     try {
       const [policy, summary] = await Promise.all([
         api<{warning_minutes:number;breach_minutes:number}>("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(requestedWorkspaceId),csrf),
         api<{overdue:number;at_risk:number;within_sla:number;paused:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(requestedWorkspaceId),csrf),
       ]);
-      if (requestedWorkspaceId !== workspaceId) return;
+      if (requestedSequence !== whatsappSLALoadSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSLAWarningMinutes(policy.warning_minutes);
       setWhatsappSLABreachMinutes(policy.breach_minutes);
       setWhatsappSLASummary(summary);
       setWhatsappSLAUnavailable(false);
     } catch {
-      if (requestedWorkspaceId === workspaceId) setWhatsappSLAUnavailable(true);
+      if (requestedSequence === whatsappSLALoadSequenceRef.current && requestedWorkspaceId === workspaceId) setWhatsappSLAUnavailable(true);
     }
   }
 
