@@ -290,7 +290,7 @@ async def process_pending_whatsapp_events(
                                                    FROM cancelled AS q
                                                    WHERE u.id=q.usage_reservation_id
                                                      AND u.workspace_id=$1 AND u.status='reserved'""",
-                                                workspace_id, account_id, prospect["id"],
+                                                workspace_id, account_id, prospect_id,
                                             )
                                     elif opt_in:
                                         # Explicit inbound START-family commands re-enable contact only after
@@ -308,7 +308,7 @@ async def process_pending_whatsapp_events(
                                             """UPDATE crm_prospects SET stage='replied', updated_at=now()
                                                WHERE id=$1 AND workspace_id=$2
                                                  AND stage NOT IN ('converted','disqualified','do_not_contact')""",
-                                            prospect["id"], workspace_id,
+                                            prospect_id, workspace_id,
                                         )
                             statuses = value.get("statuses", [])
                             for status in statuses if isinstance(statuses, list) else []:
