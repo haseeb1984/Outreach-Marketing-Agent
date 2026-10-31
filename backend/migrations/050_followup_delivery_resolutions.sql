@@ -15,3 +15,15 @@ CREATE TABLE IF NOT EXISTS outreach_followup_delivery_resolutions (
 );
 CREATE INDEX IF NOT EXISTS outreach_followup_delivery_resolutions_enrollment_idx
     ON outreach_followup_delivery_resolutions(workspace_id,enrollment_id,resolved_at DESC);
+
+CREATE OR REPLACE FUNCTION prevent_followup_delivery_resolution_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'follow-up delivery resolution records are immutable';
+END;
+$$;
+DROP TRIGGER IF EXISTS outreach_followup_delivery_resolutions_immutable
+    ON outreach_followup_delivery_resolutions;
+CREATE TRIGGER outreach_followup_delivery_resolutions_immutable
+    BEFORE UPDATE OR DELETE ON outreach_followup_delivery_resolutions
+    FOR EACH ROW EXECUTE FUNCTION prevent_followup_delivery_resolution_mutation();
