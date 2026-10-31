@@ -12,6 +12,8 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import asyncpg
+
+from app.db.migrations import apply_migrations
 import pytest
 
 from app.services.whatsapp_outbound_store import WhatsAppOutboundStore
@@ -30,15 +32,7 @@ async def _exercise_whatsapp_queue_lifecycle() -> None:
     database_url = os.environ["OMA_TEST_DATABASE_URL"]
     connection = await asyncpg.connect(database_url)
     try:
-        await connection.execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations "
-            "(version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())"
-        )
-        migrations = Path(__file__).resolve().parents[1] / "migrations"
-        migration_files = sorted(migrations.glob("[0-9][0-9][0-9]_*.sql"))
-        assert migration_files, "repository migration directory must not be empty"
-        for migration_path in migration_files:
-            await connection.execute(migration_path.read_text(encoding="utf-8"))
+        await apply_migrations(database_url)
 
         workspace_id = "whatsapp-queue-integration-" + uuid4().hex
         actor_id = uuid4()
