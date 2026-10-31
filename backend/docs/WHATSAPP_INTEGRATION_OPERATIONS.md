@@ -13,6 +13,10 @@
 
 Workspace owners/admins can select up to 100 visible conversations and atomically bulk-update assignment, inbox status and priority with `POST /api/v1/integrations/whatsapp/inbox/conversations/bulk-update?workspace_id=...`. The request contains `conversation_ids` and any subset of `assigned_to_user_id` (use null to unassign), `inbox_status` and `priority`. Every conversation must belong to the workspace; invalid/missing IDs reject the whole operation. Assignee membership is checked before changes, and each changed field writes an activity event in the same database transaction. The endpoint requires admin role and CSRF protection.
 
+## Saved WhatsApp inbox views
+
+Users can save named personal filter presets per workspace with `GET/POST /api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=...` and delete their own preset with `DELETE /saved-views/{view_id}`. Presets support status, priority, search, assigned-to-me, unassigned, and a specific workspace teammate. Names are unique case-insensitively per user and workspace; saving an existing name updates its filters. Migration `046_whatsapp_inbox_saved_views.sql` creates the tenant/user-scoped storage. The conversation list also accepts `assigned_to_user_id` to filter a teammate's assigned work.
+
 ## Required server settings
 
 - `DATABASE_URL`: PostgreSQL database with migrations through `044_whatsapp_inbox_collaboration.sql`.
