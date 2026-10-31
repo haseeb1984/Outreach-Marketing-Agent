@@ -118,3 +118,29 @@ def test_transaction_identity_cannot_be_rebound(prior, subscription_id, invoice_
     assert BillingLifecycleStore._same_transaction_identity(
         prior, subscription_id=subscription_id, invoice_number=invoice_number
     ) is expected
+
+@pytest.mark.parametrize("field,value,error", [
+    ("subscription_id", "", "invalid_subscription_id"),
+    ("subscription_id", " ", "invalid_subscription_id"),
+    ("invoice_number", "", "invalid_invoice_number"),
+    ("invoice_number", " ", "invalid_invoice_number"),
+    ("currency_code", "US", "invalid_currency_code"),
+    ("currency_code", "usd", "invalid_currency_code"),
+    ("currency_code", "U$D", "invalid_currency_code"),
+])
+def test_transaction_optional_identifiers_and_currency_are_strictly_validated(field, value, error):
+    values = {
+        "event_id": "evt_tx_123",
+        "event_created_at": NOW,
+        "transaction_id": "txn_123",
+        "workspace_id": "workspace-1",
+        "subscription_id": "sub_123",
+        "invoice_number": "INV-123",
+        "status": "completed",
+        "currency_code": "USD",
+        "total_minor": "1000",
+    }
+    values[field] = value
+    with pytest.raises(ValueError, match=error):
+        # Exercise the same boundary validation without opening a database connection.
+        BillingLifecycleStore._validate_transaction(**values)
