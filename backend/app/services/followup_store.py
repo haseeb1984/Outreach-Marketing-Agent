@@ -86,7 +86,7 @@ class FollowupStore:
                 if status == "paused":
                     await conn.execute(
                         """UPDATE outreach_followup_enrollments
-                           SET status='paused',paused_next_run_at=next_run_at,next_run_at=NULL,updated_at=now()
+                           SET status='paused',pause_reason='sequence_paused',paused_next_run_at=next_run_at,next_run_at=NULL,updated_at=now()
                            WHERE sequence_id=$1 AND workspace_id=$2 AND status='active'""",
                         sequence_id, workspace_id,
                     )
@@ -95,13 +95,13 @@ class FollowupStore:
                         """UPDATE outreach_followup_enrollments
                            SET status='active',next_run_at=COALESCE(paused_next_run_at,now()),
                                paused_next_run_at=NULL,updated_at=now()
-                           WHERE sequence_id=$1 AND workspace_id=$2 AND status='paused'""",
+                           WHERE sequence_id=$1 AND workspace_id=$2 AND status='paused' AND pause_reason='sequence_paused'""",
                         sequence_id, workspace_id,
                     )
                 elif status == "archived":
                     await conn.execute(
                         """UPDATE outreach_followup_enrollments SET status='archived',next_run_at=NULL,
-                           paused_next_run_at=NULL,updated_at=now()
+                           paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
                            WHERE sequence_id=$1 AND workspace_id=$2 AND status IN ('active','paused')""",
                         sequence_id, workspace_id,
                     )
@@ -222,7 +222,7 @@ class FollowupStore:
                     )
                     if pending:
                         await conn.execute(
-                            """UPDATE outreach_followup_enrollments SET status='paused',
+                            """UPDATE outreach_followup_enrollments SET status='paused',pause_reason='pending_draft_conflict',
                                last_error_code='existing_pending_draft_requires_review',next_run_at=NULL,updated_at=now()
                                WHERE id=$1""", row["id"],
                         )
@@ -299,7 +299,7 @@ class FollowupStore:
             async with conn.transaction():
                 if status == "paused":
                     row = await conn.fetchrow(
-                        """UPDATE outreach_followup_enrollments SET status='paused',
+                        """UPDATE outreach_followup_enrollments SET status='paused',pause_reason='operator_paused',
                            paused_next_run_at=next_run_at,next_run_at=NULL,updated_at=now()
                            WHERE id=$1 AND workspace_id=$2 AND status IN ('active','awaiting_approval')
                            RETURNING id,status,current_draft_id""",
@@ -311,7 +311,7 @@ class FollowupStore:
                            status=CASE WHEN current_draft_id IS NOT NULL THEN 'awaiting_approval' ELSE 'active' END,
                            next_run_at=CASE WHEN current_draft_id IS NOT NULL THEN NULL
                                             ELSE COALESCE(paused_next_run_at,now()) END,
-                           paused_next_run_at=NULL,updated_at=now()
+                           paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
                            WHERE id=$1 AND workspace_id=$2 AND status='paused'
                            RETURNING id,status,current_draft_id""",
                         enrollment_id, workspace_id,
@@ -319,7 +319,7 @@ class FollowupStore:
                 else:
                     row = await conn.fetchrow(
                         """UPDATE outreach_followup_enrollments SET status='archived',
-                           next_run_at=NULL,paused_next_run_at=NULL,updated_at=now()
+                           next_run_at=NULL,paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
                            WHERE id=$1 AND workspace_id=$2 AND status NOT IN ('completed','stopped_replied',
                              'stopped_opt_out','stopped_ineligible','stopped_rejected','archived')
                            RETURNING id,status,current_draft_id""",
