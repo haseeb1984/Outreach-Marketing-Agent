@@ -189,12 +189,31 @@ class BillingLifecycleStore:
                     currency_code, total_minor, event_created_at)
                 if row is None:
                     current = await conn.fetchrow(
-                        """SELECT workspace_id FROM billing_transactions
+                        """SELECT workspace_id,provider_subscription_id,invoice_number
+                           FROM billing_transactions
                            WHERE provider='paddle' AND transaction_id=$1 FOR UPDATE""", transaction_id)
                     if current is None or current["workspace_id"] != workspace_id:
                         raise ValueError("billing_transaction_workspace_conflict")
+                    if not self._same_transaction_identity(
+                        current, subscription_id=subscription_id, invoice_number=invoice_number
+                    ):
+                        raise ValueError("billing_transaction_identity_conflict")
                     return {"outcome": "stale"}
                 return {"outcome": "applied"}
+
+    @staticmethod
+    def _same_transaction_identity(
+        prior: Mapping[str, Any], *, subscription_id: str | None, invoice_number: str | None
+    ) -> bool:
+        """Prevent a transaction ID from being rebound to another subscription or invoice."""
+        return (
+            (prior["provider_subscription_id"] is None
+             or subscription_id is None
+             or prior["provider_subscription_id"] == subscription_id)
+            and (prior["invoice_number"] is None
+                 or invoice_number is None
+                 or prior["invoice_number"] == invoice_number)
+        )
 
     @staticmethod
     def _same_event_identity(prior: Mapping[str, Any], event: VerifiedBillingEvent) -> bool:
