@@ -41,7 +41,7 @@ def _split_sql_statements(sql: str) -> list[str]:
             if sql[i] == '"':
                 state = "normal"
         elif state == "line_comment":
-            if sql[i] == "\\n":
+            if sql[i] == "\n":
                 state = "normal"
         elif state == "block_comment":
             if sql.startswith("*/", i):
