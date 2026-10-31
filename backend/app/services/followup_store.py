@@ -437,7 +437,7 @@ class FollowupStore:
                            FOR UPDATE""",
                         delivery_id, workspace_id, enrollment["current_draft_id"],
                     )
-                    if delivery is None or delivery["status"] not in {"failed", "uncertain"}:
+                    if delivery is None or delivery["status"] not in {"failed", "uncertain", "delivered", "read"}:
                         raise ValueError("followup_delivery_not_recoverable")
                     provider_status = delivery["status"]
                 if outcome == "delivered":
