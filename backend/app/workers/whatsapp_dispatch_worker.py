@@ -112,6 +112,16 @@ async def _finish_provider_outcome(
     return completed
 
 
+async def _pause_followup_for_operator(pool: Any, *, workspace_id: str, draft_id: UUID, reason: str) -> None:
+    try:
+        from app.services.followup_store import FollowupStore
+        await FollowupStore(pool).pause_for_draft(
+            workspace_id=workspace_id, draft_id=draft_id, reason=reason,
+        )
+    except Exception:
+        logger.error("WhatsApp follow-up pause persistence failed; operator reconciliation required")
+
+
 async def process_claimed_delivery(
     *,
     pool: Any,
@@ -144,6 +154,7 @@ async def process_claimed_delivery(
             reservation_status=entitlement.get("reservation_status"),
             error_code=str(entitlement.get("reason", "whatsapp_entitlement_denied")),
         )
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason="whatsapp_entitlement_denied")
         return "entitlement_denied"
 
     try:
@@ -176,6 +187,7 @@ async def process_claimed_delivery(
                 reservation_status=entitlement.get("reservation_status"),
                 error_code=reason,
             )
+            await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason=reason)
             return "policy_denied"
         approved_name = None
         approved_language = None
@@ -206,6 +218,7 @@ async def process_claimed_delivery(
             reservation_status=entitlement.get("reservation_status"),
             error_code=code,
         )
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason=code)
         return "preflight_failed"
 
     provider = sender or MetaWhatsAppSender()
@@ -241,6 +254,7 @@ async def process_claimed_delivery(
             await _release_if_reserved(
                 subscriptions, workspace_id=workspace_id, reservation_id=reservation_id,
             )
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason=exc.code)
         return "provider_rejected"
     except MetaSendUncertain as exc:
         # The provider may have accepted it; never retry and always settle reserved usage.
@@ -249,6 +263,7 @@ async def process_claimed_delivery(
             workspace_id=workspace_id, reservation_id=reservation_id,
             outcome="uncertain", error_code=exc.code[:100],
         )
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason=exc.code)
         return "provider_uncertain"
     except Exception:
         # Once the sender has been invoked, any unclassified exception is treated as uncertain.
@@ -257,6 +272,7 @@ async def process_claimed_delivery(
             workspace_id=workspace_id, reservation_id=reservation_id,
             outcome="uncertain", error_code="provider_outcome_uncertain",
         )
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason="provider_outcome_uncertain")
         return "provider_uncertain"
 
     message_id = result.get("provider_message_id") if isinstance(result, dict) else None
@@ -266,6 +282,7 @@ async def process_claimed_delivery(
             workspace_id=workspace_id, reservation_id=reservation_id,
             outcome="uncertain", error_code="provider_message_id_missing",
         )
+        await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason="provider_message_id_missing")
         return "provider_uncertain"
 
     # Provider confirmed a send; settle quota even if persisting the queue state fails.
@@ -284,6 +301,7 @@ async def process_claimed_delivery(
                 channel="whatsapp",
             )
         except Exception:
+            await _pause_followup_for_operator(pool, workspace_id=workspace_id, draft_id=UUID(str(delivery["draft_id"])), reason="followup_advancement_failed")
             logger.error("WhatsApp follow-up advancement failed; operator reconciliation required")
     return "sent" if completed else "sent_lease_completion_lost"
 
