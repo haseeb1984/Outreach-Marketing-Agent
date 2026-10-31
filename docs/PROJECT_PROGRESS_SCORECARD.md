@@ -413,3 +413,17 @@ Removed duplicate Paddle webhook/checkout route implementations so the existing 
 - [PR #32](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/32) adds a separate supervised worker process for durable website-growth scans, bounded payload validation, verified-domain checks, audit persistence and safe retry/failure recording. Its backend CI passed before merge; actual persistent-process deployment remains unverified.
 - [PR #29](https://github.com/haseeb1984/Outreach-Marketing-Agent/pull/29) adds account deletion controls with explicit confirmation; backend and frontend CI passed on its PR head.
 - The score is an updated estimate, not a launch certificate. Production hosting, database migration execution, worker supervision, Paddle sandbox lifecycle, SMTP inbox delivery, Meta acceptance, and restore rehearsal still require evidence.
+
+
+## Production operations implementation update — 2026-10-31
+
+Source-side operational deliverables added to `main`:
+
+- Added a single production operations runbook covering controlled releases, release evidence, rollback boundaries, supervised workers, health/readiness, monitoring and alert ownership, incident response, and explicit external launch gates.
+- Added a hardened systemd PostgreSQL backup service and a persistent six-hour timer. The service refuses to run unless the separately provisioned backup mount is present and writes only to the configured backup mount.
+- Expanded launch preflight to require all four persistent worker unit files (including campaign follow-up), the backup service/timer, and the production operations runbook.
+- Linked the production operations runbook from the repository README.
+- Vercel inspection confirms a production deployment is `READY` for commit `d3ddd3bd62fd2adf5b22ffe52fd3a9d2d55098ee`. The latest 30-minute production error-log query returned no matching error/fatal logs. The available 24-hour grouped error view still contains two historical database startup timeout/error groups last seen 2026-10-30; they are not evidence of a current failure, but require monitoring.
+- The Vercel project is on the Hobby plan, whose runtime-log retention rejected the one-hour query; therefore a full one-hour log scan could not be completed.
+
+No tests, audits, CI, migrations, provider sends, or restore drill were run. Hostinger release/browser acceptance, Neon live schema verification, worker installation/enablement, encrypted off-host backup mount and successful scheduled backup, isolated restore rehearsal, external alert delivery, SMTP/Paddle/Meta live acceptance, and legal/domain launch acceptance remain unverified. These are runtime/account actions and cannot honestly be marked complete from repository changes. The phase score is therefore **not raised to 100%** by this source-only batch.
