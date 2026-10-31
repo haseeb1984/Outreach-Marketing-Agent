@@ -86,6 +86,7 @@ def test_find_by_idempotency_key_is_workspace_scoped_and_serializes_record():
         "queued_at": queued_at.isoformat(),
         "template_name": "welcome_offer",
         "language_code": "en_US",
+        "template_parameters": {},
         "replayed": True,
     }
     query, args = pool.connection.queries[0]
