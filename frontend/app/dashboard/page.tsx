@@ -1615,12 +1615,13 @@ export default function DashboardPage() {
   async function generateDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !selectedCampaign || !selectedProspect) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/drafts", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           campaign_id: selectedCampaign,
           prospect_id: selectedProspect,
           channel: draftChannel,
@@ -1628,29 +1629,34 @@ export default function DashboardPage() {
           idempotency_key: "draft-" + crypto.randomUUID(),
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftCallToAction("");
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Draft created and placed in the review queue. Nothing was sent.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Draft could not be generated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Draft could not be generated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function queueDraft(draft: Draft) {
     if (!workspaceId || !csrf || !window.confirm(deliveryScheduleLocal ? "Schedule this approved email draft for " + new Date(deliveryScheduleLocal).toLocaleString() + "? It will send automatically when due if the scheduler is configured." : "Queue this approved email draft for immediate eligibility? It will not send until the scheduler runs or an admin chooses Send now.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/drafts/" + encodeURIComponent(draft.id) + "/enqueue", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, idempotency_key: "queue-" + crypto.randomUUID(), email_account_id: selectedEmailAccountId || null, scheduled_at: deliveryScheduleLocal ? new Date(deliveryScheduleLocal).toISOString() : null }),
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, idempotency_key: "queue-" + crypto.randomUUID(), email_account_id: selectedEmailAccountId || null, scheduled_at: deliveryScheduleLocal ? new Date(deliveryScheduleLocal).toISOString() : null }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(deliveryScheduleLocal ? "Email scheduled. It will be dispatched automatically when due if CRON_SECRET and the scheduler are configured." : "Email queued and eligible for immediate dispatch by the scheduler or an authorized admin.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Draft could not be queued."); }
-    finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Draft could not be queued."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function queueWhatsAppDraft(draft: Draft) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     const account = whatsappAccounts.find(item => item.status === "active");
     if (!account) { setError("Verify an active Meta WhatsApp account before queueing this draft."); return; }
     const template = (whatsappTemplates[account.id] || []).find(item => item.status === "approved" && item.verified_at);
@@ -1667,7 +1673,7 @@ export default function DashboardPage() {
         "/api/v1/integrations/whatsapp/outbound/drafts/" + encodeURIComponent(draft.id) + "/queue",
         csrf,
         { method: "POST", body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           account_id: account.id,
           idempotency_key: "wa-" + crypto.randomUUID(),
           template_name: template?.template_name || null,
@@ -1675,49 +1681,56 @@ export default function DashboardPage() {
           template_parameters: templateParameters,
         }) },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("WhatsApp delivery " + result.id.slice(0, 8) + " queued. Dispatch is " + (result.dispatch_enabled ? "enabled by server configuration" : "disabled until the operator explicitly enables it") + ".");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "WhatsApp draft could not be queued."); }
-    finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp draft could not be queued."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function cancelDelivery(delivery: Delivery) {
     if (!workspaceId || !csrf || !window.confirm("Cancel this queued email? A cancelled delivery will not be sent.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/deliveries/" + encodeURIComponent(delivery.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/deliveries/" + encodeURIComponent(delivery.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Queued email cancelled.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Delivery could not be cancelled."); }
-    finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Delivery could not be cancelled."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function rescheduleDelivery(delivery: Delivery) {
     if (!workspaceId || !csrf || !deliveryScheduleLocal) { setError("Choose a future date and time above first."); return; }
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/deliveries/" + encodeURIComponent(delivery.id) + "/schedule", csrf, {
-        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, scheduled_at: new Date(deliveryScheduleLocal).toISOString() }),
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, scheduled_at: new Date(deliveryScheduleLocal).toISOString() }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Queued email rescheduled.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Delivery could not be rescheduled."); }
-    finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Delivery could not be rescheduled."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function sendDelivery(delivery: Delivery) {
     if (!workspaceId || !csrf || !window.confirm("Send this queued email to the saved recipient now? This contacts a real person and cannot be undone.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/deliveries/" + encodeURIComponent(delivery.id) + "/send", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, idempotency_key: "send-" + delivery.id }),
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, idempotency_key: "send-" + delivery.id }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Send request processed. SMTP acceptance is not proof of inbox delivery.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Send outcome could not be confirmed. Check delivery status before retrying.");
-      await refresh(workspaceId, csrf);
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Send outcome could not be confirmed. Check delivery status before retrying.");
+      await refresh(requestedWorkspaceId, csrf);
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function processWhatsAppInboxEvents() {
