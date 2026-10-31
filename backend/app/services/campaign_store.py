@@ -45,15 +45,31 @@ class CampaignStore:
         if any(not isinstance(value, str) or not value.strip() or len(value.strip()) > maximum for value, maximum in fields):
             raise ValueError("invalid_campaign_fields")
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """UPDATE outreach_campaigns SET name=$3,client_business=$4,client_offer=$5,
-                   target_customer_profile=$6,status=$7,updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2
-                   RETURNING id,workspace_id,name,client_business,client_offer,target_customer_profile,
-                             status,created_by,created_at,updated_at""",
-                campaign_id, workspace_id, name.strip(), client_business.strip(),
-                client_offer.strip(), target_customer_profile.strip(), status,
-            )
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE outreach_campaigns SET name=$3,client_business=$4,client_offer=$5,
+                       target_customer_profile=$6,status=$7,updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2
+                       RETURNING id,workspace_id,name,client_business,client_offer,target_customer_profile,
+                                 status,created_by,created_at,updated_at""",
+                    campaign_id, workspace_id, name.strip(), client_business.strip(),
+                    client_offer.strip(), target_customer_profile.strip(), status,
+                )
+                if row is not None and status == "archived":
+                    await conn.execute(
+                        """UPDATE outreach_followup_sequences SET status='archived',updated_at=now()
+                           WHERE campaign_id=$1 AND workspace_id=$2 AND status <> 'archived'""",
+                        campaign_id, workspace_id,
+                    )
+                    await conn.execute(
+                        """UPDATE outreach_followup_enrollments SET status='archived',next_run_at=NULL,
+                           paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
+                           WHERE sequence_id IN (SELECT id FROM outreach_followup_sequences
+                                                 WHERE campaign_id=$1 AND workspace_id=$2)
+                             AND workspace_id=$2 AND status NOT IN ('completed','stopped_replied',
+                               'stopped_opt_out','stopped_ineligible','stopped_rejected','archived')""",
+                        campaign_id, workspace_id,
+                    )
         return self._serialize(dict(row)) if row else None
 
     async def get_draft_generation_context(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID, channel: str) -> dict[str, Any] | None:
