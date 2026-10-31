@@ -103,3 +103,18 @@ def test_duplicate_event_identity_must_match_tenant_subscription_and_timestamp()
     assert not BillingLifecycleStore._same_event_identity(
         {**prior, "event_created_at": NOW + timedelta(seconds=1)}, event()
     )
+
+@pytest.mark.parametrize(
+    "prior,subscription_id,invoice_number,expected",
+    [
+        ({"provider_subscription_id": "sub_1", "invoice_number": "INV-1"}, "sub_1", "INV-1", True),
+        ({"provider_subscription_id": "sub_1", "invoice_number": "INV-1"}, None, None, True),
+        ({"provider_subscription_id": "sub_1", "invoice_number": "INV-1"}, "sub_2", "INV-1", False),
+        ({"provider_subscription_id": "sub_1", "invoice_number": "INV-1"}, "sub_1", "INV-2", False),
+        ({"provider_subscription_id": None, "invoice_number": None}, "sub_2", "INV-2", True),
+    ],
+)
+def test_transaction_identity_cannot_be_rebound(prior, subscription_id, invoice_number, expected):
+    assert BillingLifecycleStore._same_transaction_identity(
+        prior, subscription_id=subscription_id, invoice_number=invoice_number
+    ) is expected
