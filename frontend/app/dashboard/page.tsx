@@ -114,6 +114,8 @@ export default function DashboardPage() {
   const [whatsappFilterSearch, setWhatsappFilterSearch] = useState("");
   const [whatsappFilterAssignee, setWhatsappFilterAssignee] = useState("all");
   const [whatsappSavedViews, setWhatsappSavedViews] = useState<WhatsAppSavedView[]>([]);
+  const [whatsappSavedViewsUnavailable, setWhatsappSavedViewsUnavailable] = useState(false);
+  const [whatsappSLAUnavailable, setWhatsappSLAUnavailable] = useState(false);
   const [whatsappSLAWarningMinutes, setWhatsappSLAWarningMinutes] = useState(15);
   const [whatsappSLAPauseReason, setWhatsappSLAPauseReason] = useState("");
   const [whatsappSLABreachMinutes, setWhatsappSLABreachMinutes] = useState(60);
@@ -474,7 +476,7 @@ export default function DashboardPage() {
     setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappSavedViews([]);
     setWhatsappFilterStatus("all"); setWhatsappFilterPriority("all"); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
-    setWhatsappSelectedSavedView(""); setWhatsappSavedViewName(""); setWhatsappSLAWarningMinutes(15); setWhatsappSLABreachMinutes(60);
+    setWhatsappSelectedSavedView(""); setWhatsappSavedViewName(""); setWhatsappSavedViewsUnavailable(false); setWhatsappSLAUnavailable(false); setWhatsappSLAWarningMinutes(15); setWhatsappSLABreachMinutes(60);
     setWhatsappSLAPauseReason(""); setWhatsappSLASummary({ overdue: 0, at_risk: 0, within_sla: 0, paused: 0 });
     setSelectedWhatsAppBulkIds([]); setWhatsappBulkAssignee("__unchanged__"); setWhatsappBulkStatus(""); setWhatsappBulkPriority("");
     setWhatsappNoteDraft(""); setSelectedWhatsAppConversation(""); setWhatsappLabel(""); setWhatsappWabaId(""); setWhatsappPhoneNumberId(""); setWhatsappAccessToken("");
@@ -791,8 +793,12 @@ export default function DashboardPage() {
       );
       if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSavedViews(result.items || []);
+      setWhatsappSavedViewsUnavailable(false);
     } catch (err) {
-      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded.");
+      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) {
+        setWhatsappSavedViewsUnavailable(true);
+        setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded.");
+      }
     }
   }
 
@@ -1815,7 +1821,10 @@ export default function DashboardPage() {
       setWhatsappSLAWarningMinutes(policy.warning_minutes);
       setWhatsappSLABreachMinutes(policy.breach_minutes);
       setWhatsappSLASummary(summary);
-    } catch { /* SLA metadata remains unavailable without blocking inbox use. */ }
+      setWhatsappSLAUnavailable(false);
+    } catch {
+      if (requestedWorkspaceId === workspaceId) setWhatsappSLAUnavailable(true);
+    }
   }
 
   async function saveWhatsAppSLAPolicy() {
@@ -2579,7 +2588,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="stack" style={{border:"1px solid var(--border)",borderRadius:"0.75rem",padding:"0.75rem",marginBottom:"0.75rem"}}>
                   <strong>First-response SLA</strong>
-                  <span className="fine">Overdue: {whatsappSLASummary.overdue} · At risk: {whatsappSLASummary.at_risk} · Within SLA: {whatsappSLASummary.within_sla} · Paused: {whatsappSLASummary.paused}</span>
+                  {whatsappSLAUnavailable ? <p className="fine" role="status">SLA summary and policy could not be loaded. Inbox conversations remain available; use Refresh workspace to retry.</p> : <span className="fine">Overdue: {whatsappSLASummary.overdue} · At risk: {whatsappSLASummary.at_risk} · Within SLA: {whatsappSLASummary.within_sla} · Paused: {whatsappSLASummary.paused}</span>}
+                  {whatsappSavedViewsUnavailable && <p className="fine" role="status">Saved inbox views could not be loaded. Existing inbox filters remain usable; refresh the workspace to retry.</p>}
                   {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="grid grid-2">
                     <label>Warning after (minutes)<input className="input" type="number" min="1" max="1440" value={whatsappSLAWarningMinutes} onChange={event=>setWhatsappSLAWarningMinutes(Number(event.target.value))}/></label>
                     <label>Overdue after (minutes)<input className="input" type="number" min="2" max="10080" value={whatsappSLABreachMinutes} onChange={event=>setWhatsappSLABreachMinutes(Number(event.target.value))}/></label>
