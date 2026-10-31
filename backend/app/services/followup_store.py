@@ -94,7 +94,7 @@ class FollowupStore:
                     await conn.execute(
                         """UPDATE outreach_followup_enrollments
                            SET status='active',next_run_at=COALESCE(paused_next_run_at,now()),
-                               paused_next_run_at=NULL,updated_at=now()
+                               paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
                            WHERE sequence_id=$1 AND workspace_id=$2 AND status='paused' AND pause_reason='sequence_paused'""",
                         sequence_id, workspace_id,
                     )
@@ -281,8 +281,8 @@ class FollowupStore:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """SELECT e.id,e.workspace_id,e.sequence_id,e.prospect_id,e.current_step,e.status,
-                          e.next_run_at,e.paused_next_run_at,e.current_draft_id,e.last_delivery_id,
-                          e.last_error_code,e.created_at,e.updated_at,p.name AS prospect_name,p.company
+                          e.next_run_at,e.paused_next_run_at,e.pause_reason,e.current_draft_id,e.last_delivery_id,
+                          e.last_whatsapp_delivery_id,e.last_error_code,e.created_at,e.updated_at,p.name AS prospect_name,p.company
                    FROM outreach_followup_enrollments e
                    JOIN crm_prospects p ON p.id=e.prospect_id AND p.workspace_id=e.workspace_id
                    WHERE e.workspace_id=$1 AND e.sequence_id=$2
@@ -312,7 +312,7 @@ class FollowupStore:
                            next_run_at=CASE WHEN current_draft_id IS NOT NULL THEN NULL
                                             ELSE COALESCE(paused_next_run_at,now()) END,
                            paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
-                           WHERE id=$1 AND workspace_id=$2 AND status='paused'
+                           WHERE id=$1 AND workspace_id=$2 AND status='paused' AND pause_reason='operator_paused'
                            RETURNING id,status,current_draft_id""",
                         enrollment_id, workspace_id,
                     )
@@ -375,7 +375,7 @@ class FollowupStore:
     @staticmethod
     def _serialize(row: dict[str, Any]) -> dict[str, Any]:
         for key in ("id", "workspace_id", "campaign_id", "prospect_id", "created_by",
-                    "current_draft_id", "last_delivery_id", "sequence_id"):
+                    "current_draft_id", "last_delivery_id", "last_whatsapp_delivery_id", "sequence_id"):
             if row.get(key) is not None:
                 row[key] = str(row[key])
         for key in ("created_at", "updated_at", "next_run_at", "paused_next_run_at"):
