@@ -126,7 +126,7 @@ async def apply_migrations(database_url: str, migrations_dir: Path = MIGRATIONS_
                     for statement in statements:
                         await connection.execute(statement)
                 except Exception as exc:
-                    raise RuntimeError(f"Migration failed: {path.name}") from exc
+                    raise RuntimeError(f"Migration failed: {path.name}: {type(exc).__name__}: {exc}") from exc
                 await connection.execute(
                     "INSERT INTO schema_migrations(version) VALUES($1)", path.name
                 )
