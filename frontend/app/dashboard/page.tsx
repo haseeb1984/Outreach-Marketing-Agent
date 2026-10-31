@@ -966,27 +966,33 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf) return;
     const requestSequence = ++whatsappDetailSequenceRef.current;
     const requestedWorkspaceId = workspaceId;
+    const requestedCsrf = csrf;
+    // Switch the visible conversation immediately so the previous contact's
+    // messages and notes are never shown while the next conversation loads.
+    setSelectedWhatsAppConversation(conversation.id);
+    setWhatsappMessages([]);
+    setWhatsappNotes([]);
+    setWhatsappActivity([]);
+    setWhatsappNoteDraft("");
     setWhatsappInboxBusy(true);
     setError("");
     try {
       const result = await api<{ items: WhatsAppMessage[] }>(
         "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
-        "/messages?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
-        csrf,
+        "/messages?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=100",
+        requestedCsrf,
       );
       if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
-      setSelectedWhatsAppConversation(conversation.id);
       setWhatsappMessages((result.items || []).slice().reverse());
       const notes = await api<{ items: WhatsAppInternalNote[] }>(
         "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
-        "/notes?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf,
+        "/notes?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50", requestedCsrf,
       );
       if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappNotes((notes.items || []).slice().reverse());
-      const activity = await api<{ items: WhatsAppActivity[] }>("/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) + "/activity?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf);
+      const activity = await api<{ items: WhatsAppActivity[] }>("/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) + "/activity?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50", requestedCsrf);
       if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappActivity((activity.items || []).slice().reverse());
-      setWhatsappNoteDraft("");
     } catch (err) {
       if (requestSequence === whatsappDetailSequenceRef.current && requestedWorkspaceId === workspaceId) {
         setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
