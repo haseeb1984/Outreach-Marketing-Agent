@@ -101,7 +101,7 @@ def test_meta_webhook_splits_phone_numbers_and_deduplicates(monkeypatch):
     body = json.dumps(_payload(), separators=(",", ":")).encode("utf-8")
     connection = _Connection()
     with TestClient(app) as client:
-        app.state.db_pool = _Pool(connection)
+        monkeypatch.setattr(app.state, "db_pool", _Pool(connection), raising=False)
         headers = {"x-hub-signature-256": _signed(body, secret), "content-type": "application/json"}
         first = client.post("/api/v1/webhooks/meta/whatsapp", content=body, headers=headers)
         connection.duplicate = True
