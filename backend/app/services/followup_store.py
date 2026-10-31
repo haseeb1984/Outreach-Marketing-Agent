@@ -242,6 +242,14 @@ class FollowupStore:
                         body = body.replace(token, value)
                         if subject:
                             subject = subject.replace(token, value)
+                    facts = row["verified_facts"] or []
+                    if isinstance(facts, str):
+                        try:
+                            facts = json.loads(facts)
+                        except (TypeError, ValueError):
+                            facts = []
+                    if not isinstance(facts, list):
+                        facts = []
                     draft = await conn.fetchrow(
                         """INSERT INTO outreach_drafts
                            (workspace_id,campaign_id,prospect_id,channel,subject,body,source_evidence_url,
@@ -249,7 +257,7 @@ class FollowupStore:
                            VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'pending_approval',$9)
                            RETURNING id""",
                         row["workspace_id"], row["campaign_id"], row["prospect_id"], row["channel"],
-                        subject, body, row["evidence_url"], json.dumps(row["verified_facts"] or []), row["created_by"],
+                        subject, body, row["evidence_url"], json.dumps(facts), row["created_by"],
                     )
                     await conn.execute(
                         """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type,note)
