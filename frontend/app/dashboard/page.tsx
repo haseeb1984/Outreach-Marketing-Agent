@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Workspace = { id: string; name: string; role: string };
@@ -214,6 +214,9 @@ export default function DashboardPage() {
   const [entitlementsUnavailable, setEntitlementsUnavailable] = useState(false);
   const [period, setPeriod] = useState("30");
   const [loading, setLoading] = useState(true);
+  const loadSequenceRef = useRef(0);
+  const replyDetailSequenceRef = useRef(0);
+  const whatsappDetailSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -236,6 +239,8 @@ export default function DashboardPage() {
 
   const loadWorkspaceData = useCallback(async (selectedId: string, token: string) => {
     if (!selectedId) return;
+    const loadSequence = ++loadSequenceRef.current;
+    const isCurrentLoad = () => loadSequenceRef.current === loadSequence;
     setGrowthJobReport(null);
     // Load independent dashboard surfaces independently: one unavailable API must not blank the whole workspace.
     const primaryResults = await Promise.allSettled([
@@ -245,6 +250,7 @@ export default function DashboardPage() {
       api<{ counts: Counts }>("/api/v1/analytics/summary?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period, token),
       api<ApiResult<Delivery>>("/api/v1/deliveries?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
+    if (!isCurrentLoad()) return;
     const [prospectResult, campaignResult, draftResult, analyticsResult, deliveryResult] = primaryResults;
     const p = prospectResult.status === "fulfilled" ? prospectResult.value : { items: [] as Prospect[] };
     const c = campaignResult.status === "fulfilled" ? campaignResult.value : { items: [] as Campaign[] };
@@ -256,13 +262,15 @@ export default function DashboardPage() {
     setDrafts(d.items || []);
     setDeliveries(deliveryData.items || []);
     setCounts(a.counts || {});
-    const primaryFailures = primaryResults.filter(result => result.status === "rejected").length;
+    const primaryFailureNames = ["prospects", "campaigns", "drafts", "analytics", "deliveries"].filter((_, index) => primaryResults[index].status === "rejected");
     const followupResult = await Promise.allSettled([api<{ items: FollowupSequence[] }>("/api/v1/follow-up-sequences?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    if (!isCurrentLoad()) return;
     setFollowupSequences(followupResult[0].status === "fulfilled" ? (followupResult[0].value.items || []) : []);
     setFollowupEnrollments({});
     const replyInboxResult = await Promise.allSettled([
       api<{ items: UnifiedReplyThread[] }>("/api/v1/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
+    if (!isCurrentLoad()) return;
     const loadedReplyThreads = replyInboxResult[0].status === "fulfilled" ? (replyInboxResult[0].value.items || []) : [];
     setUnifiedReplyThreads(loadedReplyThreads);
     setSelectedReplyProspectId(current => loadedReplyThreads.some(thread => thread.prospect_id === current) ? current : "");
@@ -270,34 +278,43 @@ export default function DashboardPage() {
     const performanceResult = await Promise.allSettled([
       api<{ items: CampaignPerformance[] }>("/api/v1/analytics/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period + "&limit=50", token),
     ]);
+    if (!isCurrentLoad()) return;
     setCampaignPerformance(performanceResult[0].status === "fulfilled" ? (performanceResult[0].value.items || []) : []);
     setCampaignPerformanceUnavailable(performanceResult[0].status !== "fulfilled");
     const scheduleResult = await Promise.allSettled([
       api<{ items: GrowthSchedule[] }>("/api/v1/workspace-growth-schedules?workspace_id=" + encodeURIComponent(selectedId), token),
     ]);
+    if (!isCurrentLoad()) return;
     setGrowthSchedules(scheduleResult[0].status === "fulfilled" ? (scheduleResult[0].value.items || []) : []);
     setGrowthSchedulesUnavailable(scheduleResult[0].status !== "fulfilled");
     const jobResult = await Promise.allSettled([
       api<{ items: GrowthJob[] }>("/api/v1/workspace-jobs?workspace_id=" + encodeURIComponent(selectedId) + "&limit=20&offset=0", token),
     ]);
+    if (!isCurrentLoad()) return;
     setGrowthJobs(jobResult[0].status === "fulfilled" ? (jobResult[0].value.items || []) : []);
     setGrowthJobsUnavailable(jobResult[0].status !== "fulfilled");
     const projectResult = await Promise.allSettled([
       api<ApiResult<Project>>("/api/v1/projects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
+    if (!isCurrentLoad()) return;
     const projectResponse = projectResult[0];
     setProjects(projectResponse.status === "fulfilled" ? (projectResponse.value.items || []) : []);
     const auditHistoryResult = await Promise.allSettled([api<{ items: Array<{ id: string; start_url: string; status: string; created_at: string }> }>("/api/v1/website-audits?workspace_id=" + encodeURIComponent(selectedId) + "&limit=10", token)]);
+    if (!isCurrentLoad()) return;
     setAuditHistory(auditHistoryResult[0].status === "fulfilled" ? (auditHistoryResult[0].value.items || []) : []);
     const invitationResult = await Promise.allSettled([api<{ items: Invitation[] }>("/api/v1/workspaces/invitations?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    if (!isCurrentLoad()) return;
     setInvitations(invitationResult[0].status === "fulfilled" ? (invitationResult[0].value.items || []) : []);
     const memberResult = await Promise.allSettled([api<{ items: WorkspaceMember[] }>("/api/v1/workspaces/members?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    if (!isCurrentLoad()) return;
     setMembers(memberResult[0].status === "fulfilled" ? (memberResult[0].value.items || []) : []);
     const emailAccountResult = await Promise.allSettled([api<{ items: EmailAccount[] }>("/api/v1/integrations/email-accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    if (!isCurrentLoad()) return;
     const loadedEmailAccounts = emailAccountResult[0].status === "fulfilled" ? (emailAccountResult[0].value.items || []) : [];
     setEmailAccounts(loadedEmailAccounts);
     setSelectedEmailAccountId(current => loadedEmailAccounts.some(account => account.id === current && account.status === "active") ? current : (loadedEmailAccounts.find(account => account.status === "active")?.id || ""));
     const whatsappAccountResult = await Promise.allSettled([api<ApiResult<WhatsAppAccount>>("/api/v1/integrations/whatsapp/accounts?workspace_id=" + encodeURIComponent(selectedId), token)]);
+    if (!isCurrentLoad()) return;
     const loadedWhatsAppAccounts = whatsappAccountResult[0].status === "fulfilled" ? (whatsappAccountResult[0].value.items || []) : [];
     setWhatsappAccounts(loadedWhatsAppAccounts);
     const templateResults = await Promise.allSettled(loadedWhatsAppAccounts.map(account =>
@@ -306,6 +323,7 @@ export default function DashboardPage() {
         token,
       ),
     ));
+    if (!isCurrentLoad()) return;
     const loadedTemplates: Record<string, WhatsAppTemplate[]> = {};
     templateResults.forEach((result, index) => {
       if (result.status === "fulfilled") loadedTemplates[loadedWhatsAppAccounts[index].id] = result.value.items || [];
@@ -315,6 +333,7 @@ export default function DashboardPage() {
       api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<{ items: WhatsAppWebhookEvent[] }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25", token),
     ]);
+    if (!isCurrentLoad()) return;
     const loadedConversations = inboxResult.status === "fulfilled" ? (inboxResult.value.items || []) : [];
     setWhatsappConversations(loadedConversations);
     setWhatsappDeadLetterEvents(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.items || []) : []);
@@ -328,21 +347,38 @@ export default function DashboardPage() {
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
       api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
     ]);
+    if (!isCurrentLoad()) return;
     const availableEntitlements = entitlementResults
       .filter((result): result is PromiseFulfilledResult<Entitlement> => result.status === "fulfilled")
       .map(result => result.value);
     setEntitlements(availableEntitlements);
     setEntitlementsUnavailable(availableEntitlements.length !== 2);
-    if (primaryFailures) setError(primaryFailures + " dashboard data source(s) could not load. Available sections remain usable; refresh to retry.");
+    const failedSections = [...primaryFailureNames];
+    if (followupResult[0].status === "rejected") failedSections.push("follow-up automation");
+    if (replyInboxResult[0].status === "rejected") failedSections.push("unified inbox");
+    if (performanceResult[0].status === "rejected") failedSections.push("campaign analytics");
+    if (scheduleResult[0].status === "rejected") failedSections.push("growth schedules");
+    if (jobResult[0].status === "rejected") failedSections.push("growth jobs");
+    if (projectResponse.status === "rejected") failedSections.push("projects");
+    if (auditHistoryResult[0].status === "rejected") failedSections.push("website audit history");
+    if (invitationResult[0].status === "rejected") failedSections.push("invitations");
+    if (memberResult[0].status === "rejected") failedSections.push("team members");
+    if (emailAccountResult[0].status === "rejected") failedSections.push("email accounts");
+    if (whatsappAccountResult[0].status === "rejected") failedSections.push("WhatsApp accounts");
+    if (inboxResult.status === "rejected") failedSections.push("WhatsApp inbox");
+    if (webhookDeadLetterResult.status === "rejected") failedSections.push("webhook events");
+    if (entitlementResults.some(result => result.status === "rejected")) failedSections.push("billing entitlements");
+    if (failedSections.length) setError("Some workspace sections could not load (" + failedSections.join(", ") + "). Other sections remain available; use Refresh to retry.");
   }, [period]);
 
   const refresh = useCallback(async (selectedId = workspaceId, token = csrf) => {
     if (!selectedId || !token) return;
     setError("");
+    const requestedLoad = loadSequenceRef.current + 1;
     try {
       await loadWorkspaceData(selectedId, token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workspace data could not be loaded.");
+      if (loadSequenceRef.current === requestedLoad) setError(err instanceof Error ? err.message : "Workspace data could not be loaded.");
     }
   }, [csrf, loadWorkspaceData, workspaceId]);
 
@@ -387,8 +423,43 @@ export default function DashboardPage() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; loadSequenceRef.current += 1; };
   }, [loadWorkspaceData, router]);
+
+  function resetWorkspaceScopedState() {
+    loadSequenceRef.current += 1;
+    replyDetailSequenceRef.current += 1;
+    whatsappDetailSequenceRef.current += 1;
+    setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setCrmOffset(0); setCrmTotal(0);
+    setResearchQuery(""); setResearchResults([]); setResearchBusy(false);
+    setDomainName(""); setDomainChallenge(null); setDomainBusy(false);
+    setAuditUrl(""); setAuditReport(null); setAuditHistory([]); setAuditBusy(false); setGrowthReviewResult(null);
+    setCampaigns([]); setCampaignName(""); setBusinessName(""); setOffer(""); setTargetProfile("");
+    setSelectedCampaign(""); setSelectedProspect(""); setDraftChannel("email"); setDraftCallToAction(""); setDeliveryScheduleLocal("");
+    setFollowupSequences([]); setFollowupEnrollments({}); setFollowupName(""); setFollowupCampaignId(""); setFollowupChannel("email");
+    setFollowupProspectId(""); setFollowupResolutionReason({}); setFollowupResolutionEvidence({});
+    setDrafts([]); setDraftEvents({}); setDraftHistoryOpen({}); setDeliveries([]);
+    setCounts({}); setCampaignPerformance([]); setCampaignPerformanceUnavailable(false);
+    setGrowthSchedules([]); setGrowthSchedulesUnavailable(false); setGrowthJobs([]); setGrowthJobsUnavailable(false); setGrowthJobReport(null);
+    setScheduleStartUrl(""); setScheduleBusinessType(""); setScheduleTargetMarket(""); setScheduleQueries("");
+    setEntitlements([]); setEntitlementsUnavailable(false); setIntegrationStatus(null);
+    setProjects([]); setProjectName(""); setProjectWebsite(""); setProjectBusinessModel(""); setProjectMarket("");
+    setProjectLanguage(""); setProjectAudience(""); setProjectOffer(""); setProjectGoal(""); setProjectBrandVoice(""); setProjectCompetitors("");
+    setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
+    setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
+    setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
+    setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
+    setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappSavedViews([]);
+    setWhatsappFilterStatus("all"); setWhatsappFilterPriority("all"); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
+    setWhatsappSelectedSavedView(""); setWhatsappSavedViewName(""); setWhatsappSLAWarningMinutes(15); setWhatsappSLABreachMinutes(60);
+    setWhatsappSLAPauseReason(""); setWhatsappSLASummary({ overdue: 0, at_risk: 0, within_sla: 0, paused: 0 });
+    setSelectedWhatsAppBulkIds([]); setWhatsappBulkAssignee("__unchanged__"); setWhatsappBulkStatus(""); setWhatsappBulkPriority("");
+    setWhatsappNoteDraft(""); setSelectedWhatsAppConversation(""); setWhatsappLabel(""); setWhatsappWabaId(""); setWhatsappPhoneNumberId(""); setWhatsappAccessToken("");
+    setUnifiedReplyThreads([]); setSelectedReplyProspectId(""); setUnifiedReplyMessages([]); setUnifiedReplyBusy(false);
+    setReplyDraftBody(""); setReplyDraftSubject(""); setWhatsappInboxBusy(false);
+    setProspectName(""); setProspectCompany(""); setProspectEmail(""); setProspectPhone(""); setProspectWebsite(""); setEvidenceUrl(""); setFitReason("");
+    setError(""); setNotice(""); setBusy(false); setIntegrationBusy(false);
+  }
 
   async function changeMemberRole(member: WorkspaceMember, role: string) {
     if (!workspaceId || !csrf || role === member.role) return;
@@ -571,17 +642,20 @@ export default function DashboardPage() {
 
   async function openUnifiedReplyThread(thread: UnifiedReplyThread) {
     if (!workspaceId || !csrf) return;
+    const requestSequence = ++replyDetailSequenceRef.current;
+    const requestedWorkspaceId = workspaceId;
     setUnifiedReplyBusy(true); setError("");
     try {
       const result = await api<{ items: UnifiedReplyMessage[] }>(
         "/api/v1/prospects/" + encodeURIComponent(thread.prospect_id) + "/messages?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
         csrf,
       );
+      if (requestSequence !== replyDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setSelectedReplyProspectId(thread.prospect_id);
       setUnifiedReplyMessages((result.items || []).slice().reverse());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
-    } finally { setUnifiedReplyBusy(false); }
+    } finally { if (requestSequence === replyDetailSequenceRef.current) setUnifiedReplyBusy(false); }
   }
 
   async function createUnifiedReplyDraft() {
@@ -760,6 +834,8 @@ export default function DashboardPage() {
 
   async function openWhatsAppConversation(conversation: WhatsAppConversation) {
     if (!workspaceId || !csrf) return;
+    const requestSequence = ++whatsappDetailSequenceRef.current;
+    const requestedWorkspaceId = workspaceId;
     setWhatsappInboxBusy(true);
     setError("");
     try {
@@ -768,20 +844,23 @@ export default function DashboardPage() {
         "/messages?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
         csrf,
       );
+      if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setSelectedWhatsAppConversation(conversation.id);
       setWhatsappMessages((result.items || []).slice().reverse());
       const notes = await api<{ items: WhatsAppInternalNote[] }>(
         "/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) +
         "/notes?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf,
       );
+      if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappNotes((notes.items || []).slice().reverse());
       const activity = await api<{ items: WhatsAppActivity[] }>("/api/v1/integrations/whatsapp/inbox/conversations/" + encodeURIComponent(conversation.id) + "/activity?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=50", csrf);
+      if (requestSequence !== whatsappDetailSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappActivity((activity.items || []).slice().reverse());
       setWhatsappNoteDraft("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "WhatsApp conversation could not be loaded.");
     } finally {
-      setWhatsappInboxBusy(false);
+      if (requestSequence === whatsappDetailSequenceRef.current) setWhatsappInboxBusy(false);
     }
   }
 
@@ -1946,7 +2025,7 @@ export default function DashboardPage() {
       </nav>}
       {loading ? <section className="card" aria-live="polite">Loading secure workspace data…</section> : <>
         {!workspaces.length && <section className="card" role="status"><h2>Start with a workspace</h2><p>Create a workspace below to keep prospects, campaigns, approvals and provider connections organized in one secure place.</p></section>}
-        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); await refresh(id, csrf); }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
+        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; resetWorkspaceScopedState(); setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); setLoading(true); try { await refresh(id, csrf); } finally { setLoading(false); } }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
           <form onSubmit={createWorkspace}><div className="field"><label htmlFor="new-workspace-name">Create another workspace</label><input id="new-workspace-name" required maxLength={160} value={newWorkspaceName} onChange={e=>setNewWorkspaceName(e.target.value)} placeholder="Client or business workspace name" /></div><button className="button secondary" type="submit" disabled={busy || !csrf}>Create workspace</button></form>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
