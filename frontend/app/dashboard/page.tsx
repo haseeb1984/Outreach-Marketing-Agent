@@ -483,46 +483,53 @@ export default function DashboardPage() {
 
   async function changeMemberRole(member: WorkspaceMember, role: string) {
     if (!workspaceId || !csrf || role === member.role) return;
+    const requestedWorkspaceId = workspaceId;
     if (!window.confirm("Change " + member.email + "'s role to " + role + "?")) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/workspaces/members/" + encodeURIComponent(member.user_id), csrf, {
-        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, role }),
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, role }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Workspace member role updated.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Member role could not be changed.");
-      await refresh(workspaceId, csrf);
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Member role could not be changed.");
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function removeMember(member: WorkspaceMember) {
     if (!workspaceId || !csrf || !window.confirm("Remove " + member.email + " from this workspace? Their account will remain active.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/workspaces/members/" + encodeURIComponent(member.user_id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/workspaces/members/" + encodeURIComponent(member.user_id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Member removed from this workspace.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workspace member could not be removed.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Workspace member could not be removed.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function transferOwnership(member: WorkspaceMember) {
     if (!workspaceId || !csrf || workspaces.find(w => w.id === workspaceId)?.role !== "owner") return;
+    const requestedWorkspaceId = workspaceId;
     if (!window.confirm("Transfer ownership of this workspace to " + member.email + "? You will become an admin and the new owner will control billing and workspace administration.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/workspaces/" + encodeURIComponent(workspaceId) + "/transfer-ownership", csrf, {
+      await api("/api/v1/workspaces/" + encodeURIComponent(requestedWorkspaceId) + "/transfer-ownership", csrf, {
         method: "POST", body: JSON.stringify({ target_user_id: member.user_id }),
       });
-      setWorkspaces(current => current.map(workspace => workspace.id === workspaceId ? { ...workspace, role: "admin" } : workspace));
+      if (requestedWorkspaceId !== workspaceId) return;
+      setWorkspaces(current => current.map(workspace => workspace.id === requestedWorkspaceId ? { ...workspace, role: "admin" } : workspace));
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Workspace ownership transferred. Your role is now admin.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workspace ownership could not be transferred.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Workspace ownership could not be transferred.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function loadAuthSessions() {
@@ -531,7 +538,7 @@ export default function DashboardPage() {
       const result = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", csrf);
       setAuthSessions(result.items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
     }
   }
 
@@ -541,10 +548,11 @@ export default function DashboardPage() {
     try {
       await api("/api/v1/auth/sessions/" + encodeURIComponent(session.id), csrf, { method: "DELETE" });
       setAuthSessions(current => current.filter(item => item.id !== session.id));
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Selected session signed out.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Session could not be revoked.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Session could not be revoked.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -555,73 +563,85 @@ export default function DashboardPage() {
       const created = await api<{ workspace_id: string; name: string; role: string }>("/api/v1/workspaces", csrf, {
         method: "POST", body: JSON.stringify({ name: newWorkspaceName.trim() }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setWorkspaces(current => [...current, { id: created.workspace_id, name: created.name, role: created.role }]);
       setWorkspaceId(created.workspace_id);
       setWorkspaceName(created.name);
       setNewWorkspaceName("");
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Workspace created. You are its owner.");
       await refresh(created.workspace_id, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workspace could not be created.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Workspace could not be created.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function saveWorkspaceName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ workspace_id: string; name: string }>("/api/v1/workspaces/settings", csrf, {
-        method: "PATCH", body: JSON.stringify({ workspace_id: workspaceId, name: workspaceName }),
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, name: workspaceName }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setWorkspaceName(result.name);
-      setWorkspaces(current => current.map(workspace => workspace.id === workspaceId ? { ...workspace, name: result.name } : workspace));
+      if (requestedWorkspaceId !== workspaceId) return;
+      setWorkspaces(current => current.map(workspace => workspace.id === requestedWorkspaceId ? { ...workspace, name: result.name } : workspace));
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Workspace name updated.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workspace settings could not be saved.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Workspace settings could not be saved.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createEmailAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/integrations/email-accounts", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId, label: emailAccountLabel, smtp_host: smtpHost,
+          workspace_id: requestedWorkspaceId, label: emailAccountLabel, smtp_host: smtpHost,
           smtp_port: 587, smtp_username: smtpUsername, smtp_password: smtpPassword,
           from_email: smtpFromEmail, from_name: smtpFromName, starttls: true,
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setEmailAccountLabel(""); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail("");
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Email account credentials encrypted and stored. Test the connection before queueing messages.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Email account could not be connected.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Email account could not be connected.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
 
   async function saveEmailAccountChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !editingEmailAccountId) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/integrations/email-accounts/" + encodeURIComponent(editingEmailAccountId), csrf, {
         method: "PUT",
-        body: JSON.stringify({ workspace_id: workspaceId, label: emailAccountLabel, smtp_host: smtpHost,
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, label: emailAccountLabel, smtp_host: smtpHost,
           smtp_port: 587, smtp_username: smtpUsername, smtp_password: smtpPassword,
           from_email: smtpFromEmail, from_name: smtpFromName, starttls: true }),
       });
       setEditingEmailAccountId(null);
+      if (requestedWorkspaceId !== workspaceId) return;
       setEmailAccountLabel(""); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail("");
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("SMTP credentials updated. Queued messages tied to the old sender were retired; retest this account before creating new deliveries.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Email account could not be updated.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Email account could not be updated.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   function beginEmailAccountEdit(account: EmailAccount) {
@@ -634,30 +654,34 @@ export default function DashboardPage() {
 
   async function testEmailAccount(account: EmailAccount) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      const result = await api<{ message: string }>("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "/test?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
+      const result = await api<{ message: string }>("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "/test?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "POST" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(result.message || "Email account connection test succeeded. No email was sent.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Email account connection test failed.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Email account connection test failed.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
 
   async function sendEmailAccountTest(account: EmailAccount) {
     if (!workspaceId || !csrf || !window.confirm("Send one diagnostic email to " + account.from_email + "? This sends a real email and does not guarantee inbox placement.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ sent_to: string; note: string }>(
         "/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "/send-test",
         csrf,
-        { method: "POST", body: JSON.stringify({ workspace_id: workspaceId, confirm_send: true }) },
+        { method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, confirm_send: true }) },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Diagnostic email submitted to " + result.sent_to + ". " + result.note);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Diagnostic email could not be submitted.");
-    } finally { setBusy(false); }
+      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Diagnostic email could not be submitted.");
+    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function openUnifiedReplyThread(thread: UnifiedReplyThread) {
