@@ -26,4 +26,15 @@ Each sequence has 1–10 steps. Step 1's delay is measured from enrollment; late
 
 **Safety model:** the due scheduler only creates a new `pending_approval` draft. It never sends a follow-up. A workspace admin must approve the draft and separately queue it through the channel's normal delivery path. Email suppression, WhatsApp account-scoped opt-in, WhatsApp opt-out, prospect reply/disqualification/conversion, archived contacts, campaign state and sequence state are checked before materializing each step. Sending a step advances the enrollment only after a confirmed provider outcome. Failed or uncertain delivery pauses the enrollment for operator review. Rejected drafts stop the enrollment. Paused sequences block dispatch of their already-created follow-up drafts.
 
-Configure an external trusted scheduler to call both due-delivery endpoints at a suitable interval. Do not expose the scheduler secret to the browser. WhatsApp dispatch remains independently controlled by its existing explicit feature flag and Meta activation requirements.
+## Supervised follow-up worker
+
+For a continuously running host, install `ops/systemd/outreach-campaign-followup-worker.service` alongside the backend workers. It uses the same protected `/etc/outreach-marketing-agent/scheduler.env` file as the growth scheduler and requires `DATABASE_URL`. After installing the release and applying migration 049:
+
+```sh
+sudo install -o root -g root -m 0644 ops/systemd/outreach-campaign-followup-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now outreach-campaign-followup-worker
+sudo systemctl status outreach-campaign-followup-worker
+```
+
+The service only materializes pending-approval drafts. It cannot send email or WhatsApp. Existing email due-delivery and WhatsApp dispatch workers remain separately configured and gated. Alternatively, a trusted external scheduler can call `POST /api/v1/follow-up-sequences/process-due` with the scheduler bearer secret. Do not expose the scheduler secret to the browser. WhatsApp dispatch remains independently controlled by its existing explicit feature flag and Meta activation requirements.
