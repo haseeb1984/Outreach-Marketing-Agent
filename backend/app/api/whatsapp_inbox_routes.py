@@ -459,6 +459,13 @@ async def list_whatsapp_messages(
                     before_id = UUID(before)
                 except ValueError:
                     raise HTTPException(status_code=422, detail="invalid_before_message_id") from None
+                cursor_exists = await conn.fetchval(
+                    """SELECT EXISTS(SELECT 1 FROM whatsapp_inbound_messages
+                       WHERE id=$1 AND workspace_id=$2 AND conversation_id=$3)""",
+                    before_id, workspace_id, conversation_id,
+                )
+                if not cursor_exists:
+                    raise HTTPException(status_code=422, detail="invalid_before_message_id")
                 rows = await conn.fetch(
                     """SELECT id, conversation_id, provider_message_id, message_type, text_body,
                               media_metadata, media_mime_type, media_filename, media_size, media_downloaded_at,
