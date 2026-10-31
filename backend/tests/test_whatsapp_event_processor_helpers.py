@@ -148,3 +148,13 @@ def test_event_processor_uses_safe_prospect_id_after_unique_mapping():
     assert 'prospect["id"]' not in source
     assert "if prospect_id:" in source
     assert "workspace_id, account_id, prospect_id," in source
+
+def test_event_processor_uses_persisted_conversation_prospect_for_contact_actions():
+    import inspect
+    from app.services import whatsapp_event_processor
+
+    source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
+    assert "RETURNING id,prospect_id" in source
+    assert 'associated_prospect_id = conversation["prospect_id"]' in source
+    assert "if associated_prospect_id:" in source
+    assert "workspace_id, account_id, associated_prospect_id," in source
