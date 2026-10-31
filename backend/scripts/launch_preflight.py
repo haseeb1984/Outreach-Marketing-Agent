@@ -42,6 +42,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "050_followup_delivery_resolutions.sql",
     "051_billing_transactions.sql",
     "052_billing_event_fingerprints.sql",
+    "053_billing_transaction_event_fingerprints.sql",
 )
 
 
