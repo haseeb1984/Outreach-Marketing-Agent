@@ -538,7 +538,7 @@ export default function DashboardPage() {
       const result = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", csrf);
       setAuthSessions(result.items);
     } catch (err) {
-      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
+      setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
     }
   }
 
@@ -548,11 +548,10 @@ export default function DashboardPage() {
     try {
       await api("/api/v1/auth/sessions/" + encodeURIComponent(session.id), csrf, { method: "DELETE" });
       setAuthSessions(current => current.filter(item => item.id !== session.id));
-      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Selected session signed out.");
     } catch (err) {
-      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Session could not be revoked.");
-    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
+      setError(err instanceof Error ? err.message : "Session could not be revoked.");
+    } finally { setBusy(false); }
   }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -563,17 +562,15 @@ export default function DashboardPage() {
       const created = await api<{ workspace_id: string; name: string; role: string }>("/api/v1/workspaces", csrf, {
         method: "POST", body: JSON.stringify({ name: newWorkspaceName.trim() }),
       });
-      if (requestedWorkspaceId !== workspaceId) return;
       setWorkspaces(current => [...current, { id: created.workspace_id, name: created.name, role: created.role }]);
       setWorkspaceId(created.workspace_id);
       setWorkspaceName(created.name);
       setNewWorkspaceName("");
-      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Workspace created. You are its owner.");
       await refresh(created.workspace_id, csrf);
     } catch (err) {
-      if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Workspace could not be created.");
-    } finally { if (!requestedWorkspaceId || requestedWorkspaceId === workspaceId) setBusy(false); }
+      setError(err instanceof Error ? err.message : "Workspace could not be created.");
+    } finally { setBusy(false); }
   }
 
   async function saveWorkspaceName(event: FormEvent<HTMLFormElement>) {
@@ -633,8 +630,8 @@ export default function DashboardPage() {
           smtp_port: 587, smtp_username: smtpUsername, smtp_password: smtpPassword,
           from_email: smtpFromEmail, from_name: smtpFromName, starttls: true }),
       });
-      setEditingEmailAccountId(null);
       if (requestedWorkspaceId !== workspaceId) return;
+      setEditingEmailAccountId(null);
       setEmailAccountLabel(""); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail("");
       if (requestedWorkspaceId !== workspaceId) return;
       setNotice("SMTP credentials updated. Queued messages tied to the old sender were retired; retest this account before creating new deliveries.");
