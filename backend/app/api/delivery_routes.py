@@ -99,7 +99,12 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
                 workspace_id=workspace_id, feature="email_sends",
                 idempotency_key=f"delivery-send:{delivery_id}",
             )
-            if not reservation.get("allowed") or reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+            reservation_replayed = reservation.get("reason") == "idempotent_replay"
+            if (
+                not reservation.get("allowed")
+                or reservation.get("status") == "consumed"
+                or (reservation_replayed and reservation.get("status") != "reserved")
+            ):
                 results.append({"delivery_id": str(delivery_id), "status": "skipped", "reason": reservation.get("reason", "quota_denied")})
                 continue
             data = await store.claim(workspace_id=workspace_id, delivery_id=delivery_id)
@@ -124,7 +129,11 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
             )
             results.append({"delivery_id": str(delivery_id), "status": "sent" if delivery_saved and quota_saved else "settlement_pending"})
         except ValueError as exc:
-            if reservation and reservation.get("reservation_id"):
+            # If this was a replay, another scheduler may own the live attempt.
+            # Never release its reservation when our competing claim loses.
+            if reservation and reservation.get("reservation_id") and not (
+                reservation.get("reason") == "idempotent_replay" and not locals().get("data")
+            ):
                 await _settle_delivery_attempt(
                     store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
                     reservation_id=reservation["reservation_id"], error_code=str(exc)[:100], quota_outcome="released",
@@ -280,28 +289,35 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
         reason = reservation.get("reason", "entitlement_denied")
         status_code = 429 if reason == "quota_exhausted" else 403
         raise HTTPException(status_code=status_code, detail=reason)
-    # A reservation replay may belong to a concurrent or interrupted send. Never let
-    # a second request claim/send it or release quota reserved by the first request.
-    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+    # A consumed reservation is terminal. A still-reserved replay may be a
+    # crash-before-claim recovery; the queue's atomic claim decides which request
+    # owns the attempt. Losing replay requests must never release the winner's quota.
+    reservation_replayed = reservation.get("reason") == "idempotent_replay"
+    if reservation.get("status") == "consumed" or (
+        reservation_replayed and reservation.get("status") != "reserved"
+    ):
         raise HTTPException(status_code=409, detail="delivery_send_key_already_used")
 
     reservation_id = reservation["reservation_id"]
     try:
         data = await store.claim(workspace_id=payload.workspace_id, delivery_id=delivery_id)
     except LookupError:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-        )
+        if not reservation_replayed:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
         raise HTTPException(status_code=404, detail="delivery_not_found") from None
     except ValueError as exc:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-        )
+        if not reservation_replayed:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except Exception:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-        )
+        if not reservation_replayed:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
+            )
         raise HTTPException(status_code=503, detail="delivery_claim_unavailable") from None
 
     try:
