@@ -573,12 +573,19 @@ export default function DashboardPage() {
       const created = await api<{ workspace_id: string; name: string; role: string }>("/api/v1/workspaces", csrf, {
         method: "POST", body: JSON.stringify({ name: newWorkspaceName.trim() }),
       });
+      const switchSequence = ++workspaceSwitchSequenceRef.current;
+      resetWorkspaceScopedState();
       setWorkspaces(current => [...current, { id: created.workspace_id, name: created.name, role: created.role }]);
       setWorkspaceId(created.workspace_id);
       setWorkspaceName(created.name);
       setNewWorkspaceName("");
+      setLoading(true);
       setNotice("Workspace created. You are its owner.");
-      await refresh(created.workspace_id, csrf);
+      try {
+        await refresh(created.workspace_id, csrf);
+      } finally {
+        if (workspaceSwitchSequenceRef.current === switchSequence) setLoading(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Workspace could not be created.");
     } finally { setBusy(false); }
