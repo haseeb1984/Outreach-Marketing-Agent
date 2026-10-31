@@ -163,10 +163,18 @@ async def list_whatsapp_conversations(
                           COALESCE(m.text_body,'') ILIKE '%' || $9 || '%')
                    ORDER BY COALESCE(m.received_at,c.updated_at) DESC,c.id
                    LIMIT $2 OFFSET $3""",
-                workspace_id, limit, offset, assigned_to_me, user_id,
+                workspace_id, limit + 1, offset, assigned_to_me, user_id,
                 unassigned, inbox_status, priority, search_term, assigned_to_user_id,
             )
-        return {"items": [_serialize(dict(row)) for row in rows], "limit": limit, "offset": offset}
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
+        return {
+            "items": [_serialize(dict(row)) for row in page_rows],
+            "limit": limit,
+            "offset": offset,
+            "next_offset": offset + limit if has_more else None,
+            "has_more": has_more,
+        }
     except HTTPException:
         raise
     except Exception:
