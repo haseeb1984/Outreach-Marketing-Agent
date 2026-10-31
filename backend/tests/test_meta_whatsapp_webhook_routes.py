@@ -88,7 +88,7 @@ def test_meta_webhook_rejects_invalid_signature_before_persistence(monkeypatch):
     monkeypatch.setattr(meta_whatsapp_webhook_routes.settings, "meta_whatsapp_app_secret", "s" * 40)
     connection = _Connection()
     with TestClient(app) as client:
-        app.state.db_pool = _Pool(connection)
+        monkeypatch.setattr(app.state, "db_pool", _Pool(connection), raising=False)
         response = client.post("/api/v1/webhooks/meta/whatsapp",
             headers={"x-hub-signature-256": "sha256=invalid"}, json=_payload())
     assert response.status_code == 401
