@@ -115,14 +115,14 @@ async def list_whatsapp_conversations(
                               make_interval(mins => COALESCE(policy.breach_minutes,60)) THEN 'met'
                             WHEN response.sent_at IS NOT NULL THEN 'breached'
                             WHEN c.sla_paused_at IS NOT NULL THEN 'paused'
-                            WHEN now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
+                            WHEN now() >= inbound.received_at + make_interval(secs => COALESCE(response_pause.paused_seconds,0)) +
                               make_interval(mins => COALESCE(policy.breach_minutes,60)) THEN 'overdue'
-                            WHEN now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0)) +
+                            WHEN now() >= inbound.received_at + make_interval(secs => COALESCE(response_pause.paused_seconds,0)) +
                               make_interval(mins => COALESCE(policy.warning_minutes,15)) THEN 'at_risk'
                             ELSE 'within_sla'
                           END AS sla_state,
                           CASE WHEN inbound.received_at IS NOT NULL
-                            THEN inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0) +
+                            THEN inbound.received_at + make_interval(secs => COALESCE(response_pause.paused_seconds,0) +
                               CASE WHEN c.sla_paused_at IS NOT NULL THEN EXTRACT(EPOCH FROM now()-c.sla_paused_at)::int ELSE 0 END) +
                               make_interval(mins => COALESCE(policy.breach_minutes,60))
                             ELSE NULL END AS sla_due_at
@@ -152,7 +152,7 @@ async def list_whatsapp_conversations(
                    ) response ON TRUE
                    LEFT JOIN LATERAL (
                        SELECT COALESCE(SUM(GREATEST(0, EXTRACT(EPOCH FROM (
-                           LEAST(COALESCE(p.resume_at,response.sent_at),response.sent_at)
+                           LEAST(COALESCE(p.resume_at,COALESCE(response.sent_at,now())),COALESCE(response.sent_at,now()))
                            - GREATEST(p.pause_at,inbound.received_at)
                        )))),0)::int AS paused_seconds
                        FROM (
@@ -164,10 +164,9 @@ async def list_whatsapp_conversations(
                              AND event_type IN ('sla_paused','sla_resumed')
                        ) p
                        WHERE p.event_type='sla_paused'
-                         AND response.sent_at IS NOT NULL
-                         AND p.pause_at < response.sent_at
+                         AND p.pause_at < COALESCE(response.sent_at,now())
                          AND (p.resume_at IS NULL OR p.resume_at > inbound.received_at)
-                   ) response_pause ON response.sent_at IS NOT NULL
+                   ) response_pause ON TRUE
                    LEFT JOIN whatsapp_inbox_sla_policies policy
                      ON policy.workspace_id=c.workspace_id
                    WHERE c.workspace_id=$1
@@ -326,13 +325,13 @@ async def get_whatsapp_inbox_sla_summary(
                 """SELECT
                      count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL
                        AND inbound.received_at IS NOT NULL AND response.sent_at IS NULL
-                       AND now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                       AND now() >= inbound.received_at + make_interval(secs => COALESCE(response_pause.paused_seconds,0))
                          + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS overdue,
                      count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL
                        AND inbound.received_at IS NOT NULL AND response.sent_at IS NULL
-                       AND now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                       AND now() >= inbound.received_at + make_interval(secs => COALESCE(response_pause.paused_seconds,0))
                          + make_interval(mins => COALESCE(policy.warning_minutes,15))
-                       AND now() < inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                       AND now() < inbound.received_at + make_interval(secs => COALESCE(response_pause.paused_seconds,0))
                          + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS at_risk,
                      count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL
                        AND inbound.received_at IS NOT NULL AND response.sent_at IS NOT NULL
@@ -374,10 +373,9 @@ async def get_whatsapp_inbox_sla_summary(
                              AND event_type IN ('sla_paused','sla_resumed')
                        ) p
                        WHERE p.event_type='sla_paused'
-                         AND response.sent_at IS NOT NULL
-                         AND p.pause_at < response.sent_at
+                         AND p.pause_at < COALESCE(response.sent_at,now())
                          AND (p.resume_at IS NULL OR p.resume_at > inbound.received_at)
-                   ) response_pause ON response.sent_at IS NOT NULL
+                   ) response_pause ON TRUE
                    LEFT JOIN whatsapp_inbox_sla_policies policy ON policy.workspace_id=c.workspace_id
                    WHERE c.workspace_id=$1""",
                 workspace_id,
