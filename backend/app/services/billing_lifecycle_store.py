@@ -214,7 +214,7 @@ class BillingLifecycleStore:
                     currency_code, total_minor, event_created_at)
                 if row is None:
                     current = await conn.fetchrow(
-                        """SELECT workspace_id,provider_subscription_id,invoice_number
+                        """SELECT workspace_id,provider_subscription_id,invoice_number,currency_code,total_minor
                            FROM billing_transactions
                            WHERE provider='paddle' AND transaction_id=$1 FOR UPDATE""", transaction_id)
                     if current is None or current["workspace_id"] != workspace_id:
