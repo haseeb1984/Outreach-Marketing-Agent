@@ -94,6 +94,7 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
         workspace_id = item["workspace_id"]
         delivery_id = UUID(item["delivery_id"])
         reservation = None
+        data = None
         try:
             reservation = await subscriptions.reserve_usage(
                 workspace_id=workspace_id, feature="email_sends",
@@ -132,7 +133,7 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
             # If this was a replay, another scheduler may own the live attempt.
             # Never release its reservation when our competing claim loses.
             if reservation and reservation.get("reservation_id") and not (
-                reservation.get("reason") == "idempotent_replay" and not locals().get("data")
+                reservation.get("reason") == "idempotent_replay" and data is None
             ):
                 await _settle_delivery_attempt(
                     store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
@@ -140,7 +141,9 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
                 )
             results.append({"delivery_id": str(delivery_id), "status": "blocked", "reason": str(exc)[:100]})
         except (EmailDeliveryNotConfigured, CredentialEncryptionNotConfigured, CredentialDecryptionFailed, LookupError):
-            if reservation and reservation.get("reservation_id"):
+            if reservation and reservation.get("reservation_id") and not (
+                reservation.get("reason") == "idempotent_replay" and data is None
+            ):
                 await _settle_delivery_attempt(
                     store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
                     reservation_id=reservation["reservation_id"], error_code="provider_not_configured",
@@ -148,7 +151,7 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
                 )
             results.append({"delivery_id": str(delivery_id), "status": "failed", "reason": "provider_not_configured"})
         except EmailDeliveryFailed:
-            if reservation and reservation.get("reservation_id"):
+            if reservation and reservation.get("reservation_id") and data is not None:
                 await _settle_delivery_attempt(
                     store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
                     reservation_id=reservation["reservation_id"], error_code="delivery_outcome_unknown", quota_outcome="consumed",
@@ -156,7 +159,7 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
             results.append({"delivery_id": str(delivery_id), "status": "uncertain"})
         except Exception:
             # A claimed send may have reached SMTP; never make an ambiguous attempt retryable.
-            if reservation and reservation.get("reservation_id"):
+            if reservation and reservation.get("reservation_id") and data is not None:
                 await _settle_delivery_attempt(
                     store, subscriptions, workspace_id=workspace_id, delivery_id=delivery_id,
                     reservation_id=reservation["reservation_id"], error_code="delivery_outcome_unknown", quota_outcome="consumed",
