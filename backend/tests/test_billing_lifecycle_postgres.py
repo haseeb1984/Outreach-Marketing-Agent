@@ -201,5 +201,69 @@ async def _exercise_billing_lifecycle() -> None:
                 "SELECT count(*) FROM billing_provider_events WHERE workspace_id=$1",
                 race_workspace,
             ) == 1
+
+        # Paddle transaction history: exact event replay is idempotent, payload
+        # mutation under the same event ID is rejected, and later snapshots win.
+        transaction_id = "txn_integration_" + uuid4().hex
+        transaction_event_id = "evt_tx_" + uuid4().hex
+        transaction_args = {
+            "event_id": transaction_event_id,
+            "event_created_at": NOW,
+            "transaction_id": transaction_id,
+            "workspace_id": workspace_id,
+            "subscription_id": "sub_integration",
+            "invoice_number": "INV-INTEGRATION",
+            "status": "completed",
+            "currency_code": "USD",
+            "total_minor": "1200",
+        }
+        assert await store.record_verified_transaction(**transaction_args) == {"outcome": "applied"}
+        assert await store.record_verified_transaction(**transaction_args) == {"outcome": "duplicate"}
+        with pytest.raises(ValueError, match="billing_transaction_event_payload_conflict"):
+            await store.record_verified_transaction(
+                **{**transaction_args, "status": "payment_failed"}
+            )
+        with pytest.raises(ValueError, match="billing_transaction_event_identity_conflict"):
+            await store.record_verified_transaction(
+                **{**transaction_args, "event_created_at": NOW + timedelta(seconds=1)}
+            )
+
+        # A later event for the same transaction advances its status.
+        later_transaction_event = {
+            **transaction_args,
+            "event_id": "evt_tx_later_" + uuid4().hex,
+            "event_created_at": NOW + timedelta(minutes=1),
+            "status": "payment_failed",
+        }
+        assert await store.record_verified_transaction(**later_transaction_event) == {"outcome": "applied"}
+        # An equal-timestamp event is stale and cannot overwrite that status.
+        tied_transaction_event = {
+            **transaction_args,
+            "event_id": "evt_tx_tied_" + uuid4().hex,
+            "status": "completed",
+        }
+        assert await store.record_verified_transaction(**tied_transaction_event) == {"outcome": "stale"}
+        async with pool.acquire() as conn:
+            transaction_snapshot = await conn.fetchrow(
+                "SELECT status,total_minor,currency_code FROM billing_transactions WHERE provider='paddle' AND transaction_id=$1",
+                transaction_id,
+            )
+            assert transaction_snapshot["status"] == "payment_failed"
+            assert str(transaction_snapshot["total_minor"]) == "1200"
+            assert transaction_snapshot["currency_code"] == "USD"
+
+        # A transaction ID cannot be rebound to a different workspace.
+        other_workspace = "billing-transaction-other-" + uuid4().hex
+        async with pool.acquire() as conn:
+            await conn.execute("INSERT INTO workspaces (id) VALUES ($1)", other_workspace)
+        with pytest.raises(ValueError, match="billing_transaction_workspace_conflict"):
+            await store.record_verified_transaction(
+                **{
+                    **transaction_args,
+                    "event_id": "evt_tx_workspace_conflict_" + uuid4().hex,
+                    "event_created_at": NOW + timedelta(minutes=2),
+                    "workspace_id": other_workspace,
+                }
+            )
     finally:
         await pool.close()
