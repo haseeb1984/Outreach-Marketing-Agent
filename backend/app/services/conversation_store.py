@@ -48,17 +48,32 @@ class ConversationStore:
             rows = await c.fetch("""WITH all_messages AS (
                 SELECT id::text AS id,workspace_id,prospect_id,provider,provider_event_id,
                        provider_message_id,in_reply_to_provider_message_id,channel,direction,body,
-                       occurred_at,received_at
+                       occurred_at,received_at,NULL::text AS delivery_status
                 FROM outreach_conversation_messages
                 WHERE workspace_id=$1 AND prospect_id=$2
                 UNION ALL
                 SELECT m.id::text,m.workspace_id,c.prospect_id,'meta_whatsapp',NULL,
                        m.provider_message_id,NULL,'whatsapp','inbound',
                        COALESCE(m.text_body,'[' || m.message_type || ']'),
-                       COALESCE(m.provider_timestamp,m.received_at),m.received_at
+                       COALESCE(m.provider_timestamp,m.received_at),m.received_at,NULL::text
                 FROM whatsapp_inbound_messages m
                 JOIN whatsapp_conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
                 WHERE m.workspace_id=$1 AND c.prospect_id=$2
+                UNION ALL
+                SELECT q.id::text,q.workspace_id,d.prospect_id,'smtp',NULL,q.provider_message_id,
+                       NULL,'email','outbound',d.body,COALESCE(q.sent_at,q.updated_at,q.queued_at),
+                       q.queued_at,q.status::text
+                FROM outreach_deliveries q
+                JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                WHERE q.workspace_id=$1 AND d.prospect_id=$2 AND q.status IN ('sent','failed')
+                UNION ALL
+                SELECT q.id::text,q.workspace_id,q.prospect_id,'meta_whatsapp',NULL,q.provider_message_id,
+                       NULL,'whatsapp','outbound',d.body,COALESCE(q.sent_at,q.updated_at,q.queued_at),
+                       q.queued_at,q.status::text
+                FROM whatsapp_outbound_deliveries q
+                JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                WHERE q.workspace_id=$1 AND q.prospect_id=$2
+                  AND q.status IN ('sent','delivered','read','failed','uncertain')
             )
             SELECT * FROM all_messages
             ORDER BY occurred_at ASC,id ASC
@@ -77,14 +92,28 @@ class ConversationStore:
             raise ValueError("pagination_out_of_range")
         async with self._pool.acquire() as c:
             rows = await c.fetch("""WITH all_messages AS (
-                SELECT id::text AS id, prospect_id, channel, body, provider, occurred_at, received_at
+                SELECT id::text AS id, prospect_id, channel, body, provider, occurred_at, received_at,
+                       'inbound'::text AS direction,NULL::text AS delivery_status
                 FROM outreach_conversation_messages WHERE workspace_id=$1
                 UNION ALL
                 SELECT m.id::text, c.prospect_id, 'whatsapp', COALESCE(m.text_body,'[' || m.message_type || ']'),
-                       'meta_whatsapp', COALESCE(m.provider_timestamp,m.received_at), m.received_at
+                       'meta_whatsapp', COALESCE(m.provider_timestamp,m.received_at), m.received_at,
+                       'inbound'::text,NULL::text
                 FROM whatsapp_inbound_messages m
                 JOIN whatsapp_conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
                 WHERE m.workspace_id=$1 AND c.prospect_id IS NOT NULL
+                UNION ALL
+                SELECT q.id::text,d.prospect_id,'email',d.body,'smtp',
+                       COALESCE(q.sent_at,q.updated_at,q.queued_at),q.queued_at,'outbound',q.status::text
+                FROM outreach_deliveries q
+                JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                WHERE q.workspace_id=$1 AND q.status IN ('sent','failed')
+                UNION ALL
+                SELECT q.id::text,q.prospect_id,'whatsapp',d.body,'meta_whatsapp',
+                       COALESCE(q.sent_at,q.updated_at,q.queued_at),q.queued_at,'outbound',q.status::text
+                FROM whatsapp_outbound_deliveries q
+                JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                WHERE q.workspace_id=$1 AND q.status IN ('sent','delivered','read','failed','uncertain')
             ), ranked AS (
                 SELECT message.*, row_number() OVER (PARTITION BY message.prospect_id
                     ORDER BY message.occurred_at DESC,message.id DESC) AS position,
@@ -94,7 +123,7 @@ class ConversationStore:
             )
             SELECT ranked.id, ranked.prospect_id, p.name AS prospect_name,p.company AS prospect_company,
                    p.contact_email,p.contact_phone_e164,ranked.channel,ranked.body AS latest_message,
-                   ranked.provider,ranked.occurred_at AS latest_message_at,ranked.received_at,ranked.message_count
+                   ranked.provider,ranked.direction AS latest_direction,ranked.delivery_status AS latest_delivery_status,ranked.occurred_at AS latest_message_at,ranked.received_at,ranked.message_count
             FROM ranked JOIN crm_prospects p ON p.id=ranked.prospect_id
             WHERE ranked.position=1
             ORDER BY ranked.occurred_at DESC,ranked.id DESC LIMIT $2 OFFSET $3""",

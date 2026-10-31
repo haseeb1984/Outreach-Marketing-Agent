@@ -29,8 +29,8 @@ type WhatsAppInternalNote = { id: string; author_user_id: string; body: string; 
 type WhatsAppActivity = { id: string; actor_user_id: string; event_type: string; details?: Record<string, unknown>; created_at: string };
 type WhatsAppSavedView = { id: string; name: string; filters: { inbox_status?: string; priority?: string; search?: string; assigned_to_me?: boolean; unassigned?: boolean; assigned_to_user_id?: string }; };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; media_mime_type?: string | null; media_filename?: string | null; media_size?: number | null; media_downloaded_at?: string | null; provider_timestamp?: string | null; received_at: string };
-type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
-type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
+type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_direction?: string; latest_delivery_status?: string | null; latest_message_at: string; message_count: number };
+type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string; delivery_status?: string | null };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; domain?: string; description: string; relevance_score?: number; relevance_reasons?: string[]; relevance_method?: string; evidence_type: string; requires_human_review: boolean };
@@ -2375,18 +2375,18 @@ export default function DashboardPage() {
 
         <section className="section" aria-labelledby="unified-reply-inbox-title">
           <h2 id="unified-reply-inbox-title">Unified reply inbox</h2>
-          <p className="fine">Email and WhatsApp replies linked to workspace CRM prospects appear together. This inbox is read-only; replies do not trigger automatic outbound messages.</p>
+          <p className="fine">Inbound and outbound email and WhatsApp messages linked to workspace CRM prospects appear together. Replies are created as drafts and require approval before delivery.</p>
           <div className="cards">
             <article className="card">
               <h3>Reply threads ({unifiedReplyThreads.length})</h3>
               {unifiedReplyThreads.length ? unifiedReplyThreads.map(thread=><button key={thread.prospect_id} type="button" className={"button " + (selectedReplyProspectId===thread.prospect_id ? "" : "secondary")} disabled={unifiedReplyBusy} onClick={()=>openUnifiedReplyThread(thread)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}>
-                <strong>{thread.prospect_name}</strong><span style={{display:"block"}}>{thread.prospect_company} · {thread.channel.toUpperCase()} · {thread.message_count} messages</span><span style={{display:"block"}}>{thread.latest_message}</span><span className="fine">{new Date(thread.latest_message_at).toLocaleString()}</span>
+                <strong>{thread.prospect_name}</strong><span style={{display:"block"}}>{thread.prospect_company} · {thread.channel.toUpperCase()} · {thread.message_count} messages · {thread.latest_direction || "inbound"}{thread.latest_delivery_status ? " · " + thread.latest_delivery_status : ""}</span><span style={{display:"block"}}>{thread.latest_message}</span><span className="fine">{new Date(thread.latest_message_at).toLocaleString()}</span>
               </button>) : <p className="fine">No linked email or WhatsApp replies have been received yet.</p>}
               <button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf} onClick={()=>refresh(workspaceId,csrf)}>Refresh reply inbox</button>
             </article>
             <article className="card">
               <h3>Conversation history</h3>
-              {selectedReplyProspectId ? (unifiedReplyMessages.length ? <ol>{unifiedReplyMessages.map(message=><li key={message.id} style={{marginBottom:"0.75rem"}}><p>{message.body}</p><p className="fine">{message.direction} · {message.channel.toUpperCase()} · {message.provider} · {new Date(message.occurred_at).toLocaleString()}</p></li>)}</ol> : <p className="fine">No messages are available for this prospect.</p>) : <p className="fine">Select a reply thread to view its complete inbound history.</p>}
+              {selectedReplyProspectId ? (unifiedReplyMessages.length ? <ol>{unifiedReplyMessages.map(message=><li key={message.id} style={{marginBottom:"0.75rem"}}><p>{message.body}</p><p className="fine">{message.direction} · {message.channel.toUpperCase()} · {message.provider}{message.delivery_status ? " · " + message.delivery_status : ""} · {new Date(message.occurred_at).toLocaleString()}</p></li>)}</ol> : <p className="fine">No messages are available for this prospect.</p>) : <p className="fine">Select a reply thread to view its complete inbound history.</p>}
               {selectedReplyProspectId && (() => {
                 const thread = unifiedReplyThreads.find(item => item.prospect_id === selectedReplyProspectId);
                 if (!thread) return null;
