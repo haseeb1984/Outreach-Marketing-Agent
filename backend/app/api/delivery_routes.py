@@ -132,7 +132,7 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
         except ValueError as exc:
             # If this was a replay, another scheduler may own the live attempt.
             # Never release its reservation when our competing claim loses.
-            if reservation and reservation.get("reservation_id") and not (
+            if reservation and reservation.get("reservation_id") and str(exc) != "delivery_not_queued" and not (
                 reservation.get("reason") == "idempotent_replay" and data is None
             ):
                 await _settle_delivery_attempt(
@@ -311,7 +311,7 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
             )
         raise HTTPException(status_code=404, detail="delivery_not_found") from None
     except ValueError as exc:
-        if not reservation_replayed:
+        if not reservation_replayed and str(exc) != "delivery_not_queued":
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
             )
