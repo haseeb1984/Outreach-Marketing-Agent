@@ -530,7 +530,7 @@ async def list_whatsapp_webhook_events(
                      OR ($2='processed' AND e.processed_at IS NOT NULL))
                    ORDER BY e.received_at DESC,e.id DESC
                    LIMIT $3 OFFSET $4""",
-                workspace_id, state, limit, offset,
+                workspace_id, state, limit + 1, offset,
             )
             counts = await conn.fetchrow(
                 """SELECT count(*) FILTER (WHERE e.processed_at IS NULL AND e.attempts < 8)::bigint AS pending,
@@ -543,8 +543,10 @@ async def list_whatsapp_webhook_events(
                     AND a.workspace_id=$1""",
                 workspace_id,
             )
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
         items = []
-        for row in rows:
+        for row in page_rows:
             item = dict(row)
             item["id"] = str(item["id"])
             for key in ("received_at", "processed_at"):
@@ -557,6 +559,8 @@ async def list_whatsapp_webhook_events(
             "state": state,
             "limit": limit,
             "offset": offset,
+            "next_offset": offset + limit if has_more else None,
+            "has_more": has_more,
             "notice": "Only processing metadata for mapped workspace accounts is shown; event payloads are withheld.",
         }
     except HTTPException:
