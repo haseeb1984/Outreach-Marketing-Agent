@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 import json
+import re
 
 
 _ALLOWED_STATUSES = frozenset({
@@ -147,11 +148,19 @@ class BillingLifecycleStore:
             ("transaction_id", transaction_id, 120), ("workspace_id", workspace_id, 200)):
             if not isinstance(value, str) or not value.strip() or len(value) > maximum:
                 raise ValueError(f"invalid_{name}")
-        if subscription_id is not None and (not isinstance(subscription_id, str) or len(subscription_id) > 120):
+        if subscription_id is not None and (
+            not isinstance(subscription_id, str) or not subscription_id.strip()
+            or len(subscription_id) > 120
+        ):
             raise ValueError("invalid_subscription_id")
-        if invoice_number is not None and (not isinstance(invoice_number, str) or len(invoice_number) > 120):
+        if invoice_number is not None and (
+            not isinstance(invoice_number, str) or not invoice_number.strip()
+            or len(invoice_number) > 120
+        ):
             raise ValueError("invalid_invoice_number")
-        if currency_code is not None and (not isinstance(currency_code, str) or len(currency_code) != 3):
+        if currency_code is not None and (
+            not isinstance(currency_code, str) or re.fullmatch(r"[A-Z]{3}", currency_code) is None
+        ):
             raise ValueError("invalid_currency_code")
         if total_minor is not None and (not isinstance(total_minor, str) or not total_minor.isdigit() or len(total_minor) > 20):
             raise ValueError("invalid_transaction_total")
