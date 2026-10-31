@@ -1458,16 +1458,18 @@ export default function DashboardPage() {
 
   async function loadCrmPage(nextOffset: number) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError("");
     try {
-      const params = new URLSearchParams({ workspace_id: workspaceId, limit: String(crmPageSize), offset: String(nextOffset) });
+      const params = new URLSearchParams({ workspace_id: requestedWorkspaceId, limit: String(crmPageSize), offset: String(nextOffset) });
       if (prospectSearch.trim()) params.set("search", prospectSearch.trim());
       if (prospectStageFilter !== "all") params.set("stage", prospectStageFilter);
       const result = await api<{ items: Prospect[]; total: number; offset: number }>("/api/v1/prospects?" + params.toString(), csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
       setProspects(result.items || []); setCrmOffset(result.offset || 0); setCrmTotal(result.total || 0);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "CRM search could not be completed.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "CRM search could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function searchCrmProspects(event: FormEvent<HTMLFormElement>) {
@@ -1478,9 +1480,10 @@ export default function DashboardPage() {
   async function saveProspectDetails(event: FormEvent<HTMLFormElement>, prospect: Prospect) {
     event.preventDefault();
     if (!workspaceId || !csrf || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")) return;
+    const requestedWorkspaceId = workspaceId;
     const form = new FormData(event.currentTarget);
     const payload = {
-      workspace_id: workspaceId,
+      workspace_id: requestedWorkspaceId,
       name: String(form.get("name") || "").trim(),
       company: String(form.get("company") || "").trim(),
       role: String(form.get("role") || "").trim() || null,
@@ -1493,84 +1496,94 @@ export default function DashboardPage() {
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/prospects/" + encodeURIComponent(prospect.id), csrf, { method: "PATCH", body: JSON.stringify(payload) });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("CRM contact details and evidence updated for " + prospect.name + ".");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Prospect details could not be updated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect details could not be updated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function archiveProspect(prospect: Prospect) {
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    const requestedWorkspaceId = workspaceId;
     if (!window.confirm("Archive " + prospect.name + " from the active CRM? Historical campaign and delivery records are retained; this does not send or delete any message.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/prospects/" + encodeURIComponent(prospect.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/prospects/" + encodeURIComponent(prospect.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(prospect.name + " was archived from the active CRM. Historical records remain available.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Prospect could not be archived.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect could not be archived.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function saveProspectNotes(event: FormEvent<HTMLFormElement>, prospect: Prospect) {
     event.preventDefault();
     if (!workspaceId || !csrf || !["owner", "admin", "member"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    const requestedWorkspaceId = workspaceId;
     const form = new FormData(event.currentTarget);
     const notes = String(form.get("notes") || "").trim();
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/prospects/" + encodeURIComponent(prospect.id), csrf, {
         method: "PATCH",
-        body: JSON.stringify({ workspace_id: workspaceId, notes }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, notes }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Internal CRM notes saved for " + prospect.name + ".");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Prospect notes could not be saved.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect notes could not be saved.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function updateProspectStage(prospect: Prospect, stage: string) {
     if (!workspaceId || !csrf || !["owner", "admin", "member"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    const requestedWorkspaceId = workspaceId;
     if (stage === "do_not_contact" && !window.confirm("Mark " + prospect.name + " as Do Not Contact? Future draft and send checks will block outreach.")) {
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
       return;
     }
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/prospects/" + encodeURIComponent(prospect.id), csrf, {
         method: "PATCH",
-        body: JSON.stringify({ workspace_id: workspaceId, stage }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, stage }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(prospect.name + " moved to " + stage.replaceAll("_", " ") + ".");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Prospect stage could not be updated.");
-      await refresh(workspaceId, csrf);
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Prospect stage could not be updated.");
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function setEmailSuppression(prospect: Prospect, suppressed: boolean) {
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    const requestedWorkspaceId = workspaceId;
     const action = suppressed ? "suppress future email outreach to" : "allow email outreach to";
     if (!window.confirm("Confirm you want to " + action + " " + prospect.name + "? Existing queued messages will still be rechecked before sending.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/prospects/" + encodeURIComponent(prospect.id) + "/contact-controls", csrf, {
         method: "PUT",
-        body: JSON.stringify({ workspace_id: workspaceId, email_suppressed: suppressed, whatsapp_opt_in_confirmed: false }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, email_suppressed: suppressed, whatsapp_opt_in_confirmed: false }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(suppressed ? "Email suppression saved. Future draft, queue and send checks will honor it." : "Email suppression removed by an authorized workspace admin.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Contact controls could not be updated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Contact controls could not be updated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function recordWhatsAppConsent(event: FormEvent<HTMLFormElement>, prospect: Prospect) {
     event.preventDefault();
     if (!workspaceId || !csrf || !["owner", "admin"].includes(workspaces.find(w => w.id === workspaceId)?.role || "")) return;
+    const requestedWorkspaceId = workspaceId;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const accountId = String(form.get("whatsapp_account_id") || "");
@@ -1584,18 +1597,19 @@ export default function DashboardPage() {
       await api("/api/v1/prospects/" + encodeURIComponent(prospect.id) + "/contact-controls", csrf, {
         method: "PUT",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           whatsapp_opt_in_confirmed: true,
           whatsapp_account_id: accountId,
           whatsapp_opt_in_evidence_url: evidenceUrl,
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("WhatsApp opt-in evidence saved for the selected account. This records consent; it does not send a message.");
       formElement.reset();
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp consent could not be saved.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp consent could not be saved.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function generateDraft(event: FormEvent<HTMLFormElement>) {
