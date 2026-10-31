@@ -217,7 +217,7 @@ async def _exercise_billing_lifecycle() -> None:
             await store.record_verified_transaction(
                 **{**transaction_args, "status": "payment_failed"}
             )
-        with pytest.raises(ValueError, match="billing_transaction_event_identity_conflict"):
+        with pytest.raises(ValueError, match="billing_transaction_event_payload_conflict"):
             await store.record_verified_transaction(
                 **{**transaction_args, "event_created_at": NOW + timedelta(seconds=1)}
             )
