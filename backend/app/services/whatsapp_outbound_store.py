@@ -202,10 +202,17 @@ class WhatsAppOutboundStore:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """WITH candidates AS (
-                       SELECT id FROM whatsapp_outbound_deliveries
-                       WHERE status='queued'
-                       ORDER BY queued_at,id
-                       FOR UPDATE SKIP LOCKED
+                       SELECT q.id FROM whatsapp_outbound_deliveries q
+                       JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                       JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                       LEFT JOIN outreach_followup_enrollments fe
+                         ON fe.current_draft_id=d.id AND fe.workspace_id=d.workspace_id
+                       LEFT JOIN outreach_followup_sequences fs
+                         ON fs.id=fe.sequence_id AND fs.workspace_id=fe.workspace_id
+                       WHERE q.status='queued' AND c.status='active'
+                         AND (fe.id IS NULL OR (fe.status='awaiting_approval' AND fs.status='active'))
+                       ORDER BY q.queued_at,q.id
+                       FOR UPDATE OF q SKIP LOCKED
                        LIMIT $1
                    )
                    UPDATE whatsapp_outbound_deliveries q
