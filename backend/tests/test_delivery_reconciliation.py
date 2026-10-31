@@ -18,6 +18,11 @@ class FakeConnection:
         self.calls.append((query, args))
         return self.result
 
+    async def fetchval(self, query, *args):
+        self.calls.append((query, args))
+        parts = self.result.rsplit(" ", 1)
+        return int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 0
+
 
 class FakePool:
     def __init__(self, connection):
