@@ -71,3 +71,15 @@ def test_workspace_listing_requires_configured_authentication():
 
     assert response.status_code == 503
     assert response.json() == {"detail": "authentication_not_configured"}
+
+
+def test_delivery_dashboard_shows_provider_feedback_and_event_history():
+    with TestClient(app) as client:
+        response = client.get("/app")
+
+    assert response.status_code == 200
+    assert "Provider feedback:" in response.text
+    assert "provider_status_at" in response.text
+    assert "/provider-events?workspace_id=" in response.text
+    assert "loadDeliveryProviderEvents" in response.text
+    assert "Delivery issue:" in response.text
