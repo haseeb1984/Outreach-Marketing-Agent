@@ -25,6 +25,7 @@ type WhatsAppTemplate = { template_name: string; language_code: string; category
 type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; assigned_to_user_id?: string | null; inbox_status?: "open" | "pending" | "resolved"; priority?: "low" | "normal" | "high" | "urgent"; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null };
 type WhatsAppInternalNote = { id: string; author_user_id: string; body: string; created_at: string };
 type WhatsAppActivity = { id: string; actor_user_id: string; event_type: string; details?: Record<string, unknown>; created_at: string };
+type WhatsAppSavedView = { id: string; name: string; filters: { inbox_status?: string; priority?: string; search?: string; assigned_to_me?: boolean; unassigned?: boolean; assigned_to_user_id?: string }; };
 type WhatsAppMessage = { id: string; provider_message_id: string; message_type: string; text_body?: string | null; media_metadata?: Record<string, unknown>; media_mime_type?: string | null; media_filename?: string | null; media_size?: number | null; media_downloaded_at?: string | null; provider_timestamp?: string | null; received_at: string };
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_message_at: string; message_count: number };
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string };
@@ -110,6 +111,9 @@ export default function DashboardPage() {
   const [whatsappFilterPriority, setWhatsappFilterPriority] = useState("");
   const [whatsappFilterSearch, setWhatsappFilterSearch] = useState("");
   const [whatsappFilterAssignee, setWhatsappFilterAssignee] = useState("all");
+  const [whatsappSavedViews, setWhatsappSavedViews] = useState<WhatsAppSavedView[]>([]);
+  const [whatsappSavedViewName, setWhatsappSavedViewName] = useState("");
+  const [whatsappSelectedSavedView, setWhatsappSelectedSavedView] = useState("");
   const [selectedWhatsAppBulkIds, setSelectedWhatsAppBulkIds] = useState<string[]>([]);
   const [whatsappBulkAssignee, setWhatsappBulkAssignee] = useState("__unchanged__");
   const [whatsappBulkStatus, setWhatsappBulkStatus] = useState("");
@@ -598,6 +602,75 @@ export default function DashboardPage() {
       setNotice("WhatsApp conversation updated.");
     } catch (err) { setError(err instanceof Error ? err.message : "Conversation update failed."); }
     finally { setWhatsappInboxBusy(false); }
+  }
+
+  async function loadWhatsAppSavedViews() {
+    if (!workspaceId || !csrf) return;
+    try {
+      const result = await api<{ items: WhatsAppSavedView[] }>(
+        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(workspaceId), csrf,
+      );
+      setWhatsappSavedViews(result.items || []);
+    } catch (err) { setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded."); }
+  }
+
+  async function saveWhatsAppCurrentView() {
+    if (!workspaceId || !csrf || !whatsappSavedViewName.trim()) return;
+    const filters: WhatsAppSavedView["filters"] = {};
+    if (whatsappFilterStatus) filters.inbox_status = whatsappFilterStatus;
+    if (whatsappFilterPriority) filters.priority = whatsappFilterPriority;
+    if (whatsappFilterSearch.trim()) filters.search = whatsappFilterSearch.trim();
+    if (whatsappFilterAssignee === "me") filters.assigned_to_me = true;
+    else if (whatsappFilterAssignee === "unassigned") filters.unassigned = true;
+    else if (whatsappFilterAssignee.startsWith("user:")) filters.assigned_to_user_id = whatsappFilterAssignee.slice(5);
+    setWhatsappInboxBusy(true); setError("");
+    try {
+      const saved = await api<WhatsAppSavedView>(
+        "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf, { method: "POST", body: JSON.stringify({ name: whatsappSavedViewName.trim(), filters }) },
+      );
+      setWhatsappSavedViews(items => [...items.filter(item => item.id !== saved.id && item.name.toLowerCase() !== saved.name.toLowerCase()), saved]);
+      setWhatsappSelectedSavedView(saved.id); setWhatsappSavedViewName("");
+      setNotice("Inbox view saved to your workspace account.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Inbox view could not be saved."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
+  async function applyWhatsAppSavedView(viewId: string) {
+    setWhatsappSelectedSavedView(viewId);
+    const view = whatsappSavedViews.find(item => item.id === viewId);
+    if (!view) return;
+    setWhatsappFilterStatus(view.filters.inbox_status || "");
+    setWhatsappFilterPriority(view.filters.priority || "");
+    setWhatsappFilterSearch(view.filters.search || "");
+    setWhatsappFilterAssignee(view.filters.assigned_to_me ? "me" : view.filters.unassigned ? "unassigned" : view.filters.assigned_to_user_id ? "user:"+view.filters.assigned_to_user_id : "all");
+    const params = new URLSearchParams({ workspace_id: workspaceId, limit: "50" });
+    if (view.filters.inbox_status) params.set("inbox_status", view.filters.inbox_status);
+    if (view.filters.priority) params.set("priority", view.filters.priority);
+    if (view.filters.search) params.set("search", view.filters.search);
+    if (view.filters.assigned_to_me) params.set("assigned_to_me", "true");
+    if (view.filters.unassigned) params.set("unassigned", "true");
+    if (view.filters.assigned_to_user_id) params.set("assigned_to_user_id", view.filters.assigned_to_user_id);
+    if (!workspaceId || !csrf) return;
+    setWhatsappInboxBusy(true);
+    try {
+      const result = await api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?"+params.toString(),csrf);
+      setWhatsappConversations(result.items || []);
+      setSelectedWhatsAppBulkIds([]);
+    } catch (err) { setError(err instanceof Error ? err.message : "Saved inbox view could not be applied."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
+  async function deleteWhatsAppSavedView(viewId: string) {
+    if (!workspaceId || !csrf || !window.confirm("Delete this saved inbox view?")) return;
+    try {
+      await api<{ deleted: boolean }>(
+        "/api/v1/integrations/whatsapp/inbox/saved-views/"+encodeURIComponent(viewId)+"?workspace_id="+encodeURIComponent(workspaceId),
+        csrf,{method:"DELETE"},
+      );
+      setWhatsappSavedViews(items=>items.filter(item=>item.id!==viewId));
+      if (whatsappSelectedSavedView===viewId) setWhatsappSelectedSavedView("");
+    } catch (err) { setError(err instanceof Error ? err.message : "Saved view could not be deleted."); }
   }
 
   async function applyWhatsAppBulkUpdate() {
@@ -1328,6 +1401,7 @@ export default function DashboardPage() {
       if (whatsappFilterSearch.trim()) params.set("search", whatsappFilterSearch.trim());
       if (whatsappFilterAssignee === "me") params.set("assigned_to_me", "true");
       if (whatsappFilterAssignee === "unassigned") params.set("unassigned", "true");
+      if (whatsappFilterAssignee.startsWith("user:")) params.set("assigned_to_user_id", whatsappFilterAssignee.slice(5));
       const result = await api<{ items: WhatsAppConversation[] }>(
         "/api/v1/integrations/whatsapp/inbox/conversations?" + params.toString(), csrf,
       );
@@ -1350,6 +1424,7 @@ export default function DashboardPage() {
     setWhatsappFilterPriority("");
     setWhatsappFilterSearch("");
     setWhatsappFilterAssignee("all");
+    setWhatsappSelectedSavedView("");
     if (!workspaceId || !csrf) return;
     setWhatsappInboxBusy(true);
     try {
@@ -1958,6 +2033,26 @@ export default function DashboardPage() {
                   <label>Search contact, company or message
                     <input className="input" value={whatsappFilterSearch} maxLength={200} onChange={event=>setWhatsappFilterSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void applyWhatsAppInboxFilters();}}} placeholder="Name, phone, company or text" />
                   </label>
+                  <label>Assigned teammate
+                    <select className="input" value={whatsappFilterAssignee} onChange={event=>setWhatsappFilterAssignee(event.target.value)}>
+                      <option value="all">All conversations</option><option value="me">Assigned to me</option><option value="unassigned">Unassigned</option>
+                      {members.filter(member=>member.status==="active").map(member=><option key={member.user_id} value={"user:"+member.user_id}>{member.email}</option>)}
+                    </select>
+                  </label>
+                  <div className="grid grid-2">
+                    <label>Saved views
+                      <select className="input" value={whatsappSelectedSavedView} onFocus={loadWhatsAppSavedViews} onChange={event=>void applyWhatsAppSavedView(event.target.value)}>
+                        <option value="">Choose saved view</option>{whatsappSavedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}
+                      </select>
+                    </label>
+                    <label>Save current filters
+                      <input className="input" value={whatsappSavedViewName} maxLength={80} onChange={event=>setWhatsappSavedViewName(event.target.value)} placeholder="e.g. Urgent unassigned"/>
+                    </label>
+                  </div>
+                  <div style={{display:"flex",gap:"0.5rem",alignItems:"end",flexWrap:"wrap"}}>
+                    <button className="button secondary" type="button" disabled={whatsappInboxBusy || !whatsappSavedViewName.trim()} onClick={saveWhatsAppCurrentView}>Save view</button>
+                    {whatsappSelectedSavedView && <button className="button secondary" type="button" onClick={()=>deleteWhatsAppSavedView(whatsappSelectedSavedView)}>Delete saved view</button>}
+                  </div>
                   <div style={{display:"flex",gap:"0.5rem",alignItems:"end"}}>
                     <button className="button" type="button" disabled={whatsappInboxBusy} onClick={applyWhatsAppInboxFilters}>Apply filters</button>
                     <button className="button secondary" type="button" disabled={whatsappInboxBusy} onClick={clearWhatsAppInboxFilters}>Clear</button>
