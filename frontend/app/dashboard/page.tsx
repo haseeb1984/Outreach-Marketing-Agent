@@ -263,6 +263,9 @@ export default function DashboardPage() {
 
   const loadWorkspaceData = useCallback(async (selectedId: string, token: string) => {
     if (!selectedId) return;
+    whatsappDeadLetterLoadSequenceRef.current += 1;
+    whatsappDeadLetterLoadLockRef.current = false;
+    setWhatsappDeadLetterLoadingMore(false);
     const loadSequence = ++loadSequenceRef.current;
     const isCurrentLoad = () => loadSequenceRef.current === loadSequence;
     setGrowthJobReport(null);
