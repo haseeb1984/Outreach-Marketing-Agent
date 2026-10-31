@@ -235,6 +235,7 @@ def test_approved_template_returns_canonical_verified_provider_identity():
         "template_name": "verified_notice",
         "language_code": "en_US",
         "provider_template_id": "meta-template-987",
+        "components": [],
     }
     result, conn = run_policy(
         [{"id": account_id, "has_credentials": True}, prospect, preference, {"id": uuid4()}, canonical],
