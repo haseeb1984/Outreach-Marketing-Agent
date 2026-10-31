@@ -50,15 +50,18 @@ class EmailProviderEventStore:
 
                 # Preserve the newest provider state; older delayed callbacks remain in
                 # the immutable ledger but cannot roll the visible state backwards.
-                await conn.execute(
+                status_applied = await conn.fetchval(
                     """UPDATE outreach_deliveries
                        SET provider_status=$2,provider_status_at=$3,updated_at=now()
                        WHERE id=$1 AND workspace_id=$4
-                         AND (provider_status_at IS NULL OR provider_status_at <= $3)""",
+                         AND (provider_status_at IS NULL OR provider_status_at <= $3)
+                       RETURNING TRUE""",
                     delivery_id, event_type, occurred_at, delivery["workspace_id"],
                 )
 
-                if event_type == "delivered":
+                # A delayed delivered callback must not advance a follow-up when
+                # a newer provider event already owns the visible delivery state.
+                if event_type == "delivered" and status_applied:
                     # A provider's signed delivered callback is authoritative. Advance the
                     # matching follow-up once; current_draft_id is the idempotency guard.
                     await conn.execute(
