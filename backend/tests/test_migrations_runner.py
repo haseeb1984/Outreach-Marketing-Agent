@@ -101,14 +101,21 @@ def test_runner_skips_migrations_already_in_the_ledger(
 def test_sql_splitter_preserves_dollar_quoted_function_bodies_and_comments():
     dollar = "$" + "$"
     tagged = "$body$"
-    sql = (
-        "-- semicolon ; in comment\\n"
-        "CREATE TABLE sample (value TEXT DEFAULT ';');\\n"
-        "CREATE FUNCTION sample_fn() RETURNS trigger LANGUAGE plpgsql AS " + tagged + "\\n"
-        "BEGIN\\n    NEW.value := 'a;b';\\n    RETURN NEW;\\nEND;\\n"
-        + tagged + ";\\n"
-        "DO " + dollar + "\\nBEGIN\\n    PERFORM 1;\\nEND;\\n" + dollar + ";\\n"
-    )
+    sql = "\\n".join([
+        "-- semicolon ; in comment",
+        "CREATE TABLE sample (value TEXT DEFAULT ';');",
+        "CREATE FUNCTION sample_fn() RETURNS trigger LANGUAGE plpgsql AS " + tagged,
+        "BEGIN",
+        "    NEW.value := 'a;b';",
+        "    RETURN NEW;",
+        "END;",
+        tagged + ";",
+        "DO " + dollar,
+        "BEGIN",
+        "    PERFORM 1;",
+        "END;",
+        dollar + ";",
+    ])
     statements = migrations._split_sql_statements(sql)
     assert len(statements) == 3
     assert "DEFAULT ';'" in statements[0]
