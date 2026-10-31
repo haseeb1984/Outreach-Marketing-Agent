@@ -8,7 +8,7 @@ type Workspace = { id: string; name: string; role: string };
 type Prospect = { id: string; name: string; company: string; role?: string | null; contact_email?: string | null; contact_phone_e164?: string | null; website_url: string; evidence_url: string; fit_reason: string; stage: string; notes?: string | null; email_suppressed?: boolean; whatsapp_opt_in_documented?: boolean; whatsapp_opt_in_account_id?: string | null };
 type Campaign = { id: string; name: string; client_business: string; client_offer: string; target_customer_profile: string; status?: string };
 type FollowupSequence = { id: string; campaign_id: string; name: string; channel: string; status: string; enrollment_count?: number; active_count?: number; awaiting_approval_count?: number };
-type FollowupEnrollment = { id: string; prospect_id: string; prospect_name?: string; company?: string; current_step: number; status: string; next_run_at?: string | null; current_draft_id?: string | null; last_error_code?: string | null; pause_reason?: string | null };
+type FollowupEnrollment = { id: string; prospect_id: string; prospect_name?: string; company?: string; current_step: number; status: string; next_run_at?: string | null; current_draft_id?: string | null; current_delivery_id?: string | null; last_error_code?: string | null; pause_reason?: string | null };
 type Draft = { id: string; subject?: string; body?: string; channel?: string; status: string; prospect_name?: string };
 type DraftEvent = { event_type: string; note?: string | null; actor_id?: string | null; created_at?: string | null };
 type Plan = { id: string; name: string; description: string; display_price: string | null; currency: string | null; billing_interval: string | null; checkout_available: boolean };
@@ -185,6 +185,8 @@ export default function DashboardPage() {
   const [followupChannel, setFollowupChannel] = useState("email");
   const [followupStepsJson, setFollowupStepsJson] = useState(JSON.stringify([{ delay_minutes: 0, subject_template: "Following up with {{first_name}}", body_template: "Hi {{first_name}}, I wanted to follow up on my earlier note. Would a short conversation be useful?" }, { delay_minutes: 4320, subject_template: "One final note for {{company}}", body_template: "Hi {{first_name}}, one final follow-up from me. If this is not relevant, no action is needed." }], null, 2));
   const [followupProspectId, setFollowupProspectId] = useState("");
+  const [followupResolutionReason, setFollowupResolutionReason] = useState<Record<string, string>>({});
+  const [followupResolutionEvidence, setFollowupResolutionEvidence] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [draftEvents, setDraftEvents] = useState<Record<string, DraftEvent[]>>({});
   const [draftHistoryOpen, setDraftHistoryOpen] = useState<Record<string, boolean>>({});
@@ -1050,6 +1052,26 @@ export default function DashboardPage() {
       await loadFollowupEnrollments(sequence);
       setNotice("Follow-up enrollment " + status + ".");
     } catch (err) { setError(err instanceof Error ? err.message : "Follow-up enrollment could not be updated."); }
+    finally { setBusy(false); }
+  }
+
+  async function resolveFollowupDelivery(sequence: FollowupSequence, enrollment: FollowupEnrollment, outcome: "delivered" | "not_delivered") {
+    if (!workspaceId || !csrf || !enrollment.current_delivery_id) return;
+    const reason = followupResolutionReason[enrollment.id] || "";
+    const evidenceUrl = followupResolutionEvidence[enrollment.id] || "";
+    if (reason.trim().length < 12 || !evidenceUrl.trim().startsWith("https://")) {
+      setError("Enter a resolution reason (at least 12 characters) and an HTTPS evidence URL.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/follow-up-enrollments/" + encodeURIComponent(enrollment.id) + "/resolve-delivery", csrf, {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceId, delivery_id: enrollment.current_delivery_id, outcome, reason: reason.trim(), evidence_url: evidenceUrl.trim() }),
+      });
+      await loadFollowupEnrollments(sequence);
+      setNotice(outcome === "delivered" ? "Provider-confirmed delivery recorded; the sequence advanced safely." : "Non-delivery recorded; the enrollment was stopped without retrying the old delivery.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Follow-up delivery resolution could not be completed."); }
     finally { setBusy(false); }
   }
 
@@ -2075,7 +2097,7 @@ export default function DashboardPage() {
             <div className="actions"><button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupStatus(sequence,sequence.status==="active"?"paused":"active")}>{sequence.status==="active"?"Pause sequence":"Activate / resume"}</button><button className="button secondary" type="button" disabled={busy} onClick={()=>loadFollowupEnrollments(sequence)}>View enrollments</button></div>
             <div className="field"><label htmlFor={"followup-prospect-"+sequence.id}>Enroll prospect</label><select id={"followup-prospect-"+sequence.id} value={followupProspectId} onChange={event=>setFollowupProspectId(event.target.value)}><option value="">Choose prospect</option>{prospects.map(prospect=><option key={prospect.id} value={prospect.id}>{prospect.name} · {prospect.company}</option>)}</select></div>
             <button className="button secondary" type="button" disabled={busy || !followupProspectId || sequence.status!=="active" || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>enrollFollowup(sequence)}>Enroll prospect</button>
-            {followupEnrollments[sequence.id] && <div><h4>Enrollments</h4>{followupEnrollments[sequence.id].length ? followupEnrollments[sequence.id].map(enrollment=><div key={enrollment.id} style={{borderTop:"1px solid var(--border)",padding:"0.65rem 0"}}><strong>{enrollment.prospect_name || enrollment.company || enrollment.prospect_id}</strong><p className="fine">Step {enrollment.current_step} · {enrollment.status}{enrollment.next_run_at?" · next " + new Date(enrollment.next_run_at).toLocaleString():""}{enrollment.last_error_code?" · " + enrollment.last_error_code:""}{enrollment.pause_reason?" · pause: " + enrollment.pause_reason:""}</p>{["active","awaiting_approval"].includes(enrollment.status) && <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupEnrollmentStatus(sequence,enrollment,"paused")}>Pause prospect</button>}{enrollment.status==="paused" && ["operator_paused","pending_draft_conflict"].includes(enrollment.pause_reason || "") && <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupEnrollmentStatus(sequence,enrollment,"active")}>{enrollment.pause_reason==="pending_draft_conflict"?"Resume after clearing pending draft":"Resume prospect"}</button>}</div>) : <p className="fine">No enrollments yet.</p>}</div>}
+            {followupEnrollments[sequence.id] && <div><h4>Enrollments</h4>{followupEnrollments[sequence.id].length ? followupEnrollments[sequence.id].map(enrollment=><div key={enrollment.id} style={{borderTop:"1px solid var(--border)",padding:"0.65rem 0"}}><strong>{enrollment.prospect_name || enrollment.company || enrollment.prospect_id}</strong><p className="fine">Step {enrollment.current_step} · {enrollment.status}{enrollment.next_run_at?" · next " + new Date(enrollment.next_run_at).toLocaleString():""}{enrollment.last_error_code?" · " + enrollment.last_error_code:""}{enrollment.pause_reason?" · pause: " + enrollment.pause_reason:""}</p>{["active","awaiting_approval"].includes(enrollment.status) && <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupEnrollmentStatus(sequence,enrollment,"paused")}>Pause prospect</button>}{enrollment.status==="paused" && ["operator_paused","pending_draft_conflict"].includes(enrollment.pause_reason || "") && <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>setFollowupEnrollmentStatus(sequence,enrollment,"active")}>{enrollment.pause_reason==="pending_draft_conflict"?"Resume after clearing pending draft":"Resume prospect"}</button>}{enrollment.status==="paused" && ["delivery_failed","delivery_uncertain"].includes(enrollment.pause_reason || "") && enrollment.current_delivery_id && <div className="stack"><p className="fine">Provider review required for delivery {enrollment.current_delivery_id}. Unknown outcomes must remain paused.</p><label>Resolution reason<input value={followupResolutionReason[enrollment.id] || ""} onChange={e=>setFollowupResolutionReason(current=>({...current,[enrollment.id]:e.target.value}))} minLength={12} maxLength={2000} /></label><label>HTTPS evidence URL<input type="url" value={followupResolutionEvidence[enrollment.id] || ""} onChange={e=>setFollowupResolutionEvidence(current=>({...current,[enrollment.id]:e.target.value}))} placeholder="https://provider.example/event/..." /></label><button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>resolveFollowupDelivery(sequence,enrollment,"delivered")}>Confirm delivered</button><button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>resolveFollowupDelivery(sequence,enrollment,"not_delivered")}>Confirm not delivered and stop</button></div>}</div>) : <p className="fine">No enrollments yet.</p>}</div>}
           </article>) : <article className="card"><p>No follow-up sequences yet. Create one under an active campaign.</p></article>}</div>
         </section>
         <section className="section" aria-labelledby="website-audit-title"><h2 id="website-audit-title">Website growth audit</h2>
