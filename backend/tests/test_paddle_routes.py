@@ -424,3 +424,55 @@ def test_initial_transaction_can_use_checkout_workspace_before_subscription_webh
             return Acquire()
 
     assert asyncio.run(_resolve_transaction_workspace(Pool(), "sub_new", "workspace-new")) == "workspace-new"
+
+
+def test_paddle_transaction_webhook_persists_only_signature_verified_normalized_fields(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    captured = {}
+
+    class BillingStore:
+        async def record_verified_transaction(self, **kwargs):
+            captured.update(kwargs)
+            return {"outcome": "applied"}
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    with TestClient(app) as client:
+        app.state.db_pool = object()
+        app.state.billing_lifecycle_store = BillingStore()
+        payload = {
+            "event_id": "evt_transaction_route",
+            "event_type": "transaction.completed",
+            "occurred_at": "2026-10-31T12:00:00Z",
+            "data": {
+                "id": "txn_route_123",
+                "subscription_id": None,
+                "custom_data": {"workspace_id": "workspace-route"},
+                "invoice_number": "INV-ROUTE-123",
+                "currency_code": "USD",
+                "details": {"totals": {"total": "2599"}},
+            },
+        }
+        body = json.dumps(payload).encode()
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "applied"}
+    assert captured == {
+        "event_id": "evt_transaction_route",
+        "event_created_at": datetime.fromisoformat("2026-10-31T12:00:00+00:00"),
+        "transaction_id": "txn_route_123",
+        "workspace_id": "workspace-route",
+        "subscription_id": None,
+        "invoice_number": "INV-ROUTE-123",
+        "status": "completed",
+        "currency_code": "USD",
+        "total_minor": "2599",
+    }
