@@ -220,7 +220,9 @@ export default function DashboardPage() {
   const workspaceIdRef = useRef(workspaceId);
   const csrfRef = useRef(csrf);
   const replyDetailSequenceRef = useRef(0);
+  const replyDraftSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
+  const whatsappMutationSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -445,7 +447,9 @@ export default function DashboardPage() {
   function resetWorkspaceScopedState() {
     loadSequenceRef.current += 1;
     replyDetailSequenceRef.current += 1;
+    replyDraftSequenceRef.current += 1;
     whatsappDetailSequenceRef.current += 1;
+    whatsappMutationSequenceRef.current += 1;
     setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setCrmOffset(0); setCrmTotal(0);
     setResearchQuery(""); setResearchResults([]); setResearchBusy(false);
     setDomainName(""); setDomainChallenge(null); setDomainBusy(false);
@@ -670,7 +674,7 @@ export default function DashboardPage() {
       setSelectedReplyProspectId(thread.prospect_id);
       setUnifiedReplyMessages((result.items || []).slice().reverse());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
+      if (requestSequence === replyDetailSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
     } finally { if (requestSequence === replyDetailSequenceRef.current) setUnifiedReplyBusy(false); }
   }
 
@@ -678,18 +682,21 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf || !selectedReplyProspectId) return;
     const thread = unifiedReplyThreads.find(item => item.prospect_id === selectedReplyProspectId);
     if (!thread || !replyDraftBody.trim()) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedSequence = ++replyDraftSequenceRef.current;
     setUnifiedReplyBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/prospects/" + encodeURIComponent(selectedReplyProspectId) + "/reply-drafts", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, channel: thread.channel,
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, channel: thread.channel,
           subject: thread.channel === "email" ? replyDraftSubject.trim() : null, body: replyDraftBody.trim() }),
       });
+      if (requestedSequence !== replyDraftSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setReplyDraftBody(""); setReplyDraftSubject("");
       setNotice("Reply draft created and sent to the approval queue. No message was sent.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reply draft could not be created.");
-    } finally { setUnifiedReplyBusy(false); }
+      if (requestedSequence === replyDraftSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Reply draft could not be created.");
+    } finally { if (requestedSequence === replyDraftSequenceRef.current) setUnifiedReplyBusy(false); }
   }
 
   async function deleteWhatsAppMedia(message: WhatsAppMessage) {
