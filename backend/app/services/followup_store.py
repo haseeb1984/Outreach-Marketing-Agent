@@ -255,10 +255,18 @@ class FollowupStore:
                            (workspace_id,campaign_id,prospect_id,channel,subject,body,source_evidence_url,
                             verified_facts_used,status,created_by)
                            VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'pending_approval',$9)
-                           RETURNING id""",
+                           ON CONFLICT DO NOTHING RETURNING id""",
                         row["workspace_id"], row["campaign_id"], row["prospect_id"], row["channel"],
                         subject, body, row["evidence_url"], json.dumps(facts), row["created_by"],
                     )
+                    if draft is None:
+                        await conn.execute(
+                            """UPDATE outreach_followup_enrollments SET status='paused',pause_reason='pending_draft_conflict',
+                               last_error_code='existing_pending_draft_requires_review',next_run_at=NULL,updated_at=now()
+                               WHERE id=$1""", row["id"],
+                        )
+                        skipped += 1
+                        continue
                     await conn.execute(
                         """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type,note)
                            VALUES($1,$2,$3,'created',$4)""",
