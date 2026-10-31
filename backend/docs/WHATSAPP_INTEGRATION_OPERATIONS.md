@@ -106,7 +106,9 @@ The sender supports plain text inside the 24-hour customer-service window and ap
 
 ## WhatsApp inbox first-response SLA
 
-- Migration `047_whatsapp_inbox_sla_policies.sql` stores workspace-scoped warning and breach thresholds. Defaults are 15 minutes (at risk) and 60 minutes (overdue).
+- Migrations `047_whatsapp_inbox_sla_policies.sql` and `048_whatsapp_inbox_sla_pause_resume.sql` store workspace-scoped warning/breach thresholds and auditable conversation-level pause state. Defaults are 15 minutes (at risk) and 60 minutes (overdue).
 - Workspace viewers can read thresholds from `GET /api/v1/integrations/whatsapp/inbox/sla/policy` and team counts from `GET /api/v1/integrations/whatsapp/inbox/sla/summary`. Workspace admins update thresholds with `PUT /api/v1/integrations/whatsapp/inbox/sla/policy`.
 - Conversation list records include `sla_started_at`, `sla_first_response_at`, `sla_due_at`, and `sla_state` (`within_sla`, `at_risk`, `overdue`, `met`, `resolved`, `not_applicable`).
+
+- Workspace admins can pause an active conversation's SLA clock with `POST /api/v1/integrations/whatsapp/inbox/conversations/{conversation_id}/sla/pause?workspace_id=...` and a required 1–500 character reason. Resume with `POST .../{conversation_id}/sla/resume`. Paused duration is accumulated and excluded from elapsed SLA time; pause/resume actions are written to the append-only activity timeline. Resolved conversations cannot be paused. Business-hours calendars and automatic escalation are separate future work.
 - First response is measured from the latest inbound WhatsApp message to the earliest sent outbound delivery for the same workspace, WhatsApp account and prospect. This is a continuous elapsed-time operational indicator; business-hours calendars and pause rules are not modeled.
