@@ -215,6 +215,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState("30");
   const [loading, setLoading] = useState(true);
   const loadSequenceRef = useRef(0);
+  const workspaceSwitchSequenceRef = useRef(0);
   const replyDetailSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -447,7 +448,7 @@ export default function DashboardPage() {
     setProjectLanguage(""); setProjectAudience(""); setProjectOffer(""); setProjectGoal(""); setProjectBrandVoice(""); setProjectCompetitors("");
     setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
-    setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
+    setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
     setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappSavedViews([]);
     setWhatsappFilterStatus("all"); setWhatsappFilterPriority("all"); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
@@ -2025,7 +2026,7 @@ export default function DashboardPage() {
       </nav>}
       {loading ? <section className="card" aria-live="polite">Loading secure workspace data…</section> : <>
         {!workspaces.length && <section className="card" role="status"><h2>Start with a workspace</h2><p>Create a workspace below to keep prospects, campaigns, approvals and provider connections organized in one secure place.</p></section>}
-        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; resetWorkspaceScopedState(); setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); setLoading(true); try { await refresh(id, csrf); } finally { setLoading(false); } }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
+        <section className="card" aria-labelledby="workspace-title"><div className="field"><label id="workspace-title" htmlFor="workspace">Active workspace</label><select id="workspace" value={workspaceId} onChange={async e => { const id=e.target.value; const switchSequence=++workspaceSwitchSequenceRef.current; resetWorkspaceScopedState(); setWorkspaceId(id); setWorkspaceName(workspaces.find(w=>w.id===id)?.name || ""); setLoading(Boolean(id)); try { if (id) await refresh(id, csrf); } finally { if (workspaceSwitchSequenceRef.current===switchSequence) setLoading(false); } }}><option value="">Choose a workspace</option>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}</select></div>
           <form onSubmit={createWorkspace}><div className="field"><label htmlFor="new-workspace-name">Create another workspace</label><input id="new-workspace-name" required maxLength={160} value={newWorkspaceName} onChange={e=>setNewWorkspaceName(e.target.value)} placeholder="Client or business workspace name" /></div><button className="button secondary" type="submit" disabled={busy || !csrf}>Create workspace</button></form>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
