@@ -189,3 +189,29 @@ def test_event_processor_uses_persisted_prospect_for_reply_stage_update():
     source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
     stage_update = source.split("elif associated_prospect_id:", 1)[1].split("statuses =", 1)[0]
     assert "associated_prospect_id, workspace_id," in stage_update
+
+
+def test_dead_letter_webhook_retry_is_csrf_protected_and_workspace_admin_scoped():
+    from pathlib import Path
+
+    routes = Path(__file__).parents[1] / "app" / "api" / "whatsapp_inbox_routes.py"
+    source = routes.read_text(encoding="utf-8")
+    retry = source.split('@router.post("/webhook-events/{event_id}/retry")', 1)[1]
+    retry = retry.split('@router.post("/webhook-events/process-pending")', 1)[0]
+    assert "_check_csrf(request, session)" in retry
+    assert '_authorize(request, workspace_id, session, role="admin")' in retry
+    assert "a.workspace_id=$2 AND a.phone_number_id=e.phone_number_id" in retry
+    assert "a.status='active'" in retry
+    assert "e.processed_at IS NULL AND e.attempts >= 8" in retry
+
+
+def test_webhook_event_listing_never_returns_provider_payload():
+    from pathlib import Path
+
+    routes = Path(__file__).parents[1] / "app" / "api" / "whatsapp_inbox_routes.py"
+    source = routes.read_text(encoding="utf-8")
+    listing = source.split('@router.get("/webhook-events")', 1)[1]
+    listing = listing.split('@router.post("/webhook-events/{event_id}/retry")', 1)[0]
+    assert "e.payload" not in listing
+    assert "e.phone_number_id" in listing
+    assert "a.workspace_id=$1" in listing
