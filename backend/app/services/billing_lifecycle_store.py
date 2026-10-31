@@ -201,6 +201,12 @@ class BillingLifecycleStore:
                          AND (billing_transactions.invoice_number IS NULL
                               OR EXCLUDED.invoice_number IS NULL
                               OR billing_transactions.invoice_number=EXCLUDED.invoice_number)
+                         AND (billing_transactions.currency_code IS NULL
+                              OR EXCLUDED.currency_code IS NULL
+                              OR billing_transactions.currency_code=EXCLUDED.currency_code)
+                         AND (billing_transactions.total_minor IS NULL
+                              OR EXCLUDED.total_minor IS NULL
+                              OR billing_transactions.total_minor=EXCLUDED.total_minor)
                          AND (billing_transactions.provider_event_created_at IS NULL
                               OR EXCLUDED.provider_event_created_at > billing_transactions.provider_event_created_at)
                        RETURNING transaction_id""",
@@ -217,6 +223,13 @@ class BillingLifecycleStore:
                         current, subscription_id=subscription_id, invoice_number=invoice_number
                     ):
                         raise ValueError("billing_transaction_identity_conflict")
+                    if (
+                        (current["currency_code"] is not None and currency_code is not None
+                         and current["currency_code"] != currency_code)
+                        or (current["total_minor"] is not None and total_minor is not None
+                            and str(current["total_minor"]) != total_minor)
+                    ):
+                        raise ValueError("billing_transaction_value_conflict")
                     return {"outcome": "stale"}
                 return {"outcome": "applied"}
 
