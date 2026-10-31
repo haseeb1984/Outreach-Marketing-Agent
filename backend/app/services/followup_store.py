@@ -320,7 +320,18 @@ class FollowupStore:
                            next_run_at=CASE WHEN current_draft_id IS NOT NULL THEN NULL
                                             ELSE COALESCE(paused_next_run_at,now()) END,
                            paused_next_run_at=NULL,pause_reason=NULL,updated_at=now()
-                           WHERE id=$1 AND workspace_id=$2 AND status='paused' AND pause_reason='operator_paused'
+                           WHERE id=$1 AND workspace_id=$2 AND status='paused'
+                             AND pause_reason IN ('operator_paused','pending_draft_conflict')
+                             AND (pause_reason <> 'pending_draft_conflict' OR (
+                               current_draft_id IS NULL AND NOT EXISTS (
+                                 SELECT 1 FROM outreach_followup_sequences s
+                                 JOIN outreach_drafts d ON d.workspace_id=s.workspace_id
+                                   AND d.campaign_id=s.campaign_id
+                                   AND d.prospect_id=outreach_followup_enrollments.prospect_id
+                                   AND d.channel=s.channel AND d.status='pending_approval'
+                                 WHERE s.id=outreach_followup_enrollments.sequence_id
+                               )
+                             ))
                            RETURNING id,status,current_draft_id""",
                         enrollment_id, workspace_id,
                     )
