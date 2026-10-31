@@ -182,6 +182,12 @@ class BillingLifecycleStore:
                          total_minor=COALESCE(EXCLUDED.total_minor,billing_transactions.total_minor),
                          billed_at=EXCLUDED.billed_at,provider_event_created_at=EXCLUDED.provider_event_created_at,updated_at=now()
                        WHERE billing_transactions.workspace_id=EXCLUDED.workspace_id
+                         AND (billing_transactions.provider_subscription_id IS NULL
+                              OR EXCLUDED.provider_subscription_id IS NULL
+                              OR billing_transactions.provider_subscription_id=EXCLUDED.provider_subscription_id)
+                         AND (billing_transactions.invoice_number IS NULL
+                              OR EXCLUDED.invoice_number IS NULL
+                              OR billing_transactions.invoice_number=EXCLUDED.invoice_number)
                          AND (billing_transactions.provider_event_created_at IS NULL
                               OR EXCLUDED.provider_event_created_at > billing_transactions.provider_event_created_at)
                        RETURNING transaction_id""",
