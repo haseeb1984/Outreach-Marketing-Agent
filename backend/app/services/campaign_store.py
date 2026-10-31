@@ -408,6 +408,14 @@ class CampaignStore:
                        VALUES ($1,$2,$3,$4,$5)""",
                     draft_id, workspace_id, UUID(str(actor_id)), decision, note.strip() if note else None,
                 )
+                if decision == "rejected":
+                    await conn.execute(
+                        """UPDATE outreach_followup_enrollments SET status='stopped_rejected',
+                           current_draft_id=NULL,next_run_at=NULL,last_error_code='followup_draft_rejected',
+                           updated_at=now()
+                           WHERE workspace_id=$1 AND current_draft_id=$2 AND status='awaiting_approval'""",
+                        workspace_id, draft_id,
+                    )
         return self._serialize(dict(row))
 
     async def list_draft_events(self, *, workspace_id: str, draft_id: UUID, limit: int = 100) -> list[dict[str, Any]] | None:
