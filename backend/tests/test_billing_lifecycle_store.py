@@ -170,3 +170,31 @@ def test_duplicate_transaction_event_must_match_original_workspace_and_transacti
     assert not BillingLifecycleStore._same_transaction_event_identity(
         {**prior, "invoice_number": "INV-OTHER"}, **kwargs
     )
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("provider_subscription_id", None),
+        ("invoice_number", None),
+        ("provider_subscription_id", "sub_other"),
+        ("invoice_number", "INV-OTHER"),
+    ],
+)
+def test_duplicate_transaction_event_requires_exact_nullable_identity(field, value):
+    prior = {
+        "transaction_id": "txn_123",
+        "event_created_at": NOW,
+        "workspace_id": "workspace-1",
+        "provider_subscription_id": "sub_123",
+        "invoice_number": "INV-123",
+    }
+    kwargs = {
+        "transaction_id": "txn_123",
+        "event_created_at": NOW,
+        "workspace_id": "workspace-1",
+        "subscription_id": "sub_123",
+        "invoice_number": "INV-123",
+    }
+    assert not BillingLifecycleStore._same_transaction_event_identity(
+        {**prior, field: value}, **kwargs
+    )
