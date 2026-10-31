@@ -23,6 +23,13 @@ class WhatsAppConversationUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
 
 
+class WhatsAppConversationBulkUpdate(BaseModel):
+    conversation_ids: list[UUID] = Field(min_length=1, max_length=100)
+    assigned_to_user_id: str | None = Field(default=None, min_length=1, max_length=200)
+    inbox_status: str | None = Field(default=None, pattern="^(open|pending|resolved)$")
+    priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
+
+
 class WhatsAppInternalNoteCreate(BaseModel):
     body: str = Field(min_length=1, max_length=5000)
 
@@ -508,6 +515,87 @@ async def update_whatsapp_conversation(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_update_unavailable") from None
+
+
+@router.post("/conversations/bulk-update")
+async def bulk_update_whatsapp_conversations(
+    payload: WhatsAppConversationBulkUpdate,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Apply one or more inbox changes atomically to up to 100 workspace conversations."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="admin")
+    ids = payload.conversation_ids
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="duplicate_whatsapp_conversation_ids")
+    changes = payload.model_dump(exclude_unset=True, exclude={"conversation_ids"})
+    if not changes:
+        raise HTTPException(status_code=422, detail="whatsapp_bulk_update_empty")
+    assignee = changes.get("assigned_to_user_id")
+    try:
+        if "assigned_to_user_id" in changes and assignee is not None:
+            auth = getattr(request.app.state, "auth_store", None)
+            if auth is None or not await auth.authorize_workspace(
+                user_id=assignee, workspace_id=workspace_id, minimum_role="viewer"
+            ):
+                raise HTTPException(status_code=422, detail="whatsapp_assignee_not_workspace_member")
+        updated = []
+        event_map = {
+            "assigned_to_user_id": "assignment_changed",
+            "inbox_status": "status_changed",
+            "priority": "priority_changed",
+        }
+        async with _pool(request).acquire() as conn:
+            async with conn.transaction():
+                rows = await conn.fetch(
+                    """SELECT id,assigned_to_user_id,inbox_status,priority
+                       FROM whatsapp_conversations
+                       WHERE workspace_id=$1 AND id=ANY($2::uuid[])
+                       ORDER BY id FOR UPDATE""",
+                    workspace_id, ids,
+                )
+                if len(rows) != len(ids):
+                    raise HTTPException(status_code=404, detail="whatsapp_bulk_conversation_not_found")
+                for old in rows:
+                    assignments, args = [], [old["id"], workspace_id]
+                    if "assigned_to_user_id" in changes:
+                        args.append(assignee)
+                        assignments.extend([
+                            f"assigned_to_user_id=${len(args)}",
+                            f"assigned_at=CASE WHEN ${len(args)} IS NULL THEN NULL ELSE now() END",
+                        ])
+                    if "inbox_status" in changes:
+                        args.append(changes["inbox_status"])
+                        assignments.extend([
+                            f"inbox_status=${len(args)}",
+                            f"closed_at=CASE WHEN ${len(args)}='resolved' THEN now() ELSE NULL END",
+                        ])
+                    if "priority" in changes:
+                        args.append(changes["priority"])
+                        assignments.append(f"priority=${len(args)}")
+                    assignments.append("updated_at=now()")
+                    row = await conn.fetchrow(
+                        "UPDATE whatsapp_conversations SET " + ",".join(assignments) +
+                        " WHERE id=$1 AND workspace_id=$2 RETURNING id,assigned_to_user_id,inbox_status,priority,assigned_at,closed_at,updated_at",
+                        *args,
+                    )
+                    updated.append(_serialize(dict(row)))
+                    for field, event_type in event_map.items():
+                        if field in changes and str(old[field] or "") != str(changes[field] or ""):
+                            await conn.execute(
+                                """INSERT INTO whatsapp_conversation_activity
+                                   (workspace_id,conversation_id,actor_user_id,event_type,details)
+                                   VALUES ($1,$2,$3,$4,$5::jsonb)""",
+                                workspace_id, old["id"], str(session["user_id"]), event_type,
+                                json.dumps({"from": old[field], "to": changes[field]}),
+                            )
+        return {"updated_count": len(updated), "items": updated}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_bulk_update_unavailable") from None
 
 
 @router.get("/conversations/{conversation_id}/activity")
