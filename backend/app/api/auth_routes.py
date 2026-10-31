@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from html import escape
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
