@@ -311,7 +311,7 @@ async def process_pending_whatsapp_events(
                                             """UPDATE crm_prospects SET stage='replied', updated_at=now()
                                                WHERE id=$1 AND workspace_id=$2
                                                  AND stage NOT IN ('converted','disqualified','do_not_contact')""",
-                                            prospect_id, workspace_id,
+                                            associated_prospect_id, workspace_id,
                                         )
                             statuses = value.get("statuses", [])
                             for status in statuses if isinstance(statuses, list) else []:
