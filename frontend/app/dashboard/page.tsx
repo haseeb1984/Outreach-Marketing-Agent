@@ -1363,7 +1363,6 @@ export default function DashboardPage() {
         }),
       });
       if (requestedWorkspaceId !== workspaceId) return;
-      if (requestedWorkspaceId !== workspaceId) return;
       setAuditReport(result);
       setNotice(result.notice || "Read-only audit completed.");
       await refresh(requestedWorkspaceId, csrf);
@@ -1438,10 +1437,10 @@ export default function DashboardPage() {
 
 
   async function importProspectsCsv(event: React.ChangeEvent<HTMLInputElement>) {
-    const requestedWorkspaceId = workspaceId;
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file || !workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     if (file.size > 1_000_000) { setError("CSV must be 1 MB or smaller."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
