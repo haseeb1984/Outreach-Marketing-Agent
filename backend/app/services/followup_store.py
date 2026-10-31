@@ -393,6 +393,103 @@ class FollowupStore:
                     )
                 return True
 
+    async def resolve_delivery(
+        self, *, workspace_id: str, enrollment_id: UUID, delivery_id: UUID,
+        outcome: str, actor_id: UUID | str, reason: str, evidence_url: str,
+    ) -> dict[str, Any] | None:
+        """Record an admin's reviewed provider outcome; never retries a delivery."""
+        if outcome not in {"delivered", "not_delivered"}:
+            raise ValueError("followup_resolution_outcome_invalid")
+        if not isinstance(reason, str) or not 12 <= len(reason.strip()) <= 2000:
+            raise ValueError("followup_resolution_reason_invalid")
+        if not isinstance(evidence_url, str) or not evidence_url.startswith("https://") or len(evidence_url) > 2048:
+            raise ValueError("followup_resolution_evidence_invalid")
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                enrollment = await conn.fetchrow(
+                    """SELECT e.id,e.sequence_id,e.current_step,e.current_draft_id,e.pause_reason,
+                              s.channel
+                       FROM outreach_followup_enrollments e
+                       JOIN outreach_followup_sequences s
+                         ON s.id=e.sequence_id AND s.workspace_id=e.workspace_id
+                       WHERE e.id=$1 AND e.workspace_id=$2
+                         AND e.status='paused'
+                         AND e.pause_reason IN ('delivery_failed','delivery_uncertain')
+                       FOR UPDATE OF e""",
+                    enrollment_id, workspace_id,
+                )
+                if enrollment is None or enrollment["current_draft_id"] is None:
+                    return None
+                if enrollment["channel"] == "email":
+                    delivery = await conn.fetchrow(
+                        """SELECT id,draft_id,status,provider_status FROM outreach_deliveries
+                           WHERE id=$1 AND workspace_id=$2 AND draft_id=$3 AND channel='email'
+                           FOR UPDATE""",
+                        delivery_id, workspace_id, enrollment["current_draft_id"],
+                    )
+                    if delivery is None or delivery["status"] not in {"failed", "uncertain"}:
+                        raise ValueError("followup_delivery_not_recoverable")
+                    provider_status = delivery["provider_status"]
+                else:
+                    delivery = await conn.fetchrow(
+                        """SELECT id,draft_id,status FROM whatsapp_outbound_deliveries
+                           WHERE id=$1 AND workspace_id=$2 AND draft_id=$3
+                           FOR UPDATE""",
+                        delivery_id, workspace_id, enrollment["current_draft_id"],
+                    )
+                    if delivery is None or delivery["status"] not in {"failed", "uncertain"}:
+                        raise ValueError("followup_delivery_not_recoverable")
+                    provider_status = delivery["status"]
+                if outcome == "delivered":
+                    if enrollment["channel"] == "email" and provider_status != "delivered":
+                        raise ValueError("provider_delivery_confirmation_required")
+                    if enrollment["channel"] == "whatsapp" and provider_status not in {"delivered", "read"}:
+                        raise ValueError("provider_delivery_confirmation_required")
+                    next_step = enrollment["current_step"] + 1
+                    delay = await conn.fetchval(
+                        "SELECT delay_minutes FROM outreach_followup_steps WHERE sequence_id=$1 AND step_number=$2",
+                        enrollment["sequence_id"], next_step,
+                    )
+                    if delay is None:
+                        await conn.execute(
+                            """UPDATE outreach_followup_enrollments SET status='completed',
+                               current_draft_id=NULL,last_delivery_id=CASE WHEN $2='email' THEN $3 ELSE last_delivery_id END,
+                               last_whatsapp_delivery_id=CASE WHEN $2='whatsapp' THEN $3 ELSE last_whatsapp_delivery_id END,
+                               next_run_at=NULL,paused_next_run_at=NULL,pause_reason=NULL,last_error_code=NULL,updated_at=now()
+                               WHERE id=$1""",
+                            enrollment_id, enrollment["channel"], delivery_id,
+                        )
+                        next_status = "completed"
+                    else:
+                        await conn.execute(
+                            """UPDATE outreach_followup_enrollments SET status='active',current_step=$2,
+                               current_draft_id=NULL,last_delivery_id=CASE WHEN $3='email' THEN $4 ELSE last_delivery_id END,
+                               last_whatsapp_delivery_id=CASE WHEN $3='whatsapp' THEN $4 ELSE last_whatsapp_delivery_id END,
+                               next_run_at=now()+($5 * interval '1 minute'),paused_next_run_at=NULL,
+                               pause_reason=NULL,last_error_code=NULL,updated_at=now() WHERE id=$1""",
+                            enrollment_id, next_step, enrollment["channel"], delivery_id, delay,
+                        )
+                        next_status = "active"
+                else:
+                    await conn.execute(
+                        """UPDATE outreach_followup_enrollments SET status='stopped_ineligible',
+                           current_draft_id=NULL,next_run_at=NULL,paused_next_run_at=NULL,pause_reason=NULL,
+                           last_error_code='admin_confirmed_not_delivered',updated_at=now()
+                           WHERE id=$1""",
+                        enrollment_id,
+                    )
+                    next_status = "stopped_ineligible"
+                await conn.execute(
+                    """INSERT INTO outreach_followup_delivery_resolutions
+                       (workspace_id,enrollment_id,draft_id,delivery_id,channel,outcome,provider_status,
+                        reason,evidence_url,resolved_by)
+                       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+                    workspace_id, enrollment_id, enrollment["current_draft_id"], delivery_id,
+                    enrollment["channel"], outcome, provider_status, reason.strip(), evidence_url,
+                    UUID(str(actor_id)),
+                )
+                return {"id": str(enrollment_id), "status": next_status, "outcome": outcome}
+
     async def reject_draft(self, *, workspace_id: str, draft_id: UUID) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
