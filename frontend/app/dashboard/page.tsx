@@ -2211,6 +2211,7 @@ export default function DashboardPage() {
 
   async function deleteAccount() {
     if (!csrf || busy) return;
+    const requestedWorkspaceId = workspaceId;
     if (!window.confirm("Permanently delete this account? Your sign-in will stop and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
     const confirmation = window.prompt("Type DELETE MY ACCOUNT to confirm this irreversible action.");
     if (confirmation !== "DELETE MY ACCOUNT") {
