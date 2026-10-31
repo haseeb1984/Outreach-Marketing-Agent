@@ -273,6 +273,47 @@ async def _exercise_billing_lifecycle() -> None:
                     conflicting_value_event_id,
                 ) == 0
 
+        # Concurrent first events for one transaction cannot race two different totals
+        # into the same billing record. The losing event must roll back its ledger row.
+        concurrent_transaction_id = "txn_concurrent_" + uuid4().hex
+        concurrent_events = [
+            {
+                **transaction_args,
+                "transaction_id": concurrent_transaction_id,
+                "event_id": "evt_tx_concurrent_a_" + uuid4().hex,
+                "event_created_at": NOW + timedelta(minutes=3),
+                "total_minor": "2100",
+            },
+            {
+                **transaction_args,
+                "transaction_id": concurrent_transaction_id,
+                "event_id": "evt_tx_concurrent_b_" + uuid4().hex,
+                "event_created_at": NOW + timedelta(minutes=3),
+                "total_minor": "2200",
+            },
+        ]
+        concurrent_results = await asyncio.gather(
+            *(store.record_verified_transaction(**event) for event in concurrent_events),
+            return_exceptions=True,
+        )
+        assert sum(result == {"outcome": "applied"} for result in concurrent_results) == 1
+        value_conflicts = [
+            result for result in concurrent_results
+            if isinstance(result, ValueError) and str(result) == "billing_transaction_value_conflict"
+        ]
+        assert len(value_conflicts) == 1
+        async with pool.acquire() as conn:
+            concurrent_snapshot = await conn.fetchrow(
+                "SELECT total_minor FROM billing_transactions WHERE provider='paddle' AND transaction_id=$1",
+                concurrent_transaction_id,
+            )
+            assert str(concurrent_snapshot["total_minor"]) in {"2100", "2200"}
+            assert await conn.fetchval(
+                """SELECT count(*) FROM billing_transaction_events
+                   WHERE provider='paddle' AND transaction_id=$1""",
+                concurrent_transaction_id,
+            ) == 1
+
         # A transaction ID cannot be rebound to a different workspace.
         other_workspace = "billing-transaction-other-" + uuid4().hex
         async with pool.acquire() as conn:
