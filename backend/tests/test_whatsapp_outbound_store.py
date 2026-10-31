@@ -73,7 +73,7 @@ def test_find_by_idempotency_key_is_workspace_scoped_and_serializes_record():
     pool = FakePool([{
         "id": queue_id, "account_id": account_id, "draft_id": draft_id,
         "status": "queued", "queued_at": queued_at,
-        "template_name": "welcome_offer", "language_code": "en_US",
+        "template_name": "welcome_offer", "language_code": "en_US", "template_parameters": {},
     }])
     result = asyncio.run(WhatsAppOutboundStore(pool).find_by_idempotency_key(
         workspace_id="workspace-test", idempotency_key="queue-key-123",
@@ -234,7 +234,8 @@ def test_queue_persists_selected_template_metadata_for_future_dispatch():
     ))
     insert_query, insert_args = pool.connection.queries[-1]
     assert "template_name,language_code" in insert_query
-    assert insert_args[-2:] == ("welcome_offer", "en_US")
+    assert insert_args[7:9] == ("welcome_offer", "en_US")
+    assert insert_args[9] == "{}"
     assert result["template_name"] == "welcome_offer"
     assert result["language_code"] == "en_US"
 
@@ -267,7 +268,7 @@ def test_claim_batch_uses_atomic_skip_locked_leases_and_serializes_rows():
     assert result[0]["lease_token"] == str(lease_token)
     assert result[0]["lease_expires_at"] == expires.isoformat()
     query, args = pool.connection.queries[0]
-    assert "FOR UPDATE SKIP LOCKED" in query
+    assert "FOR UPDATE OF q SKIP LOCKED" in query
     assert "status='processing'" in query
     assert "lease_expires_at=now()+($2::int * interval '1 second')" in query
     assert args == (5, 120)
