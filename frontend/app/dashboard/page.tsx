@@ -1875,41 +1875,46 @@ export default function DashboardPage() {
 
   async function retryWhatsAppDeadLetter(event: WhatsAppWebhookEvent) {
     if (!workspaceId || !csrf || !window.confirm("Requeue this exhausted inbound webhook event for processing? This does not send a WhatsApp message.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api<{ state: string }>(
-        "/api/v1/integrations/whatsapp/inbox/webhook-events/" + encodeURIComponent(event.id) + "/retry?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/integrations/whatsapp/inbox/webhook-events/" + encodeURIComponent(event.id) + "/retry?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf,
         { method: "POST" },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Webhook event requeued. Select Process pending inbound events to attempt processing; no message was sent.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Webhook event could not be requeued.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Webhook event could not be requeued.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function reconcileStaleDeliveries() {
     if (!workspaceId || !csrf || !window.confirm("Mark email sends stuck in processing for at least 15 minutes as uncertain? This will not retry or resend any email.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ reconciled_count: number; automatic_retry: boolean }>(
-        "/api/v1/deliveries/reconcile-stale?workspace_id=" + encodeURIComponent(workspaceId) + "&older_than_seconds=900&limit=100",
+        "/api/v1/deliveries/reconcile-stale?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&older_than_seconds=900&limit=100",
         csrf,
         { method: "POST" },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(result.reconciled_count
         ? result.reconciled_count + " stale delivery record(s) marked uncertain. Check SMTP/provider logs before taking any further action."
         : "No stale processing deliveries found. No messages were sent or retried.");
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Stale delivery reconciliation failed.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Stale delivery reconciliation failed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function saveDraftEdits(event: FormEvent<HTMLFormElement>, draft: Draft) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     const form = new FormData(event.currentTarget);
     const subject = String(form.get("subject") || "").trim();
     const body = String(form.get("body") || "").trim();
@@ -1921,29 +1926,37 @@ export default function DashboardPage() {
     try {
       await api("/api/v1/drafts/" + encodeURIComponent(draft.id), csrf, {
         method: "PATCH",
-        body: JSON.stringify({ workspace_id: workspaceId, subject: draft.channel === "email" ? subject : null, body }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, subject: draft.channel === "email" ? subject : null, body }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Draft changes saved. The draft remains pending approval and has not been sent.");
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftEvents(current => { const next = { ...current }; delete next[draft.id]; return next; });
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Draft changes could not be saved.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Draft changes could not be saved.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function loadDraftEvents(draft: Draft) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     const opening = !draftHistoryOpen[draft.id];
     setDraftHistoryOpen(current => ({ ...current, [draft.id]: opening }));
     if (!opening) return;
     try {
       const result = await api<{ items: DraftEvent[] }>(
-        "/api/v1/drafts/" + encodeURIComponent(draft.id) + "/events?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=100",
+        "/api/v1/drafts/" + encodeURIComponent(draft.id) + "/events?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=100",
         csrf,
       );
+      if (requestedWorkspaceId !== workspaceId) return;
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftEvents(current => ({ ...current, [draft.id]: result.items || [] }));
     } catch (err) {
+      if (requestedWorkspaceId !== workspaceId) return;
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
       setError(err instanceof Error ? err.message : "Draft history could not be loaded.");
     }
@@ -1951,6 +1964,7 @@ export default function DashboardPage() {
 
   async function regenerateDraft(draft: Draft) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     const callToAction = window.prompt("What action should this revised message invite?", "Would you be open to a brief conversation?");
     if (callToAction === null || !callToAction.trim()) return;
     setBusy(true); setError(""); setNotice("");
@@ -1958,35 +1972,42 @@ export default function DashboardPage() {
       await api("/api/v1/drafts/" + encodeURIComponent(draft.id) + "/regenerate", csrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId,
+          workspace_id: requestedWorkspaceId,
           call_to_action: callToAction.trim(),
           idempotency_key: "regenerate-" + crypto.randomUUID(),
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Draft regenerated and returned to the same pending review. Nothing was sent.");
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftEvents(current => { const next = { ...current }; delete next[draft.id]; return next; });
-      await refresh(workspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Draft could not be regenerated.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Draft could not be regenerated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function reviewDraft(draft: Draft, decision: "approved" | "rejected") {
     if (!workspaceId || !csrf || !window.confirm("Confirm " + decision + " for this draft? This does not send a message.")) return;
+    const requestedWorkspaceId = workspaceId;
     const note = window.prompt("Optional review note (for the activity history):", "");
     if (note === null) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/drafts/" + encodeURIComponent(draft.id) + "/review", csrf, {
-        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, decision, note: note.trim() || null }),
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, decision, note: note.trim() || null }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Draft " + decision + ". No message was sent.");
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftHistoryOpen(current => ({ ...current, [draft.id]: false }));
+      if (requestedWorkspaceId !== workspaceId) return;
       setDraftEvents(current => { const next = { ...current }; delete next[draft.id]; return next; });
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "Draft review failed."); }
-    finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Draft review failed."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function startCheckout() {
