@@ -22,7 +22,7 @@ type AuthSession = { id: string; created_at: string; last_seen_at: string; expir
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
 type WhatsAppTemplate = { template_name: string; language_code: string; category: string; status: string; components?: Array<{ type?: string; format?: string; text?: string; buttons?: Array<{ type?: string; url?: string }> }>; provider_status?: string | null; verified_at?: string | null; updated_at?: string | null };
-type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; assigned_to_user_id?: string | null; inbox_status?: "open" | "pending" | "resolved"; priority?: "low" | "normal" | "high" | "urgent"; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null; sla_state?: "within_sla" | "at_risk" | "overdue" | "met" | "resolved" | "not_applicable"; sla_due_at?: string | null; sla_started_at?: string | null; sla_first_response_at?: string | null };
+type WhatsAppConversation = { id: string; account_id: string; wa_id: string; account_label: string; assigned_to_user_id?: string | null; inbox_status?: "open" | "pending" | "resolved"; priority?: "low" | "normal" | "high" | "urgent"; prospect_name?: string | null; prospect_company?: string | null; last_message_text?: string | null; last_message_type?: string | null; last_message_at?: string | null; sla_state?: "within_sla" | "at_risk" | "overdue" | "met" | "resolved" | "not_applicable"; sla_due_at?: string | null; sla_started_at?: string | null; sla_first_response_at?: string | null; sla_paused_at?: string | null; sla_pause_reason?: string | null };
 type WhatsAppInternalNote = { id: string; author_user_id: string; body: string; created_at: string };
 type WhatsAppActivity = { id: string; actor_user_id: string; event_type: string; details?: Record<string, unknown>; created_at: string };
 type WhatsAppSavedView = { id: string; name: string; filters: { inbox_status?: string; priority?: string; search?: string; assigned_to_me?: boolean; unassigned?: boolean; assigned_to_user_id?: string }; };
@@ -113,6 +113,7 @@ export default function DashboardPage() {
   const [whatsappFilterAssignee, setWhatsappFilterAssignee] = useState("all");
   const [whatsappSavedViews, setWhatsappSavedViews] = useState<WhatsAppSavedView[]>([]);
   const [whatsappSLAWarningMinutes, setWhatsappSLAWarningMinutes] = useState(15);
+  const [whatsappSLAPauseReason, setWhatsappSLAPauseReason] = useState("");
   const [whatsappSLABreachMinutes, setWhatsappSLABreachMinutes] = useState(60);
   const [whatsappSLASummary, setWhatsappSLASummary] = useState({ overdue: 0, at_risk: 0, within_sla: 0 });
   const [whatsappSavedViewName, setWhatsappSavedViewName] = useState("");
@@ -1394,6 +1395,26 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function changeWhatsAppSLAPause(conversation: WhatsAppConversation, action: "pause" | "resume") {
+    if (!workspaceId || !csrf) return;
+    if (action === "pause" && !whatsappSLAPauseReason.trim()) {
+      setError("Enter a reason before pausing the SLA clock.");
+      return;
+    }
+    setWhatsappInboxBusy(true); setError("");
+    try {
+      await api("/api/v1/integrations/whatsapp/inbox/conversations/"+encodeURIComponent(conversation.id)+"/sla/"+action+"?workspace_id="+encodeURIComponent(workspaceId),csrf,{
+        method:"POST",
+        ...(action === "pause" ? {body:JSON.stringify({reason:whatsappSLAPauseReason.trim()})} : {}),
+      });
+      setNotice(action === "pause" ? "SLA clock paused with an audit entry." : "SLA clock resumed; paused duration has been excluded.");
+      setWhatsappSLAPauseReason("");
+      await applyWhatsAppInboxFilters();
+      await loadWhatsAppConversationActivity(conversation.id);
+    } catch(err) { setError(err instanceof Error ? err.message : "Could not update SLA pause state."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
   async function loadWhatsAppSLA() {
     if (!workspaceId || !csrf) return;
     try {
@@ -2165,6 +2186,10 @@ export default function DashboardPage() {
                           <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
                         </select>
                       </label>
+                    </div>
+                    <div className="stack" style={{border:"1px solid var(--border)",borderRadius:"0.75rem",padding:"0.75rem"}}>
+                      <strong>Response SLA clock</strong>
+                      {conversation.sla_paused_at ? <><span className="fine">Paused: {conversation.sla_pause_reason || "No reason recorded"}</span><button className="button secondary" type="button" disabled={!canManage || whatsappInboxBusy} onClick={()=>changeWhatsAppSLAPause(conversation,"resume")}>Resume SLA clock</button></> : <><input className="input" value={whatsappSLAPauseReason} maxLength={500} onChange={event=>setWhatsappSLAPauseReason(event.target.value)} placeholder="Reason for pausing the SLA clock"/><button className="button secondary" type="button" disabled={!canManage || whatsappInboxBusy || !whatsappSLAPauseReason.trim()} onClick={()=>changeWhatsAppSLAPause(conversation,"pause")}>Pause SLA clock</button></>}
                     </div>
                     <h4>Internal notes</h4>
                     {whatsappNotes.length ? <ul>{whatsappNotes.map(note=><li key={note.id} style={{marginBottom:"0.5rem"}}><p>{note.body}</p><span className="fine">{members.find(member=>member.user_id===note.author_user_id)?.email || "Workspace teammate"} · {new Date(note.created_at).toLocaleString()}</span></li>)}</ul> : <p className="fine">No internal notes yet.</p>}
