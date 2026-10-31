@@ -352,7 +352,7 @@ async def process_pending_whatsapp_events(
                                                WHEN 'processing' THEN 0
                                                WHEN 'uncertain' THEN 0
                                                WHEN 'sent' THEN 1
-                                               WHEN 'failed' THEN 1
+                                               WHEN 'failed' THEN 0
                                                WHEN 'delivered' THEN 2
                                                WHEN 'read' THEN 3
                                                ELSE 5 END
