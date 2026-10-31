@@ -29,6 +29,18 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "037_whatsapp_outbound_template_persistence.sql",
     "038_whatsapp_outbound_queue_leases.sql",
     "039_website_audit_job_idempotency.sql",
+    "040_email_provider_feedback.sql",
+    "041_campaign_delivery_scheduling.sql",
+    "042_whatsapp_template_components.sql",
+    "043_whatsapp_inbound_media_storage.sql",
+    "044_whatsapp_inbox_collaboration.sql",
+    "045_whatsapp_conversation_activity.sql",
+    "046_whatsapp_inbox_saved_views.sql",
+    "047_whatsapp_inbox_sla_policies.sql",
+    "048_whatsapp_inbox_sla_pause_resume.sql",
+    "049_campaign_followup_sequences.sql",
+    "050_followup_delivery_resolutions.sql",
+    "051_billing_transactions.sql",
 )
 
 
