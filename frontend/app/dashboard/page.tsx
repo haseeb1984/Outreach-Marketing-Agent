@@ -223,6 +223,7 @@ export default function DashboardPage() {
   const workspaceIdRef = useRef(workspaceId);
   const csrfRef = useRef(csrf);
   const replyDetailSequenceRef = useRef(0);
+  const authSessionsSequenceRef = useRef(0);
   const replyDraftSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
   const whatsappMutationSequenceRef = useRef(0);
@@ -545,11 +546,13 @@ export default function DashboardPage() {
 
   async function loadAuthSessions() {
     if (!csrf) return;
+    const requestedSequence = ++authSessionsSequenceRef.current;
     try {
       const result = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", csrf);
-      setAuthSessions(result.items);
+      if (requestedSequence !== authSessionsSequenceRef.current) return;
+      setAuthSessions(result.items || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
+      if (requestedSequence === authSessionsSequenceRef.current) setError(err instanceof Error ? err.message : "Signed-in sessions could not be loaded.");
     }
   }
 
