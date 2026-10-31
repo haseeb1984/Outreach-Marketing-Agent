@@ -227,6 +227,7 @@ export default function DashboardPage() {
   const replyDraftSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
   const whatsappMutationSequenceRef = useRef(0);
+  const whatsappSavedViewsSequenceRef = useRef(0);
   const whatsappSLALoadSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -461,6 +462,7 @@ export default function DashboardPage() {
     replyDraftSequenceRef.current += 1;
     whatsappDetailSequenceRef.current += 1;
     whatsappMutationSequenceRef.current += 1;
+    whatsappSavedViewsSequenceRef.current += 1;
     whatsappSLALoadSequenceRef.current += 1;
     setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setCrmOffset(0); setCrmTotal(0);
     setResearchQuery(""); setResearchResults([]); setResearchBusy(false);
@@ -482,7 +484,7 @@ export default function DashboardPage() {
     setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
     setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappSavedViews([]);
-    setWhatsappFilterStatus("all"); setWhatsappFilterPriority("all"); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
+    setWhatsappFilterStatus(""); setWhatsappFilterPriority(""); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
     setWhatsappSelectedSavedView(""); setWhatsappSavedViewName(""); setWhatsappSavedViewsUnavailable(false); setWhatsappSLAUnavailable(false); setWhatsappSLAWarningMinutes(15); setWhatsappSLABreachMinutes(60);
     setWhatsappSLAPauseReason(""); setWhatsappSLASummary({ overdue: 0, at_risk: 0, within_sla: 0, paused: 0 });
     setSelectedWhatsAppBulkIds([]); setWhatsappBulkAssignee("__unchanged__"); setWhatsappBulkStatus(""); setWhatsappBulkPriority("");
@@ -802,16 +804,16 @@ export default function DashboardPage() {
   async function loadWhatsAppSavedViews() {
     if (!workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
-    const requestedSequence = ++whatsappMutationSequenceRef.current;
+    const requestedSequence = ++whatsappSavedViewsSequenceRef.current;
     try {
       const result = await api<{ items: WhatsAppSavedView[] }>(
         "/api/v1/integrations/whatsapp/inbox/saved-views?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf,
       );
-      if (requestedSequence !== whatsappMutationSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
+      if (requestedSequence !== whatsappSavedViewsSequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappSavedViews(result.items || []);
       setWhatsappSavedViewsUnavailable(false);
     } catch (err) {
-      if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) {
+      if (requestedSequence === whatsappSavedViewsSequenceRef.current && requestedWorkspaceId === workspaceId) {
         setWhatsappSavedViewsUnavailable(true);
         setError(err instanceof Error ? err.message : "Saved inbox views could not be loaded.");
       }
