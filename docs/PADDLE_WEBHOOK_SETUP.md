@@ -31,5 +31,5 @@ Example shape (replace with real recurring price IDs and reviewed limits):
 - Use encrypted deployment secrets; never commit API keys, webhook secrets or real customer data.
 - Checkout metadata carries `workspace_id` and `plan_id`. The signed webhook must map the declared plan to the configured Paddle price ID before updating entitlements.
 - Duplicate events are idempotent; stale subscription snapshots must not overwrite newer state.
-- Verify valid signatures, invalid signatures, stale timestamps, duplicate deliveries, out-of-order events, cancellation, past-due state and unknown plan IDs in sandbox.
+- Verify valid signatures, invalid signatures, stale timestamps, duplicate deliveries, out-of-order events, trialing, cancellation, past-due state and unknown plan IDs in sandbox.
 - Do not enable live billing until merchant eligibility, policies, database migrations, operational alerts and a real sandbox lifecycle are accepted.
