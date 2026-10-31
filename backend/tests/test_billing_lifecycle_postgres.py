@@ -66,13 +66,16 @@ async def _exercise_billing_lifecycle() -> None:
         first = make_event("evt_first_" + uuid4().hex, NOW)
         assert await store.apply_verified_event(first) == {"outcome": "applied"}
 
-        # A duplicate provider event must not reapply changed data under the same event ID.
-        duplicate = make_event(
+        # An exact retry is idempotent, but mutating the snapshot under the
+        # same provider event ID must be rejected by the payload fingerprint.
+        assert await store.apply_verified_event(first) == {"outcome": "duplicate"}
+        mutated_duplicate = make_event(
             first.event_id, NOW,
             subscription_status="cancelled",
             entitlements={"email_outreach": {"enabled": False, "monthly_limit": 0}},
         )
-        assert await store.apply_verified_event(duplicate) == {"outcome": "duplicate"}
+        with pytest.raises(ValueError, match="billing_event_payload_conflict"):
+            await store.apply_verified_event(mutated_duplicate)
 
         # Reusing the same provider event ID with a different timestamp is an identity conflict.
         timestamp_collision = make_event(first.event_id, NOW + timedelta(minutes=5))
