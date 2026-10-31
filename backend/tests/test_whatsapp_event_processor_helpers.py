@@ -158,3 +158,33 @@ def test_event_processor_uses_persisted_conversation_prospect_for_contact_action
     assert 'associated_prospect_id = conversation["prospect_id"]' in source
     assert "if associated_prospect_id:" in source
     assert "workspace_id, account_id, associated_prospect_id," in source
+
+def test_event_processor_dead_letters_events_after_retry_limit():
+    import inspect
+    from app.services import whatsapp_event_processor
+
+    source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
+    assert "attempts < 8" in source
+    assert "dead_lettered_at=CASE WHEN attempts+1 >= 8" in source
+    assert "worker_retry_exhausted" in source
+    assert "processing_started_at=NULL" in source
+
+
+def test_whatsapp_webhook_retry_tracking_migration_adds_required_columns():
+    from pathlib import Path
+
+    migration = Path(__file__).parents[1] / "migrations" / "055_whatsapp_webhook_retry_tracking.sql"
+    source = migration.read_text(encoding="utf-8")
+    assert "ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0" in source
+    assert "ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ" in source
+    assert "ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMPTZ" in source
+    assert "CHECK (attempts >= 0)" in source
+
+
+def test_event_processor_uses_persisted_prospect_for_reply_stage_update():
+    import inspect
+    from app.services import whatsapp_event_processor
+
+    source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
+    stage_update = source.split("elif associated_prospect_id:", 1)[1].split("statuses =", 1)[0]
+    assert "associated_prospect_id, workspace_id," in stage_update
