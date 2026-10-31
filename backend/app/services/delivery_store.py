@@ -157,7 +157,7 @@ class DeliveryStore:
                     result=await c.execute("""UPDATE outreach_deliveries SET status='uncertain',error_code=$3,updated_at=now()
                       WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
                     await c.execute(
-                        """UPDATE outreach_followup_enrollments e SET status='paused',
+                        """UPDATE outreach_followup_enrollments e SET status='paused',pause_reason='delivery_uncertain',
                            last_error_code='followup_delivery_uncertain',updated_at=now()
                            FROM outreach_deliveries d
                            WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
@@ -168,7 +168,7 @@ class DeliveryStore:
                     result=await c.execute("""UPDATE outreach_deliveries SET status='failed',error_code=$3,updated_at=now()
                       WHERE id=$1 AND workspace_id=$2 AND status='processing'""",delivery_id,workspace_id,error_code[:100])
                     await c.execute(
-                        """UPDATE outreach_followup_enrollments e SET status='paused',
+                        """UPDATE outreach_followup_enrollments e SET status='paused',pause_reason='delivery_failed',
                            last_error_code='followup_delivery_failed',updated_at=now()
                            FROM outreach_deliveries d
                            WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
