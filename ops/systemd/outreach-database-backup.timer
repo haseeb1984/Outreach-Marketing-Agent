@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Outreach Marketing Agent PostgreSQL backup every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/06:00:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=outreach-database-backup.service
+
+[Install]
+WantedBy=timers.target
