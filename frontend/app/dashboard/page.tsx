@@ -927,123 +927,142 @@ export default function DashboardPage() {
   async function createWhatsAppAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedCsrf = csrf;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/integrations/whatsapp/accounts", csrf, {
+      await api("/api/v1/integrations/whatsapp/accounts", requestedCsrf, {
         method: "POST",
         body: JSON.stringify({
-          workspace_id: workspaceId, label: whatsappLabel, waba_id: whatsappWabaId,
+          workspace_id: requestedWorkspaceId, label: whatsappLabel, waba_id: whatsappWabaId,
           phone_number_id: whatsappPhoneNumberId, access_token: whatsappAccessToken,
         }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setWhatsappLabel(""); setWhatsappWabaId(""); setWhatsappPhoneNumberId(""); setWhatsappAccessToken("");
       setNotice("Meta account credentials encrypted and saved as pending verification.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, requestedCsrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp account could not be saved.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp account could not be saved.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function verifyWhatsAppAccount(account: WhatsAppAccount) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      const result = await api<{ verified: boolean; notice: string }>("/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/verify?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "POST" });
+      const result = await api<{ verified: boolean; notice: string }>("/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/verify?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "POST" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice(result.notice || "Meta account and WABA webhook subscription verified. Outbound sending remains separately gated by server configuration and consent.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp account verification failed.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp account verification failed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function rotateWhatsAppToken(account: WhatsAppAccount) {
     if (!workspaceId || !csrf || !window.confirm("Replace the access token for " + account.label + "? Pending deliveries will be cancelled and must be queued again.")) return;
     const token = window.prompt("Paste the new Meta access token. It will be encrypted and will not be shown again.");
     if (!token?.trim()) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ status: string; queued_reservations_released: number }>(
         "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/rotate-token",
         csrf,
-        { method: "POST", body: JSON.stringify({ workspace_id: workspaceId, access_token: token.trim() }) },
+        { method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, access_token: token.trim() }) },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("WhatsApp token rotated. " + result.queued_reservations_released + " queued reservation(s) released. Verify the account again.");
-      await refresh(workspaceId, csrf);
-    } catch (err) { setError(err instanceof Error ? err.message : "WhatsApp token could not be rotated."); }
-    finally { setBusy(false); }
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp token could not be rotated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function syncWhatsAppTemplates(account: WhatsAppAccount) {
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ templates_received: number; templates_synced: number; templates_skipped: number; sending_enabled: boolean }>(
-        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates/sync?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates/sync?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf,
         { method: "POST" },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       const refreshed = await api<{ items: WhatsAppTemplate[] }>(
-        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates?workspace_id=" + encodeURIComponent(workspaceId),
+        "/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "/templates?workspace_id=" + encodeURIComponent(requestedWorkspaceId),
         csrf,
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setWhatsappTemplates(current => ({ ...current, [account.id]: refreshed.items || [] }));
       setNotice("Meta template sync complete for " + account.label + ": " + result.templates_synced + " saved, " + result.templates_skipped + " skipped from " + result.templates_received + " received. Queue dispatch is controlled by the server-side WhatsApp feature flag.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp templates could not be synchronized.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp templates could not be synchronized.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function disableWhatsAppAccount(account: WhatsAppAccount) {
     if (!workspaceId || !csrf || !window.confirm("Disable the WhatsApp account " + account.label + "?")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/integrations/whatsapp/accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("WhatsApp account disabled.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp account could not be disabled.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp account could not be disabled.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function disableEmailAccount(account: EmailAccount) {
     if (!workspaceId || !csrf || !window.confirm("Disable " + account.label + "? New queue requests cannot use this account.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/integrations/email-accounts/" + encodeURIComponent(account.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Email account disabled. Its queued messages were retired and will not be sent later if the account is re-enabled.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Email account could not be disabled.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Email account could not be disabled.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function createInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       await api("/api/v1/workspaces/invitations", csrf, {
         method: "POST",
-        body: JSON.stringify({ workspace_id: workspaceId, email: inviteEmail, role: inviteRole }),
+        body: JSON.stringify({ workspace_id: requestedWorkspaceId, email: inviteEmail, role: inviteRole }),
       });
+      if (requestedWorkspaceId !== workspaceId) return;
       setInviteEmail("");
       setNotice("Invitation email sent. The recipient must sign in with that email address to accept.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workspace invitation could not be sent.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Workspace invitation could not be sent.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function revokeInvitation(invitation: Invitation) {
     if (!workspaceId || !csrf || !window.confirm("Revoke the pending invitation for " + invitation.invited_email + "?")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/workspaces/invitations/" + encodeURIComponent(invitation.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      await api("/api/v1/workspaces/invitations/" + encodeURIComponent(invitation.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("Pending invitation revoked.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invitation could not be revoked.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Invitation could not be revoked.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function updateProject(event: FormEvent<HTMLFormElement>, project: Project) {
