@@ -296,15 +296,22 @@ async def get_whatsapp_inbox_sla_summary(
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT
-                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
-                       AND response.sent_at IS NULL
-                       AND now() >= inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS overdue,
-                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
-                       AND response.sent_at IS NULL
-                       AND now() >= inbound.received_at + make_interval(mins => COALESCE(policy.warning_minutes,15))
-                       AND now() < inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS at_risk,
-                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
-                       AND (response.sent_at IS NOT NULL OR now() < inbound.received_at + make_interval(mins => COALESCE(policy.warning_minutes,15))))::int AS within_sla
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL
+                       AND inbound.received_at IS NOT NULL AND response.sent_at IS NULL
+                       AND now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                         + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS overdue,
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL
+                       AND inbound.received_at IS NOT NULL AND response.sent_at IS NULL
+                       AND now() >= inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                         + make_interval(mins => COALESCE(policy.warning_minutes,15))
+                       AND now() < inbound.received_at + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                         + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS at_risk,
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NULL
+                       AND inbound.received_at IS NOT NULL
+                       AND (response.sent_at IS NOT NULL OR now() < inbound.received_at
+                         + make_interval(secs => COALESCE(c.sla_paused_seconds,0))
+                         + make_interval(mins => COALESCE(policy.warning_minutes,15))))::int AS within_sla,
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND c.sla_paused_at IS NOT NULL)::int AS paused
                    FROM whatsapp_conversations c
                    LEFT JOIN LATERAL (
                      SELECT received_at FROM whatsapp_inbound_messages
