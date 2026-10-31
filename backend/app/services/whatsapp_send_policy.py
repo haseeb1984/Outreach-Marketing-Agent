@@ -65,6 +65,8 @@ class WhatsAppSendPolicy:
                 return {"allowed": False, "reason": "prospect_not_found"}
             if prospect["stage"] == "do_not_contact":
                 return {"allowed": False, "reason": "contact_suppressed"}
+            if prospect["stage"] in {"replied", "converted", "disqualified"}:
+                return {"allowed": False, "reason": "contact_no_longer_eligible"}
 
             raw_phone = prospect["contact_phone_e164"]
             if not isinstance(raw_phone, str) or not _E164_PHONE.fullmatch(raw_phone):
