@@ -375,7 +375,7 @@ async def paddle_webhook(request: Request):
         raise HTTPException(status_code=400, detail="invalid_webhook_payload")
 
     event_type = payload.get("event_type")
-    if event_type in {"transaction.completed", "transaction.payment_failed"}:
+    if event_type in {"transaction.completed", "transaction.payment_failed", "transaction.past_due"}:
         data = payload.get("data")
         if not isinstance(data, dict):
             raise HTTPException(status_code=400, detail="invalid_transaction_event")
@@ -401,7 +401,7 @@ async def paddle_webhook(request: Request):
                 event_id=payload["event_id"], event_created_at=occurred_at,
                 transaction_id=transaction_id, workspace_id=workspace_id,
                 subscription_id=subscription_id, invoice_number=data.get("invoice_number"),
-                status="completed" if event_type == "transaction.completed" else "payment_failed",
+                status=("completed" if event_type == "transaction.completed" else "past_due" if event_type == "transaction.past_due" else "payment_failed"),
                 currency_code=data.get("currency_code"), total_minor=total_minor)
         except HTTPException:
             raise
