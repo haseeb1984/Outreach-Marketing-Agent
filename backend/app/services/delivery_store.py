@@ -89,13 +89,16 @@ class DeliveryStore:
         async with self._pool.acquire() as c:
             async with c.transaction():
                 r=await c.fetchrow("""SELECT q.id AS delivery_id,q.status AS queue_status,q.scheduled_at,d.status AS draft_status,d.channel,d.subject,d.body,q.email_account_id, d.prospect_id,
-                  p.contact_email,p.stage,p.archived_at,cc.email_suppressed,c.status AS campaign_status,ea.status AS email_account_status
+                  p.contact_email,p.stage,p.archived_at,cc.email_suppressed,c.status AS campaign_status,ea.status AS email_account_status,
+                  fe.status AS followup_enrollment_status,fs.status AS followup_sequence_status
                   FROM outreach_deliveries q
                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                   JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
                   LEFT JOIN outreach_contact_controls cc ON cc.workspace_id=d.workspace_id AND cc.prospect_id=d.prospect_id
                   LEFT JOIN workspace_email_accounts ea ON ea.id=q.email_account_id AND ea.workspace_id=q.workspace_id
+                  LEFT JOIN outreach_followup_enrollments fe ON fe.current_draft_id=d.id AND fe.workspace_id=q.workspace_id
+                  LEFT JOIN outreach_followup_sequences fs ON fs.id=fe.sequence_id AND fs.workspace_id=fe.workspace_id
                   WHERE q.id=$1 AND q.workspace_id=$2 FOR UPDATE OF q,d,c,p""",delivery_id,workspace_id)
                 if r is None: raise LookupError("delivery_not_found")
                 if r["queue_status"]!="queued": raise ValueError("delivery_not_queued")
@@ -103,6 +106,8 @@ class DeliveryStore:
                 if r["draft_status"]!="approved": raise ValueError("draft_not_approved")
                 if r["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if r["campaign_status"] == "paused": raise ValueError("campaign_paused")
+                if r["followup_enrollment_status"] is not None and (r["followup_enrollment_status"] != "awaiting_approval" or r["followup_sequence_status"] != "active"):
+                    raise ValueError("followup_sequence_paused")
                 if r["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if r["archived_at"] is not None: raise ValueError("prospect_archived")
                 if not r["contact_email"]: raise ValueError("prospect_email_required")
