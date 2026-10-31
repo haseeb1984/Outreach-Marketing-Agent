@@ -82,6 +82,20 @@ async def _exercise_billing_lifecycle() -> None:
         with pytest.raises(ValueError, match="billing_event_identity_conflict"):
             await store.apply_verified_event(timestamp_collision)
 
+        # Equal timestamps are deliberately first-committer-wins: a later
+        # distinct event at the same provider timestamp cannot replace the snapshot.
+        tied = make_event(
+            "evt_tied_" + uuid4().hex, NOW,
+            subscription_status="cancelled",
+            entitlements={"email_outreach": {"enabled": False, "monthly_limit": 0}},
+        )
+        assert await store.apply_verified_event(tied) == {"outcome": "stale"}
+        async with pool.acquire() as conn:
+            assert await conn.fetchval(
+                "SELECT status FROM workspace_subscriptions WHERE workspace_id=$1",
+                workspace_id,
+            ) == "active"
+
         # Older snapshots are retained in the ledger as stale but cannot regress state.
         stale = make_event(
             "evt_stale_" + uuid4().hex, NOW - timedelta(minutes=1),
