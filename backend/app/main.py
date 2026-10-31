@@ -345,9 +345,11 @@ async def readiness() -> Response:
                             '044_whatsapp_inbox_collaboration.sql',
                             '045_whatsapp_conversation_activity.sql',
                             '046_whatsapp_inbox_saved_views.sql',
-                            '047_whatsapp_inbox_sla_policies.sql'
-                          )) = 47
-                     AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL"""
+                            '047_whatsapp_inbox_sla_policies.sql',
+                            '048_whatsapp_inbox_sla_pause_resume.sql'
+                          )) = 48
+                     AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
+                     AND to_regclass('public.whatsapp_conversations') IS NOT NULL"""
             )
             if not schema_ready:
                 return JSONResponse(
