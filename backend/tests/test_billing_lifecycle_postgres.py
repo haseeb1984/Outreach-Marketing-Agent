@@ -236,7 +236,15 @@ async def _exercise_billing_lifecycle() -> None:
             "status": "payment_failed",
         }
         assert await store.record_verified_transaction(**later_transaction_event) == {"outcome": "applied"}
-        # An equal-timestamp event is stale and cannot overwrite that status.
+        # Paddle emits transaction.past_due after a failed renewal attempt.
+        past_due_transaction_event = {
+            **transaction_args,
+            "event_id": "evt_tx_past_due_" + uuid4().hex,
+            "event_created_at": NOW + timedelta(minutes=2),
+            "status": "past_due",
+        }
+        assert await store.record_verified_transaction(**past_due_transaction_event) == {"outcome": "applied"}
+        # Older/equal events cannot regress the current transaction state.
         tied_transaction_event = {
             **transaction_args,
             "event_id": "evt_tx_tied_" + uuid4().hex,
@@ -248,7 +256,7 @@ async def _exercise_billing_lifecycle() -> None:
                 "SELECT status,total_minor,currency_code FROM billing_transactions WHERE provider='paddle' AND transaction_id=$1",
                 transaction_id,
             )
-            assert transaction_snapshot["status"] == "payment_failed"
+            assert transaction_snapshot["status"] == "past_due"
             assert str(transaction_snapshot["total_minor"]) == "1200"
             assert transaction_snapshot["currency_code"] == "USD"
 
