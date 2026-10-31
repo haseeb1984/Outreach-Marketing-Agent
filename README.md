@@ -109,3 +109,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE
 
 
 For persistent worker deployment and production-like acceptance, see [docs/GROWTH_WORKER_HOST_RUNBOOK.md](docs/GROWTH_WORKER_HOST_RUNBOOK.md) and [docs/WORKER_OPERATIONS.md](docs/WORKER_OPERATIONS.md).
+
+
+## Production operations
+
+The production release, health/readiness, supervised-worker, PostgreSQL backup/restore, monitoring, incident response, rollback, and external launch acceptance procedures are maintained in [Production Operations and Launch Runbook](docs/PRODUCTION_OPERATIONS_AND_LAUNCH.md). The runbook distinguishes repository artifacts from verified live production acceptance; a checked-in unit or preflight pass does not prove a service is deployed.
