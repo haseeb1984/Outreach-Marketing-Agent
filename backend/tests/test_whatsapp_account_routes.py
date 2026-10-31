@@ -204,6 +204,9 @@ def test_whatsapp_sla_summary_distinguishes_late_completed_responses(monkeypatch
     assert response.json()["breached"] == 3
     query, args = connection.fetchrow_calls[0]
     assert "response.sent_at >" in query
+    assert "response_pause.paused_seconds" in query
+    assert "LEAD(created_at) OVER" in query
+    assert "event_type IN ('sla_paused','sla_resumed')" in query
     assert "AS breached" in query
     assert args == ("workspace-1",)
 
@@ -223,5 +226,8 @@ def test_whatsapp_conversation_sla_state_checks_response_deadline(monkeypatch):
     assert response.status_code == 200, response.text
     query, args = connection.fetch_calls[0]
     assert "response.sent_at <=" in query
+    assert "response_pause.paused_seconds" in query
+    assert "LEAD(created_at) OVER" in query
+    assert "event_type IN ('sla_paused','sla_resumed')" in query
     assert "THEN 'breached'" in query
     assert args[0] == "workspace-1"
