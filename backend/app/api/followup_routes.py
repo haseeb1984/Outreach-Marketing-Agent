@@ -47,6 +47,27 @@ class SequenceStatusUpdate(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=200)
     status: str
 
+class FollowupDeliveryResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    delivery_id: UUID
+    outcome: str
+    reason: str = Field(min_length=12, max_length=2000)
+    evidence_url: str = Field(min_length=9, max_length=2048)
+    @field_validator("outcome")
+    @classmethod
+    def valid_outcome(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"delivered", "not_delivered"}:
+            raise ValueError("invalid_resolution_outcome")
+        return value
+    @field_validator("evidence_url")
+    @classmethod
+    def valid_evidence_url(cls, value: str) -> str:
+        if not value.strip().startswith("https://"):
+            raise ValueError("https_evidence_url_required")
+        return value.strip()
+
 class FollowupEnroll(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
@@ -151,6 +172,26 @@ async def update_followup_enrollment(enrollment_id: UUID, payload: SequenceStatu
         raise HTTPException(status_code=503, detail="followup_enrollment_update_unavailable") from None
     if result is None:
         raise HTTPException(status_code=404, detail="followup_enrollment_not_found_or_terminal")
+    return result
+
+@router.post("/follow-up-enrollments/{enrollment_id}/resolve-delivery")
+async def resolve_followup_delivery(enrollment_id: UUID, payload: FollowupDeliveryResolution, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    from app.services.followup_store import FollowupStore
+    try:
+        result = await FollowupStore(_pool(request)).resolve_delivery(
+            workspace_id=payload.workspace_id, enrollment_id=enrollment_id,
+            delivery_id=payload.delivery_id, outcome=payload.outcome,
+            actor_id=session["user_id"], reason=payload.reason, evidence_url=payload.evidence_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="followup_delivery_resolution_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=404, detail="recoverable_followup_delivery_not_found")
     return result
 
 @router.post("/follow-up-sequences/process-due")
