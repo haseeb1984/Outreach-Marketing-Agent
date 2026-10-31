@@ -173,15 +173,23 @@ class BillingLifecycleStore:
                              ON t.provider='paddle' AND t.transaction_id=e.transaction_id
                            WHERE e.provider='paddle' AND e.provider_event_id=$1
                            FOR UPDATE OF e""", event_id)
-                    if prior is None or not self._same_transaction_event_identity(
+                    if prior is None:
+                        raise ValueError("billing_transaction_event_identity_conflict")
+                    if prior["event_fingerprint"] is not None:
+                        # The fingerprint captures the original immutable event
+                        # snapshot. Do not compare against the joined transaction row:
+                        # later transaction.updated events may legitimately enrich
+                        # invoice_number/subscription_id on that mutable row.
+                        if prior["event_fingerprint"] != event_fingerprint:
+                            raise ValueError("billing_transaction_event_payload_conflict")
+                    elif not self._same_transaction_event_identity(
                         prior, transaction_id=transaction_id, event_created_at=event_created_at,
                         workspace_id=workspace_id, subscription_id=subscription_id,
                         invoice_number=invoice_number,
                     ):
+                        # Legacy pre-fingerprint rows retain the conservative
+                        # historical identity check.
                         raise ValueError("billing_transaction_event_identity_conflict")
-                    if (prior["event_fingerprint"] is not None
-                            and prior["event_fingerprint"] != event_fingerprint):
-                        raise ValueError("billing_transaction_event_payload_conflict")
                     return {"outcome": "duplicate"}
                 row = await conn.fetchrow(
                     """INSERT INTO billing_transactions
