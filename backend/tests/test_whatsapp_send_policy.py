@@ -247,6 +247,8 @@ def test_approved_template_returns_canonical_verified_provider_identity():
         "allowed": True,
         "reason": "approved_template_outside_customer_service_window",
         "requires_approved_template": True,
+        "template_parameters": {},
+        "required_template_parameters": {},
         "template_id": str(canonical["id"]),
         "provider_template_id": "meta-template-987",
         "template_name": "verified_notice",
