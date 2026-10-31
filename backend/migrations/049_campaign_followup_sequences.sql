@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS outreach_followup_enrollments (
     )),
     next_run_at TIMESTAMPTZ,
     paused_next_run_at TIMESTAMPTZ,
+    pause_reason TEXT CHECK (pause_reason IS NULL OR length(pause_reason) <= 100),
     current_draft_id UUID REFERENCES outreach_drafts(id) ON DELETE SET NULL,
     last_delivery_id UUID REFERENCES outreach_deliveries(id) ON DELETE SET NULL,
     last_whatsapp_delivery_id UUID REFERENCES whatsapp_outbound_deliveries(id) ON DELETE SET NULL,
