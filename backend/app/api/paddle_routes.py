@@ -309,6 +309,36 @@ def _resolve_subscription_plan(custom_data: Any, price_ids: set[Any], plans: dic
     return matched_slug, plan
 
 
+async def _resolve_transaction_workspace(pool: Any, subscription_id: Any, custom_workspace_id: Any) -> str:
+    """Resolve transaction tenancy and reject metadata that contradicts an existing subscription link."""
+    if custom_workspace_id is not None and (
+        not isinstance(custom_workspace_id, str) or not custom_workspace_id.strip()
+    ):
+        raise ValueError("transaction_workspace_mapping_invalid")
+    if subscription_id is not None and (
+        not isinstance(subscription_id, str) or not subscription_id.strip()
+    ):
+        raise ValueError("transaction_subscription_mapping_invalid")
+
+    mapped_workspace_id = None
+    if isinstance(subscription_id, str):
+        async with pool.acquire() as conn:
+            mapped_workspace_id = await conn.fetchval(
+                """SELECT workspace_id FROM workspace_subscriptions
+                   WHERE provider='paddle' AND provider_subscription_id=$1""",
+                subscription_id,
+            )
+    if mapped_workspace_id is not None:
+        if custom_workspace_id is not None and custom_workspace_id != mapped_workspace_id:
+            raise ValueError("transaction_workspace_mapping_conflict")
+        return mapped_workspace_id
+    if isinstance(custom_workspace_id, str):
+        # Initial subscription transactions may arrive before the subscription.created
+        # webhook has established the provider-subscription-to-workspace mapping.
+        return custom_workspace_id
+    raise ValueError("transaction_workspace_mapping_missing")
+
+
 def _datetime(value: Any) -> datetime:
     if not isinstance(value, str):
         raise ValueError("missing_billing_timestamp")
@@ -357,15 +387,7 @@ async def paddle_webhook(request: Request):
             raise HTTPException(status_code=503, detail="billing_service_not_configured")
         try:
             occurred_at = _datetime(payload["occurred_at"])
-            if not isinstance(workspace_id, str) or not workspace_id.strip():
-                if not isinstance(subscription_id, str) or not subscription_id.strip():
-                    raise ValueError("transaction_workspace_mapping_missing")
-                async with pool.acquire() as conn:
-                    workspace_id = await conn.fetchval(
-                        """SELECT workspace_id FROM workspace_subscriptions
-                           WHERE provider='paddle' AND provider_subscription_id=$1""", subscription_id)
-            if not isinstance(workspace_id, str) or not workspace_id.strip():
-                raise ValueError("transaction_workspace_mapping_missing")
+            workspace_id = await _resolve_transaction_workspace(pool, subscription_id, workspace_id)
             details = data.get("details") if isinstance(data.get("details"), dict) else {}
             totals = details.get("totals") if isinstance(details.get("totals"), dict) else {}
             raw_total = totals.get("total")
