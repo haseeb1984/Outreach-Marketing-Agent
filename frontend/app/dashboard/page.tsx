@@ -864,6 +864,7 @@ export default function DashboardPage() {
     if (!view || !workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
     const requestedSequence = ++whatsappInboxQuerySequenceRef.current;
+    const requestedDetailSequence = whatsappDetailSequenceRef.current;
     setWhatsappSelectedSavedView(viewId);
     setWhatsappFilterStatus(view.filters.inbox_status || "");
     setWhatsappFilterPriority(view.filters.priority || "");
@@ -882,7 +883,7 @@ export default function DashboardPage() {
       if (requestedSequence !== whatsappInboxQuerySequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       const nextConversations = result.items || [];
       setWhatsappConversations(nextConversations);
-      if (selectedWhatsAppConversation && !nextConversations.some(item => item.id === selectedWhatsAppConversation)) {
+      if (requestedDetailSequence === whatsappDetailSequenceRef.current && selectedWhatsAppConversation && !nextConversations.some(item => item.id === selectedWhatsAppConversation)) {
         whatsappDetailSequenceRef.current += 1;
         setSelectedWhatsAppConversation("");
         setWhatsappMessages([]);
@@ -1904,6 +1905,7 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
     const requestedSequence = ++whatsappInboxQuerySequenceRef.current;
+    const requestedDetailSequence = whatsappDetailSequenceRef.current;
     const requestedConversationId = selectedWhatsAppConversation;
     const params = new URLSearchParams({ workspace_id: requestedWorkspaceId, limit: "50" });
     if (whatsappFilterStatus) params.set("inbox_status", whatsappFilterStatus);
@@ -1919,7 +1921,7 @@ export default function DashboardPage() {
       );
       if (requestedSequence !== whatsappInboxQuerySequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappConversations(result.items || []);
-      if (requestedConversationId && selectedWhatsAppConversation === requestedConversationId && !(result.items || []).some(item => item.id === requestedConversationId)) {
+      if (requestedDetailSequence === whatsappDetailSequenceRef.current && requestedConversationId && selectedWhatsAppConversation === requestedConversationId && !(result.items || []).some(item => item.id === requestedConversationId)) {
         whatsappDetailSequenceRef.current += 1;
         setSelectedWhatsAppConversation("");
         setWhatsappMessages([]);
