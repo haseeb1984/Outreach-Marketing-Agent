@@ -426,6 +426,53 @@ def test_initial_transaction_can_use_checkout_workspace_before_subscription_webh
 
     assert asyncio.run(_resolve_transaction_workspace(Pool(), "sub_new", "workspace-new")) == "workspace-new"
 
+def test_paddle_payment_failed_webhook_records_transaction_without_changing_subscription(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    recorded = {}
+
+    class BillingStore:
+        async def record_verified_transaction(self, **kwargs):
+            recorded.update(kwargs)
+            return {"outcome": "applied"}
+
+        async def apply_verified_event(self, event):
+            raise AssertionError("transaction payment failure must not mutate subscription entitlements")
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    with TestClient(app) as client:
+        app.state.db_pool = object()
+        app.state.billing_lifecycle_store = BillingStore()
+        payload = {
+            "event_id": "evt_transaction_payment_failed",
+            "event_type": "transaction.payment_failed",
+            "occurred_at": "2026-10-31T12:05:00Z",
+            "data": {
+                "id": "txn_payment_failed_route",
+                "subscription_id": None,
+                "custom_data": {"workspace_id": "workspace-route"},
+                "invoice_number": "INV-FAILED-ROUTE",
+                "currency_code": "USD",
+                "details": {"totals": {"total": "2599"}},
+            },
+        }
+        body = json.dumps(payload).encode()
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "applied"}
+    assert recorded["status"] == "payment_failed"
+    assert recorded["transaction_id"] == "txn_payment_failed_route"
+    assert recorded["workspace_id"] == "workspace-route"
+
+
 
 def test_paddle_transaction_webhook_persists_only_signature_verified_normalized_fields(monkeypatch):
     from fastapi.testclient import TestClient
