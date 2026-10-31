@@ -123,3 +123,43 @@ async def list_conversation_threads(
         "limit": limit,
         "offset": offset,
     }
+
+
+class ConversationReplyDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    channel: str
+    subject: str | None = Field(default=None, max_length=300)
+    body: str = Field(min_length=1, max_length=10000)
+
+    @field_validator("channel")
+    @classmethod
+    def valid_reply_channel(cls, value: str) -> str:
+        if value not in {"email", "whatsapp"}:
+            raise ValueError("reply_channel_invalid")
+        return value
+
+
+@router.post("/prospects/{prospect_id}/reply-drafts", status_code=201)
+async def create_conversation_reply_draft(prospect_id: UUID, payload: ConversationReplyDraft, request: Request):
+    """Create a reviewed reply draft from the inbox; this endpoint never sends."""
+    _, _, session = await _authenticated(request)
+    from app.api.auth_routes import _check_csrf
+    _check_csrf(request, session)
+    auth = getattr(request.app.state, "auth_store", None)
+    if auth is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth.authorize_workspace(user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    store = getattr(request.app.state, "conversation_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="conversation_service_not_configured")
+    try:
+        return await store.create_reply_draft(workspace_id=payload.workspace_id, prospect_id=prospect_id,
+            actor_id=session["user_id"], channel=payload.channel, subject=payload.subject, body=payload.body)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="prospect_not_found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="reply_draft_create_unavailable") from None

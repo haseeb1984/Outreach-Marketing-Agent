@@ -131,6 +131,8 @@ export default function DashboardPage() {
   const [selectedReplyProspectId, setSelectedReplyProspectId] = useState("");
   const [unifiedReplyMessages, setUnifiedReplyMessages] = useState<UnifiedReplyMessage[]>([]);
   const [unifiedReplyBusy, setUnifiedReplyBusy] = useState(false);
+  const [replyDraftBody, setReplyDraftBody] = useState("");
+  const [replyDraftSubject, setReplyDraftSubject] = useState("");
   const [whatsappInboxBusy, setWhatsappInboxBusy] = useState(false);
   const [whatsappLabel, setWhatsappLabel] = useState("");
   const [whatsappWabaId, setWhatsappWabaId] = useState("");
@@ -570,6 +572,24 @@ export default function DashboardPage() {
       setUnifiedReplyMessages((result.items || []).slice().reverse());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
+    } finally { setUnifiedReplyBusy(false); }
+  }
+
+  async function createUnifiedReplyDraft() {
+    if (!workspaceId || !csrf || !selectedReplyProspectId) return;
+    const thread = unifiedReplyThreads.find(item => item.prospect_id === selectedReplyProspectId);
+    if (!thread || !replyDraftBody.trim()) return;
+    setUnifiedReplyBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/prospects/" + encodeURIComponent(selectedReplyProspectId) + "/reply-drafts", csrf, {
+        method: "POST", body: JSON.stringify({ workspace_id: workspaceId, channel: thread.channel,
+          subject: thread.channel === "email" ? replyDraftSubject.trim() : null, body: replyDraftBody.trim() }),
+      });
+      setReplyDraftBody(""); setReplyDraftSubject("");
+      setNotice("Reply draft created and sent to the approval queue. No message was sent.");
+      await refresh(workspaceId, csrf);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reply draft could not be created.");
     } finally { setUnifiedReplyBusy(false); }
   }
 
@@ -2367,6 +2387,17 @@ export default function DashboardPage() {
             <article className="card">
               <h3>Conversation history</h3>
               {selectedReplyProspectId ? (unifiedReplyMessages.length ? <ol>{unifiedReplyMessages.map(message=><li key={message.id} style={{marginBottom:"0.75rem"}}><p>{message.body}</p><p className="fine">{message.direction} · {message.channel.toUpperCase()} · {message.provider} · {new Date(message.occurred_at).toLocaleString()}</p></li>)}</ol> : <p className="fine">No messages are available for this prospect.</p>) : <p className="fine">Select a reply thread to view its complete inbound history.</p>}
+              {selectedReplyProspectId && (() => {
+                const thread = unifiedReplyThreads.find(item => item.prospect_id === selectedReplyProspectId);
+                if (!thread) return null;
+                return <form className="stack" onSubmit={event => { event.preventDefault(); void createUnifiedReplyDraft(); }}>
+                  <h4>Create {thread.channel.toUpperCase()} reply draft</h4>
+                  {thread.channel === "email" && <label>Subject<input required maxLength={300} value={replyDraftSubject} onChange={event=>setReplyDraftSubject(event.target.value)} /></label>}
+                  <label>Reply<textarea required maxLength={10000} rows={5} value={replyDraftBody} onChange={event=>setReplyDraftBody(event.target.value)} placeholder="Write a reply for human approval..." /></label>
+                  <button className="button" type="submit" disabled={unifiedReplyBusy || !replyDraftBody.trim()}>Create approval draft</button>
+                  <p className="fine">This creates a pending-approval draft. Sending still requires normal approval, consent, provider and quota checks.</p>
+                </form>;
+              })()}
             </article>
           </div>
         </section>
