@@ -219,9 +219,6 @@ export default function DashboardPage() {
   const periodRef = useRef(period);
   const workspaceIdRef = useRef(workspaceId);
   const csrfRef = useRef(csrf);
-  periodRef.current = period;
-  workspaceIdRef.current = workspaceId;
-  csrfRef.current = csrf;
   const replyDetailSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -388,6 +385,12 @@ export default function DashboardPage() {
       if (loadSequenceRef.current === requestedLoad) setError(err instanceof Error ? err.message : "Workspace data could not be loaded.");
     }
   }, [csrf, loadWorkspaceData, workspaceId]);
+
+  useEffect(() => {
+    periodRef.current = period;
+    workspaceIdRef.current = workspaceId;
+    csrfRef.current = csrf;
+  }, [period, workspaceId, csrf]);
 
   useEffect(() => {
     const selectedId = workspaceIdRef.current;
