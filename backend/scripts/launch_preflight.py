@@ -221,6 +221,11 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     add("growth_worker_runbook", worker_runbook.is_file(), "growth worker host runbook exists" if worker_runbook.is_file()
         else "docs/GROWTH_WORKER_HOST_RUNBOOK.md is missing")
 
+    production_runbook = root / "docs" / "PRODUCTION_OPERATIONS_AND_LAUNCH.md"
+    add("production_operations_runbook", production_runbook.is_file(),
+        "production release, recovery, monitoring and incident runbook exists" if production_runbook.is_file()
+        else "docs/PRODUCTION_OPERATIONS_AND_LAUNCH.md is missing")
+
     # Local files cannot prove these runtime facts.
     add("remote_deployment", False,
         "not verified by this local preflight; check the deployed commit and health endpoint", "warning")
