@@ -30,6 +30,11 @@ class WhatsAppConversationBulkUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
 
 
+class WhatsAppInboxSavedViewCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    filters: dict = Field(default_factory=dict)
+
+
 class WhatsAppInternalNoteCreate(BaseModel):
     body: str = Field(min_length=1, max_length=5000)
 
@@ -74,6 +79,7 @@ async def list_whatsapp_conversations(
     inbox_status: str | None = Query(default=None, pattern="^(open|pending|resolved)$"),
     priority: str | None = Query(default=None, pattern="^(low|normal|high|urgent)$"),
     search: str | None = Query(default=None, min_length=1, max_length=200),
+    assigned_to_user_id: str | None = Query(default=None, min_length=1, max_length=200),
 ) -> dict:
     _, _, session = await _authenticated(request)
     await _authorize(request, workspace_id, session)
@@ -102,6 +108,7 @@ async def list_whatsapp_conversations(
                    WHERE c.workspace_id=$1
                      AND (NOT $4::boolean OR c.assigned_to_user_id=$5)
                      AND (NOT $6::boolean OR c.assigned_to_user_id IS NULL)
+                     AND ($10::text IS NULL OR c.assigned_to_user_id=$10)
                      AND ($7::text IS NULL OR c.inbox_status=$7)
                      AND ($8::text IS NULL OR c.priority=$8)
                      AND ($9::text IS NULL OR
@@ -112,13 +119,109 @@ async def list_whatsapp_conversations(
                    ORDER BY COALESCE(m.received_at,c.updated_at) DESC,c.id
                    LIMIT $2 OFFSET $3""",
                 workspace_id, limit, offset, assigned_to_me, user_id,
-                unassigned, inbox_status, priority, search_term,
+                unassigned, inbox_status, priority, search_term, assigned_to_user_id,
             )
         return {"items": [_serialize(dict(row)) for row in rows], "limit": limit, "offset": offset}
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_list_unavailable") from None
+
+
+@router.get("/saved-views")
+async def list_whatsapp_inbox_saved_views(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, role="viewer")
+    try:
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT id,name,filters,created_at,updated_at
+                   FROM whatsapp_inbox_saved_views
+                   WHERE workspace_id=$1 AND user_id=$2
+                   ORDER BY lower(name),id""",
+                workspace_id, str(session["user_id"]),
+            )
+        items = [_serialize(dict(row)) for row in rows]
+        for item in items:
+            if isinstance(item.get("filters"), str):
+                item["filters"] = json.loads(item["filters"])
+        return {"items": items}
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_saved_views_unavailable") from None
+
+
+@router.post("/saved-views")
+async def create_whatsapp_inbox_saved_view(
+    payload: WhatsAppInboxSavedViewCreate,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="member")
+    name = payload.name.strip()
+    allowed = {"inbox_status", "priority", "search", "assigned_to_me", "unassigned", "assigned_to_user_id"}
+    filters = payload.filters
+    if not name or set(filters) - allowed:
+        raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+    if filters.get("inbox_status") not in (None, "", "open", "pending", "resolved"):
+        raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+    if filters.get("priority") not in (None, "", "low", "normal", "high", "urgent"):
+        raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+    if filters.get("search") is not None and (not isinstance(filters["search"], str) or len(filters["search"]) > 200):
+        raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+    if filters.get("assigned_to_me") and filters.get("unassigned"):
+        raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+    if filters.get("assigned_to_user_id"):
+        auth = getattr(request.app.state, "auth_store", None)
+        if auth is None or not await auth.authorize_workspace(
+            user_id=filters["assigned_to_user_id"], workspace_id=workspace_id, minimum_role="viewer"
+        ):
+            raise HTTPException(status_code=422, detail="whatsapp_assignee_not_workspace_member")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO whatsapp_inbox_saved_views(workspace_id,user_id,name,filters)
+                   VALUES($1,$2,$3,$4::jsonb)
+                   ON CONFLICT(workspace_id,user_id,(lower(name))) DO UPDATE
+                     SET filters=EXCLUDED.filters,updated_at=now()
+                   RETURNING id,name,filters,created_at,updated_at""",
+                workspace_id, str(session["user_id"]), name, json.dumps(filters),
+            )
+        item = _serialize(dict(row))
+        if isinstance(item.get("filters"), str):
+            item["filters"] = json.loads(item["filters"])
+        return item
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_saved_view_save_unavailable") from None
+
+
+@router.delete("/saved-views/{view_id}")
+async def delete_whatsapp_inbox_saved_view(
+    view_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="member")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """DELETE FROM whatsapp_inbox_saved_views
+                   WHERE id=$1 AND workspace_id=$2 AND user_id=$3 RETURNING id""",
+                view_id, workspace_id, str(session["user_id"]),
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="whatsapp_saved_view_not_found")
+        return {"id": str(row["id"]), "deleted": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_saved_view_delete_unavailable") from None
 
 
 @router.get("/conversations/{conversation_id}/messages")
