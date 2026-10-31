@@ -216,6 +216,7 @@ export default function DashboardPage() {
   const [entitlementsUnavailable, setEntitlementsUnavailable] = useState(false);
   const [period, setPeriod] = useState("30");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const loadSequenceRef = useRef(0);
   const workspaceSwitchSequenceRef = useRef(0);
   const periodRef = useRef(period);
@@ -387,10 +388,13 @@ export default function DashboardPage() {
     if (!selectedId || !token) return;
     setError("");
     const requestedLoad = loadSequenceRef.current + 1;
+    setRefreshing(true);
     try {
       await loadWorkspaceData(selectedId, token);
     } catch (err) {
       if (loadSequenceRef.current === requestedLoad) setError(err instanceof Error ? err.message : "Workspace data could not be loaded.");
+    } finally {
+      if (loadSequenceRef.current === requestedLoad) setRefreshing(false);
     }
   }, [csrf, loadWorkspaceData, workspaceId]);
 
@@ -485,7 +489,7 @@ export default function DashboardPage() {
     setUnifiedReplyThreads([]); setSelectedReplyProspectId(""); setUnifiedReplyMessages([]); setUnifiedReplyBusy(false);
     setReplyDraftBody(""); setReplyDraftSubject(""); setWhatsappInboxBusy(false);
     setProspectName(""); setProspectCompany(""); setProspectEmail(""); setProspectPhone(""); setProspectWebsite(""); setEvidenceUrl(""); setFitReason("");
-    setError(""); setNotice(""); setBusy(false); setIntegrationBusy(false);
+    setError(""); setNotice(""); setBusy(false); setIntegrationBusy(false); setRefreshing(false);
   }
 
   async function changeMemberRole(member: WorkspaceMember, role: string) {
@@ -2276,7 +2280,7 @@ export default function DashboardPage() {
           <form onSubmit={createWorkspace}><div className="field"><label htmlFor="new-workspace-name">Create another workspace</label><input id="new-workspace-name" required maxLength={160} value={newWorkspaceName} onChange={e=>setNewWorkspaceName(e.target.value)} placeholder="Client or business workspace name" /></div><button className="button secondary" type="submit" disabled={busy || !csrf}>Create workspace</button></form>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
-          <div className="actions"><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || !workspaceId}>Refresh workspace</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
+          <div className="actions"><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || refreshing || !workspaceId}>{refreshing ? "Refreshing workspace…" : "Refresh workspace"}</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
         </section>
         <section className="section" aria-labelledby="email-accounts-title"><h2 id="email-accounts-title">Connected email accounts</h2>
           <p className="fine">SMTP credentials are encrypted at rest. Only supported TLS submission hosts on port 587 are accepted. Connection tests authenticate only and do not send a message.</p>
