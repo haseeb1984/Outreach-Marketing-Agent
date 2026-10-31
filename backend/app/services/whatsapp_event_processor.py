@@ -216,9 +216,12 @@ async def process_pending_whatsapp_events(
                                        ON CONFLICT(workspace_id,account_id,wa_id) DO UPDATE
                                          SET prospect_id=COALESCE(whatsapp_conversations.prospect_id,EXCLUDED.prospect_id),
                                              updated_at=now()
-                                       RETURNING id""",
+                                       RETURNING id,prospect_id""",
                                     workspace_id, account_id, prospect_id, wa_id,
                                 )
+                                # Reuse an established conversation association when a later
+                                # phone lookup is ambiguous; never replace it with a guess.
+                                associated_prospect_id = conversation["prospect_id"]
                                 message_type, body = _text(msg)
                                 media_metadata = _media_metadata(msg, message_type)
                                 provider_timestamp = _timestamp(msg.get("timestamp"))
@@ -263,7 +266,7 @@ async def process_pending_whatsapp_events(
                                         )
                                         # Opt-out terminates every WhatsApp follow-up for this contact now.
                                         # Preserve current_draft_id for audit/history; never schedule another step.
-                                        if prospect_id:
+                                        if associated_prospect_id:
                                             await conn.execute(
                                                 """UPDATE outreach_followup_enrollments e
                                                    SET status='stopped_opt_out',next_run_at=NULL,paused_next_run_at=NULL,
@@ -272,7 +275,7 @@ async def process_pending_whatsapp_events(
                                                    WHERE s.id=e.sequence_id AND s.workspace_id=e.workspace_id
                                                      AND e.workspace_id=$1 AND e.prospect_id=$2 AND s.channel='whatsapp'
                                                      AND e.status IN ('active','awaiting_approval','paused')""",
-                                                workspace_id, prospect_id,
+                                                workspace_id, associated_prospect_id,
                                             )
                                             # Cancel queued (not yet dispatched) drafts for this contact.
                                             # The future dispatcher must still re-check policy immediately before send.
@@ -290,7 +293,7 @@ async def process_pending_whatsapp_events(
                                                    FROM cancelled AS q
                                                    WHERE u.id=q.usage_reservation_id
                                                      AND u.workspace_id=$1 AND u.status='reserved'""",
-                                                workspace_id, account_id, prospect_id,
+                                                workspace_id, account_id, associated_prospect_id,
                                             )
                                     elif opt_in:
                                         # Explicit inbound START-family commands re-enable contact only after
@@ -303,7 +306,7 @@ async def process_pending_whatsapp_events(
                                                  AND (opted_in_at IS NULL OR opted_in_at <= $4)""",
                                             workspace_id, account_id, wa_id, inbound_at,
                                         )
-                                    elif prospect_id:
+                                    elif associated_prospect_id:
                                         await conn.execute(
                                             """UPDATE crm_prospects SET stage='replied', updated_at=now()
                                                WHERE id=$1 AND workspace_id=$2
