@@ -252,6 +252,27 @@ async def _exercise_billing_lifecycle() -> None:
             assert str(transaction_snapshot["total_minor"]) == "1200"
             assert transaction_snapshot["currency_code"] == "USD"
 
+        # A transaction's settled currency and total are immutable across later events.
+        for value_overrides in (
+            {"currency_code": "EUR"},
+            {"total_minor": "1300"},
+        ):
+            conflicting_value_event_id = "evt_tx_value_conflict_" + uuid4().hex
+            with pytest.raises(ValueError, match="billing_transaction_value_conflict"):
+                await store.record_verified_transaction(
+                    **{
+                        **transaction_args,
+                        **value_overrides,
+                        "event_id": conflicting_value_event_id,
+                        "event_created_at": NOW + timedelta(minutes=2),
+                    }
+                )
+            async with pool.acquire() as conn:
+                assert await conn.fetchval(
+                    "SELECT count(*) FROM billing_transaction_events WHERE provider='paddle' AND provider_event_id=$1",
+                    conflicting_value_event_id,
+                ) == 0
+
         # A transaction ID cannot be rebound to a different workspace.
         other_workspace = "billing-transaction-other-" + uuid4().hex
         async with pool.acquire() as conn:
