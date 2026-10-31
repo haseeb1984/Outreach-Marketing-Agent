@@ -584,3 +584,64 @@ def test_paddle_subscription_trialing_webhook_updates_subscription_status(monkey
     assert captured["event"].subscription_status == "trialing"
     assert captured["event"].workspace_id == "workspace-trialing"
     assert captured["event"].provider_subscription_id == "sub_trialing_route"
+
+
+def test_paddle_transaction_past_due_webhook_persists_current_transaction_state(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    recorded = {}
+
+    class BillingStore:
+        async def record_verified_transaction(self, **kwargs):
+            recorded.update(kwargs)
+            return {"outcome": "applied"}
+
+        async def apply_verified_event(self, event):
+            raise AssertionError("transaction past due must not independently mutate subscription entitlements")
+
+    class Connection:
+        async def fetchval(self, query, subscription_id):
+            assert subscription_id == "sub_past_due"
+            return "workspace-past-due"
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    with TestClient(app) as client:
+        app.state.db_pool = Pool()
+        app.state.billing_lifecycle_store = BillingStore()
+        payload = {
+            "event_id": "evt_transaction_past_due",
+            "event_type": "transaction.past_due",
+            "occurred_at": "2026-10-31T12:06:00Z",
+            "data": {
+                "id": "txn_past_due_route",
+                "subscription_id": "sub_past_due",
+                "invoice_number": None,
+                "currency_code": "USD",
+                "details": {"totals": {"total": "2599"}},
+            },
+        }
+        body = json.dumps(payload).encode()
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "applied"}
+    assert recorded["status"] == "past_due"
+    assert recorded["workspace_id"] == "workspace-past-due"
+    assert recorded["transaction_id"] == "txn_past_due_route"
