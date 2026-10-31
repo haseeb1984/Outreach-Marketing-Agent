@@ -155,9 +155,22 @@ class BillingLifecycleStore:
                        RETURNING provider_event_id""", event_id, transaction_id, event_created_at)
                 if inserted is None:
                     prior = await conn.fetchrow(
-                        """SELECT transaction_id,event_created_at FROM billing_transaction_events
-                           WHERE provider='paddle' AND provider_event_id=$1 FOR UPDATE""", event_id)
-                    if prior is None or prior["transaction_id"] != transaction_id or prior["event_created_at"] != event_created_at:
+                        """SELECT e.transaction_id,e.event_created_at,t.workspace_id,
+                                  t.provider_subscription_id,t.invoice_number
+                           FROM billing_transaction_events e
+                           LEFT JOIN billing_transactions t
+                             ON t.provider='paddle' AND t.transaction_id=e.transaction_id
+                           WHERE e.provider='paddle' AND e.provider_event_id=$1
+                           FOR UPDATE OF e""", event_id)
+                    if (
+                        prior is None
+                        or prior["transaction_id"] != transaction_id
+                        or prior["event_created_at"] != event_created_at
+                        or prior["workspace_id"] != workspace_id
+                        or not self._same_transaction_identity(
+                            prior, subscription_id=subscription_id, invoice_number=invoice_number
+                        )
+                    ):
                         raise ValueError("billing_transaction_event_identity_conflict")
                     return {"outcome": "duplicate"}
                 row = await conn.fetchrow(
