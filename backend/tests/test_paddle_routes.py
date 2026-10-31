@@ -645,3 +645,73 @@ def test_paddle_transaction_past_due_webhook_persists_current_transaction_state(
     assert recorded["status"] == "past_due"
     assert recorded["workspace_id"] == "workspace-past-due"
     assert recorded["transaction_id"] == "txn_past_due_route"
+
+
+def test_paddle_transaction_updated_enriches_invoice_number_without_changing_paid_state(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    captured = {}
+
+    class BillingStore:
+        async def record_verified_transaction(self, **kwargs):
+            captured.update(kwargs)
+            return {"outcome": "applied"}
+
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    with TestClient(app) as client:
+        app.state.db_pool = object()
+        app.state.billing_lifecycle_store = BillingStore()
+        payload = {
+            "event_id": "evt_transaction_updated_invoice",
+            "event_type": "transaction.updated",
+            "occurred_at": "2026-10-31T12:10:00Z",
+            "data": {
+                "id": "txn_updated_invoice",
+                "status": "completed",
+                "subscription_id": None,
+                "custom_data": {"workspace_id": "workspace-updated"},
+                "invoice_number": "INV-UPDATED-123",
+                "currency_code": "USD",
+                "details": {"totals": {"total": "2599"}},
+            },
+        }
+        body = json.dumps(payload).encode()
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "applied"}
+    assert captured["status"] == "completed"
+    assert captured["invoice_number"] == "INV-UPDATED-123"
+    assert captured["transaction_id"] == "txn_updated_invoice"
+
+
+def test_paddle_transaction_updated_ignores_nonfinancial_status(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    secret = "integration-secret"
+    monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
+    with TestClient(app) as client:
+        payload = {
+            "event_id": "evt_transaction_updated_ready",
+            "event_type": "transaction.updated",
+            "occurred_at": "2026-10-31T12:11:00Z",
+            "data": {"id": "txn_updated_ready", "status": "ready"},
+        }
+        body = json.dumps(payload).encode()
+        response = client.post(
+            "/api/v1/billing/paddle/webhook",
+            headers={"Paddle-Signature": _signed(body, secret)},
+            content=body,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": True, "outcome": "ignored"}
