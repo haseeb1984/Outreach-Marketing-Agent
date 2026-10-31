@@ -133,14 +133,16 @@ class DeliveryStore:
                         # was actually delivered. The next step remains approval-gated.
                         await c.execute(
                             """UPDATE outreach_followup_enrollments e
-                               SET status=CASE WHEN nxt.delay_minutes IS NULL THEN 'completed' ELSE 'active' END,
+                               SET status=CASE WHEN EXISTS(
+                                       SELECT 1 FROM outreach_followup_steps st
+                                       WHERE st.sequence_id=e.sequence_id AND st.step_number=e.current_step+1
+                                   ) THEN 'active' ELSE 'completed' END,
                                    current_step=e.current_step+1,current_draft_id=NULL,last_delivery_id=$1,
-                                   next_run_at=CASE WHEN nxt.delay_minutes IS NULL THEN NULL
-                                                    ELSE now()+(nxt.delay_minutes * interval '1 minute') END,
+                                   next_run_at=(SELECT now()+(st.delay_minutes * interval '1 minute')
+                                                FROM outreach_followup_steps st
+                                                WHERE st.sequence_id=e.sequence_id AND st.step_number=e.current_step+1),
                                    last_error_code=NULL,updated_at=now()
                                FROM outreach_deliveries d
-                               LEFT JOIN outreach_followup_steps nxt
-                                 ON nxt.sequence_id=e.sequence_id AND nxt.step_number=e.current_step+1
                                WHERE d.id=$1 AND d.workspace_id=$2 AND e.workspace_id=$2
                                  AND e.current_draft_id=d.draft_id AND e.status='awaiting_approval'""",
                             delivery_id,workspace_id,
