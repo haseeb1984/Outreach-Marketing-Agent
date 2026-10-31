@@ -216,6 +216,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const loadSequenceRef = useRef(0);
   const workspaceSwitchSequenceRef = useRef(0);
+  const periodRef = useRef(period);
+  const workspaceIdRef = useRef(workspaceId);
+  const csrfRef = useRef(csrf);
+  periodRef.current = period;
+  workspaceIdRef.current = workspaceId;
+  csrfRef.current = csrf;
   const replyDetailSequenceRef = useRef(0);
   const whatsappDetailSequenceRef = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -248,7 +254,7 @@ export default function DashboardPage() {
       api<ApiResult<Prospect>>("/api/v1/prospects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<ApiResult<Campaign>>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<ApiResult<Draft>>("/api/v1/drafts?workspace_id=" + encodeURIComponent(selectedId) + "&status=all&limit=50", token),
-      api<{ counts: Counts }>("/api/v1/analytics/summary?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period, token),
+      api<{ counts: Counts }>("/api/v1/analytics/summary?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + periodRef.current, token),
       api<ApiResult<Delivery>>("/api/v1/deliveries?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
     ]);
     if (!isCurrentLoad()) return;
@@ -277,7 +283,7 @@ export default function DashboardPage() {
     setSelectedReplyProspectId(current => loadedReplyThreads.some(thread => thread.prospect_id === current) ? current : "");
     if (!loadedReplyThreads.length) setUnifiedReplyMessages([]);
     const performanceResult = await Promise.allSettled([
-      api<{ items: CampaignPerformance[] }>("/api/v1/analytics/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + period + "&limit=50", token),
+      api<{ items: CampaignPerformance[] }>("/api/v1/analytics/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + periodRef.current + "&limit=50", token),
     ]);
     if (!isCurrentLoad()) return;
     setCampaignPerformance(performanceResult[0].status === "fulfilled" ? (performanceResult[0].value.items || []) : []);
@@ -370,7 +376,7 @@ export default function DashboardPage() {
     if (webhookDeadLetterResult.status === "rejected") failedSections.push("webhook events");
     if (entitlementResults.some(result => result.status === "rejected")) failedSections.push("billing entitlements");
     if (failedSections.length) setError("Some workspace sections could not load (" + failedSections.join(", ") + "). Other sections remain available; use Refresh to retry.");
-  }, [period]);
+  }, []);
 
   const refresh = useCallback(async (selectedId = workspaceId, token = csrf) => {
     if (!selectedId || !token) return;
@@ -382,6 +388,12 @@ export default function DashboardPage() {
       if (loadSequenceRef.current === requestedLoad) setError(err instanceof Error ? err.message : "Workspace data could not be loaded.");
     }
   }, [csrf, loadWorkspaceData, workspaceId]);
+
+  useEffect(() => {
+    const selectedId = workspaceIdRef.current;
+    const token = csrfRef.current;
+    if (selectedId && token) void loadWorkspaceData(selectedId, token);
+  }, [period, loadWorkspaceData]);
 
   useEffect(() => {
     let cancelled = false;
