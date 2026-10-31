@@ -243,3 +243,17 @@ def test_transaction_fingerprint_normalizes_equivalent_timezone_offsets():
     }
     equivalent = {**values, "event_created_at": NOW.astimezone(timezone(timedelta(hours=5)))}
     assert BillingLifecycleStore._transaction_event_fingerprint(**values) == BillingLifecycleStore._transaction_event_fingerprint(**equivalent)
+
+
+def test_paddle_past_due_transaction_status_passes_boundary_validation():
+    BillingLifecycleStore._validate_transaction(
+        event_id="evt_tx_past_due",
+        event_created_at=NOW,
+        transaction_id="txn_past_due",
+        workspace_id="workspace-1",
+        subscription_id="sub_123",
+        invoice_number=None,
+        status="past_due",
+        currency_code="USD",
+        total_minor="1000",
+    )
