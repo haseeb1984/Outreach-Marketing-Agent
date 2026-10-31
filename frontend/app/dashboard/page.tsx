@@ -880,7 +880,16 @@ export default function DashboardPage() {
     try {
       const result = await api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?"+params.toString(),csrf);
       if (requestedSequence !== whatsappInboxQuerySequenceRef.current || requestedWorkspaceId !== workspaceId) return;
-      setWhatsappConversations(result.items || []);
+      const nextConversations = result.items || [];
+      setWhatsappConversations(nextConversations);
+      if (selectedWhatsAppConversation && !nextConversations.some(item => item.id === selectedWhatsAppConversation)) {
+        whatsappDetailSequenceRef.current += 1;
+        setSelectedWhatsAppConversation("");
+        setWhatsappMessages([]);
+        setWhatsappNotes([]);
+        setWhatsappActivity([]);
+        setWhatsappNoteDraft("");
+      }
       await loadWhatsAppSLA();
       if (requestedSequence !== whatsappInboxQuerySequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setSelectedWhatsAppBulkIds([]);
