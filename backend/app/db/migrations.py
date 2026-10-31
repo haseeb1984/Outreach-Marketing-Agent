@@ -31,9 +31,6 @@ def _split_sql_statements(sql: str) -> list[str]:
                 continue
             if sql[i] == "'":
                 state = "normal"
-            elif sql[i] == "\\\\" and i + 1 < len(sql):
-                i += 2
-                continue
         elif state == "double":
             if sql[i] == '"' and i + 1 < len(sql) and sql[i + 1] == '"':
                 i += 2
