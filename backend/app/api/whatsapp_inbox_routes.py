@@ -30,6 +30,11 @@ class WhatsAppConversationBulkUpdate(BaseModel):
     priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
 
 
+class WhatsAppInboxSLAPolicyUpdate(BaseModel):
+    warning_minutes: int = Field(default=15, ge=1, le=1440)
+    breach_minutes: int = Field(default=60, ge=2, le=10080)
+
+
 class WhatsAppInboxSavedViewCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     filters: dict = Field(default_factory=dict)
@@ -93,7 +98,20 @@ async def list_whatsapp_conversations(
                           c.created_at, c.updated_at, a.label AS account_label,
                           p.name AS prospect_name, p.company AS prospect_company,
                           m.text_body AS last_message_text, m.message_type AS last_message_type,
-                          m.received_at AS last_message_at
+                          m.received_at AS last_message_at,
+                          inbound.received_at AS sla_started_at,
+                          response.sent_at AS sla_first_response_at,
+                          CASE
+                            WHEN c.inbox_status='resolved' THEN 'resolved'
+                            WHEN inbound.received_at IS NULL THEN 'not_applicable'
+                            WHEN response.sent_at IS NOT NULL THEN 'met'
+                            WHEN now() >= inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)) THEN 'overdue'
+                            WHEN now() >= inbound.received_at + make_interval(mins => COALESCE(policy.warning_minutes,15)) THEN 'at_risk'
+                            ELSE 'within_sla'
+                          END AS sla_state,
+                          CASE WHEN inbound.received_at IS NOT NULL
+                            THEN inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60))
+                            ELSE NULL END AS sla_due_at
                    FROM whatsapp_conversations c
                    JOIN workspace_whatsapp_accounts a
                      ON a.id=c.account_id AND a.workspace_id=c.workspace_id
@@ -105,6 +123,21 @@ async def list_whatsapp_conversations(
                        WHERE conversation_id=c.id AND workspace_id=c.workspace_id
                        ORDER BY received_at DESC, id DESC LIMIT 1
                    ) m ON TRUE
+                   LEFT JOIN LATERAL (
+                       SELECT received_at FROM whatsapp_inbound_messages
+                       WHERE conversation_id=c.id AND workspace_id=c.workspace_id
+                       ORDER BY received_at DESC,id DESC LIMIT 1
+                   ) inbound ON TRUE
+                   LEFT JOIN LATERAL (
+                       SELECT d.sent_at
+                       FROM whatsapp_outbound_deliveries d
+                       WHERE d.workspace_id=c.workspace_id AND d.account_id=c.account_id
+                         AND d.prospect_id=c.prospect_id AND d.sent_at >= inbound.received_at
+                         AND d.sent_at IS NOT NULL
+                       ORDER BY d.sent_at,d.id LIMIT 1
+                   ) response ON TRUE
+                   LEFT JOIN whatsapp_inbox_sla_policies policy
+                     ON policy.workspace_id=c.workspace_id
                    WHERE c.workspace_id=$1
                      AND (NOT $4::boolean OR c.assigned_to_user_id=$5)
                      AND (NOT $6::boolean OR c.assigned_to_user_id IS NULL)
@@ -126,6 +159,100 @@ async def list_whatsapp_conversations(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_list_unavailable") from None
+
+
+@router.get("/sla/policy")
+async def get_whatsapp_inbox_sla_policy(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, role="viewer")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT warning_minutes,breach_minutes,updated_at
+                   FROM whatsapp_inbox_sla_policies WHERE workspace_id=$1""",
+                workspace_id,
+            )
+        return {
+            "warning_minutes": int(row["warning_minutes"]) if row else 15,
+            "breach_minutes": int(row["breach_minutes"]) if row else 60,
+            "updated_at": row["updated_at"].isoformat() if row else None,
+        }
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_sla_policy_unavailable") from None
+
+
+@router.put("/sla/policy")
+async def update_whatsapp_inbox_sla_policy(
+    payload: WhatsAppInboxSLAPolicyUpdate,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, workspace_id, session, role="admin")
+    if payload.breach_minutes <= payload.warning_minutes:
+        raise HTTPException(status_code=422, detail="whatsapp_sla_breach_must_exceed_warning")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO whatsapp_inbox_sla_policies
+                   (workspace_id,warning_minutes,breach_minutes,updated_by)
+                   VALUES($1,$2,$3,$4)
+                   ON CONFLICT(workspace_id) DO UPDATE SET
+                     warning_minutes=EXCLUDED.warning_minutes,
+                     breach_minutes=EXCLUDED.breach_minutes,
+                     updated_by=EXCLUDED.updated_by,updated_at=now()
+                   RETURNING warning_minutes,breach_minutes,updated_at""",
+                workspace_id, payload.warning_minutes, payload.breach_minutes,
+                str(session["user_id"]),
+            )
+        return _serialize(dict(row))
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_sla_policy_update_unavailable") from None
+
+
+@router.get("/sla/summary")
+async def get_whatsapp_inbox_sla_summary(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, session, role="viewer")
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
+                       AND response.sent_at IS NULL
+                       AND now() >= inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS overdue,
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
+                       AND response.sent_at IS NULL
+                       AND now() >= inbound.received_at + make_interval(mins => COALESCE(policy.warning_minutes,15))
+                       AND now() < inbound.received_at + make_interval(mins => COALESCE(policy.breach_minutes,60)))::int AS at_risk,
+                     count(*) FILTER (WHERE c.inbox_status <> 'resolved' AND inbound.received_at IS NOT NULL
+                       AND (response.sent_at IS NOT NULL OR now() < inbound.received_at + make_interval(mins => COALESCE(policy.warning_minutes,15))))::int AS within_sla
+                   FROM whatsapp_conversations c
+                   LEFT JOIN LATERAL (
+                     SELECT received_at FROM whatsapp_inbound_messages
+                     WHERE conversation_id=c.id AND workspace_id=c.workspace_id
+                     ORDER BY received_at DESC,id DESC LIMIT 1
+                   ) inbound ON TRUE
+                   LEFT JOIN LATERAL (
+                     SELECT sent_at FROM whatsapp_outbound_deliveries d
+                     WHERE d.workspace_id=c.workspace_id AND d.account_id=c.account_id
+                       AND d.prospect_id=c.prospect_id AND d.sent_at >= inbound.received_at
+                       AND d.sent_at IS NOT NULL ORDER BY d.sent_at,d.id LIMIT 1
+                   ) response ON TRUE
+                   LEFT JOIN whatsapp_inbox_sla_policies policy ON policy.workspace_id=c.workspace_id
+                   WHERE c.workspace_id=$1""",
+                workspace_id,
+            )
+        return {key: int(value or 0) for key, value in dict(row).items()}
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_sla_summary_unavailable") from None
 
 
 @router.get("/saved-views")
