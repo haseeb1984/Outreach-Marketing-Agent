@@ -36,8 +36,12 @@ def _release_root(root: Path) -> None:
     (root / "ops/systemd/outreach-growth-worker.service").write_text("# test")
     (root / "ops/systemd/outreach-growth-scheduler.service").write_text("# test")
     (root / "ops/systemd/outreach-whatsapp-dispatch-worker.service").write_text("# test")
+    (root / "ops/systemd/outreach-campaign-followup-worker.service").write_text("# test")
+    (root / "ops/systemd/outreach-database-backup.service").write_text("# test")
+    (root / "ops/systemd/outreach-database-backup.timer").write_text("# test")
     (root / "docs").mkdir()
     (root / "docs/GROWTH_WORKER_HOST_RUNBOOK.md").write_text("# test")
+    (root / "docs/PRODUCTION_OPERATIONS_AND_LAUNCH.md").write_text("# test")
 
 
 def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: Path):
@@ -197,7 +201,7 @@ def test_preflight_flags_missing_required_operational_artifacts(tmp_path: Path):
     assert status["migration_artifacts"] == "fail"
     assert status["required_release_migrations"] == "fail"
     assert status["backup_tool"] == "fail"
-    assert status["growth_worker_supervision"] == "fail"
+    assert status["background_worker_supervision"] == "fail"
     assert status["growth_worker_runbook"] == "fail"
 
 
