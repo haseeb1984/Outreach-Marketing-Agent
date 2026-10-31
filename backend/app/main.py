@@ -302,6 +302,8 @@ async def readiness() -> Response:
                       AND to_regclass('public.outreach_followup_sequences') IS NOT NULL
                       AND to_regclass('public.outreach_followup_steps') IS NOT NULL
                       AND to_regclass('public.outreach_followup_enrollments') IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_followup_enrollments' AND column_name='last_whatsapp_delivery_id')
+                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_followup_enrollments' AND column_name='pause_reason')
                      AND (SELECT count(*) FROM schema_migrations
                           WHERE version IN (
                             '001_workspace_domain_verification.sql',
