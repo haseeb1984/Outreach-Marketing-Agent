@@ -198,3 +198,12 @@ def test_duplicate_transaction_event_requires_exact_nullable_identity(field, val
     assert not BillingLifecycleStore._same_transaction_event_identity(
         {**prior, field: value}, **kwargs
     )
+
+def test_verified_subscription_event_fingerprint_is_stable_and_covers_entire_snapshot():
+    original = event()
+    same = event(entitlements={"email_outreach": {"monthly_limit": 100, "enabled": True}})
+    changed_status = event(subscription_status="cancelled")
+    changed_plan = event(plan_slug="pro")
+    assert BillingLifecycleStore._event_fingerprint(original) == BillingLifecycleStore._event_fingerprint(same)
+    assert BillingLifecycleStore._event_fingerprint(original) != BillingLifecycleStore._event_fingerprint(changed_status)
+    assert BillingLifecycleStore._event_fingerprint(original) != BillingLifecycleStore._event_fingerprint(changed_plan)
