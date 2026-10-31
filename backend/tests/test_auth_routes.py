@@ -506,8 +506,7 @@ def test_logout_hides_session_revocation_store_outage(monkeypatch):
         assert "private revoke database exception" not in response.text
 
 
-@pytest.mark.asyncio
-async def test_session_revocation_parses_uuid_and_scopes_to_current_user(monkeypatch):
+def test_session_revocation_parses_uuid_and_scopes_to_current_user(monkeypatch):
     from uuid import UUID
 
     target_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -523,6 +522,7 @@ async def test_session_revocation_parses_uuid_and_scopes_to_current_user(monkeyp
 
     monkeypatch.setattr(auth_routes, "_authenticated", authenticated)
     monkeypatch.setattr(auth_routes, "_check_csrf", lambda request, session: None)
-    response = await auth_routes.revoke_account_session(str(target_id), SimpleNamespace())
+    import asyncio
+    response = asyncio.run(auth_routes.revoke_account_session(str(target_id), SimpleNamespace()))
     assert response == {"session_id": str(target_id), "revoked": True}
 
