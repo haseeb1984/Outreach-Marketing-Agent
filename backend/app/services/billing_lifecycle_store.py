@@ -162,14 +162,10 @@ class BillingLifecycleStore:
                              ON t.provider='paddle' AND t.transaction_id=e.transaction_id
                            WHERE e.provider='paddle' AND e.provider_event_id=$1
                            FOR UPDATE OF e""", event_id)
-                    if (
-                        prior is None
-                        or prior["transaction_id"] != transaction_id
-                        or prior["event_created_at"] != event_created_at
-                        or prior["workspace_id"] != workspace_id
-                        or not self._same_transaction_identity(
-                            prior, subscription_id=subscription_id, invoice_number=invoice_number
-                        )
+                    if prior is None or not self._same_transaction_event_identity(
+                        prior, transaction_id=transaction_id, event_created_at=event_created_at,
+                        workspace_id=workspace_id, subscription_id=subscription_id,
+                        invoice_number=invoice_number,
                     ):
                         raise ValueError("billing_transaction_event_identity_conflict")
                     return {"outcome": "duplicate"}
@@ -241,6 +237,20 @@ class BillingLifecycleStore:
         if (not isinstance(event_created_at, datetime) or event_created_at.tzinfo is None
             or event_created_at.utcoffset() is None):
             raise ValueError("timezone_required")
+
+    @staticmethod
+    def _same_transaction_event_identity(
+        prior: Mapping[str, Any], *, transaction_id: str, event_created_at: datetime,
+        workspace_id: str, subscription_id: str | None, invoice_number: str | None,
+    ) -> bool:
+        return (
+            prior["transaction_id"] == transaction_id
+            and prior["event_created_at"] == event_created_at
+            and prior["workspace_id"] == workspace_id
+            and BillingLifecycleStore._same_transaction_identity(
+                prior, subscription_id=subscription_id, invoice_number=invoice_number
+            )
+        )
 
     @staticmethod
     def _same_transaction_identity(
