@@ -80,6 +80,16 @@ def _media_metadata(message: dict[str, Any], kind: str) -> dict[str, Any]:
     return {}
 
 
+def _unique_prospect_id(matches: Any) -> Any | None:
+    """Only associate a phone with a prospect when the workspace match is unique."""
+    if not isinstance(matches, (list, tuple)) or len(matches) != 1:
+        return None
+    try:
+        return matches[0]["id"]
+    except (KeyError, TypeError, IndexError):
+        return None
+
+
 def _text(message: dict[str, Any]) -> tuple[str, str | None]:
     kind = message.get("type")
     if not isinstance(kind, str) or not kind:
@@ -192,13 +202,14 @@ async def process_pending_whatsapp_events(
                                 wa_id = msg.get("from")
                                 if not isinstance(provider_id, str) or not provider_id or not isinstance(wa_id, str) or not wa_id.isdigit() or len(wa_id) > 64:
                                     continue
-                                prospect = await conn.fetchrow(
+                                prospect_matches = await conn.fetch(
                                     """SELECT id FROM crm_prospects
                                        WHERE workspace_id=$1 AND archived_at IS NULL
                                          AND regexp_replace(contact_phone_e164, '[^0-9]', '', 'g')=$2
-                                       ORDER BY updated_at DESC LIMIT 1""",
+                                       ORDER BY id LIMIT 2""",
                                     workspace_id, wa_id,
                                 )
+                                prospect_id = _unique_prospect_id(prospect_matches)
                                 conversation = await conn.fetchrow(
                                     """INSERT INTO whatsapp_conversations(workspace_id,account_id,prospect_id,wa_id)
                                        VALUES($1,$2,$3,$4)
@@ -206,7 +217,7 @@ async def process_pending_whatsapp_events(
                                          SET prospect_id=COALESCE(whatsapp_conversations.prospect_id,EXCLUDED.prospect_id),
                                              updated_at=now()
                                        RETURNING id""",
-                                    workspace_id, account_id, prospect["id"] if prospect else None, wa_id,
+                                    workspace_id, account_id, prospect_id, wa_id,
                                 )
                                 message_type, body = _text(msg)
                                 media_metadata = _media_metadata(msg, message_type)
@@ -252,7 +263,7 @@ async def process_pending_whatsapp_events(
                                         )
                                         # Opt-out terminates every WhatsApp follow-up for this contact now.
                                         # Preserve current_draft_id for audit/history; never schedule another step.
-                                        if prospect:
+                                        if prospect_id:
                                             await conn.execute(
                                                 """UPDATE outreach_followup_enrollments e
                                                    SET status='stopped_opt_out',next_run_at=NULL,paused_next_run_at=NULL,
@@ -261,7 +272,7 @@ async def process_pending_whatsapp_events(
                                                    WHERE s.id=e.sequence_id AND s.workspace_id=e.workspace_id
                                                      AND e.workspace_id=$1 AND e.prospect_id=$2 AND s.channel='whatsapp'
                                                      AND e.status IN ('active','awaiting_approval','paused')""",
-                                                workspace_id, prospect["id"],
+                                                workspace_id, prospect_id,
                                             )
                                             # Cancel queued (not yet dispatched) drafts for this contact.
                                             # The future dispatcher must still re-check policy immediately before send.
@@ -292,7 +303,7 @@ async def process_pending_whatsapp_events(
                                                  AND (opted_in_at IS NULL OR opted_in_at <= $4)""",
                                             workspace_id, account_id, wa_id, inbound_at,
                                         )
-                                    elif prospect:
+                                    elif prospect_id:
                                         await conn.execute(
                                             """UPDATE crm_prospects SET stage='replied', updated_at=now()
                                                WHERE id=$1 AND workspace_id=$2
