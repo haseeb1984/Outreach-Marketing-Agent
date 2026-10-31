@@ -146,7 +146,8 @@ def test_event_processor_uses_safe_prospect_id_after_unique_mapping():
 
     source = inspect.getsource(whatsapp_event_processor.process_pending_whatsapp_events)
     assert 'prospect["id"]' not in source
-    assert "if prospect_id:" in source
+    assert "prospect_id = _unique_prospect_id(prospect_matches)" in source
+    assert 'associated_prospect_id = conversation["prospect_id"]' in source
     assert "workspace_id, account_id, prospect_id," in source
 
 def test_event_processor_uses_persisted_conversation_prospect_for_contact_actions():
