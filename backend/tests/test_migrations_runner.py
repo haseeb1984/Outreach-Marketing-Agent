@@ -101,7 +101,7 @@ def test_runner_skips_migrations_already_in_the_ledger(
 def test_sql_splitter_preserves_dollar_quoted_function_bodies_and_comments():
     dollar = "$" + "$"
     tagged = "$body$"
-    sql = "\\n".join([
+    sql = chr(10).join([
         "-- semicolon ; in comment",
         "CREATE TABLE sample (value TEXT DEFAULT ';');",
         "CREATE FUNCTION sample_fn() RETURNS trigger LANGUAGE plpgsql AS " + tagged,
