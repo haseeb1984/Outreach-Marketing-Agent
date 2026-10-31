@@ -1729,24 +1729,26 @@ export default function DashboardPage() {
       if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Send outcome could not be confirmed. Check delivery status before retrying.");
-      await refresh(requestedWorkspaceId, csrf);
+      if (requestedWorkspaceId === workspaceId) await refresh(requestedWorkspaceId, csrf);
     } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function processWhatsAppInboxEvents() {
     if (!workspaceId || !csrf || !window.confirm("Process up to 25 pending inbound Meta webhook events for this workspace's active WhatsApp accounts? This will not send any messages.")) return;
+    const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ processed: number; messages_saved: number; statuses_saved: number; unmapped: number; failed: number }>(
-        "/api/v1/integrations/whatsapp/inbox/webhook-events/process-pending?workspace_id=" + encodeURIComponent(workspaceId) + "&batch_size=25",
+        "/api/v1/integrations/whatsapp/inbox/webhook-events/process-pending?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&batch_size=25",
         csrf,
         { method: "POST" },
       );
+      if (requestedWorkspaceId !== workspaceId) return;
       setNotice("WhatsApp inbox processing: " + result.processed + " events processed, " + result.messages_saved + " inbound messages saved, " + result.statuses_saved + " status events saved, " + result.unmapped + " unmapped, " + result.failed + " failed. No messages were sent.");
-      await refresh(workspaceId, csrf);
+      await refresh(requestedWorkspaceId, csrf);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "WhatsApp inbox processing failed.");
-    } finally { setBusy(false); }
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp inbox processing failed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
   async function changeWhatsAppSLAPause(conversation: WhatsAppConversation, action: "pause" | "resume") {
