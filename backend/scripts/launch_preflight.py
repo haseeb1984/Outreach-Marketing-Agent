@@ -204,11 +204,18 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
         root / "ops" / "systemd" / "outreach-growth-scheduler.service",
         root / "ops" / "systemd" / "outreach-growth-worker.service",
         root / "ops" / "systemd" / "outreach-whatsapp-dispatch-worker.service",
+        root / "ops" / "systemd" / "outreach-campaign-followup-worker.service",
     )
     missing_worker_units = [unit.name for unit in worker_units if not unit.is_file()]
-    add("growth_worker_supervision", not missing_worker_units,
-        "scheduler, growth worker, and WhatsApp dispatch worker units exist" if not missing_worker_units
-        else "missing worker supervision units: " + ", ".join(missing_worker_units))
+    add("background_worker_supervision", not missing_worker_units,
+        "growth scheduler, growth worker, WhatsApp dispatch worker, and campaign follow-up worker units exist" if not missing_worker_units
+        else "missing background worker supervision units: " + ", ".join(missing_worker_units))
+
+    backup_service = root / "ops" / "systemd" / "outreach-database-backup.service"
+    backup_timer = root / "ops" / "systemd" / "outreach-database-backup.timer"
+    add("scheduled_backup_supervision", backup_service.is_file() and backup_timer.is_file(),
+        "systemd backup service and persistent timer exist" if backup_service.is_file() and backup_timer.is_file()
+        else "ops/systemd backup service and timer are required")
 
     worker_runbook = root / "docs" / "GROWTH_WORKER_HOST_RUNBOOK.md"
     add("growth_worker_runbook", worker_runbook.is_file(), "growth worker host runbook exists" if worker_runbook.is_file()
