@@ -358,3 +358,69 @@ def test_subscription_items_require_exactly_one_configured_base_plan():
     ):
         with pytest.raises(ValueError, match="subscription_items_unsupported"):
             _subscription_price_ids(items)
+
+def test_transaction_workspace_mapping_rejects_custom_data_conflicting_with_subscription():
+    import asyncio
+    import pytest
+    from app.api.paddle_routes import _resolve_transaction_workspace
+
+    class Connection:
+        async def fetchval(self, query, subscription_id):
+            assert subscription_id == "sub_bound"
+            return "workspace-owner"
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    with pytest.raises(ValueError, match="transaction_workspace_mapping_conflict"):
+        asyncio.run(_resolve_transaction_workspace(Pool(), "sub_bound", "workspace-attacker"))
+
+
+def test_transaction_workspace_mapping_uses_existing_subscription_binding():
+    import asyncio
+    from app.api.paddle_routes import _resolve_transaction_workspace
+
+    class Connection:
+        async def fetchval(self, query, subscription_id):
+            return "workspace-owner"
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    assert asyncio.run(_resolve_transaction_workspace(Pool(), "sub_bound", "workspace-owner")) == "workspace-owner"
+    assert asyncio.run(_resolve_transaction_workspace(Pool(), "sub_bound", None)) == "workspace-owner"
+
+
+def test_initial_transaction_can_use_checkout_workspace_before_subscription_webhook():
+    import asyncio
+    from app.api.paddle_routes import _resolve_transaction_workspace
+
+    class Connection:
+        async def fetchval(self, query, subscription_id):
+            return None
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    assert asyncio.run(_resolve_transaction_workspace(Pool(), "sub_new", "workspace-new")) == "workspace-new"
