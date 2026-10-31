@@ -9,6 +9,10 @@
 5. Approved WhatsApp drafts can be queued from the dashboard. Queue creation reserves quota and checks account-specific documented opt-in, current opt-out, active campaign, approved draft, phone validity and the 24-hour customer-service window / approved-template rule.
 6. Before each provider request, the worker rechecks the subscription reservation and all send-policy conditions, resolves the active tenant's encrypted token, and makes one Meta API attempt. Definite rejections release quota; accepted or ambiguous outcomes consume quota and are never blindly retried.
 
+## WhatsApp inbox team operations
+
+Workspace owners/admins can select up to 100 visible conversations and atomically bulk-update assignment, inbox status and priority with `POST /api/v1/integrations/whatsapp/inbox/conversations/bulk-update?workspace_id=...`. The request contains `conversation_ids` and any subset of `assigned_to_user_id` (use null to unassign), `inbox_status` and `priority`. Every conversation must belong to the workspace; invalid/missing IDs reject the whole operation. Assignee membership is checked before changes, and each changed field writes an activity event in the same database transaction. The endpoint requires admin role and CSRF protection.
+
 ## Required server settings
 
 - `DATABASE_URL`: PostgreSQL database with migrations through `044_whatsapp_inbox_collaboration.sql`.
