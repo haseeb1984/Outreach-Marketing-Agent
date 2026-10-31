@@ -926,11 +926,23 @@ async def list_whatsapp_conversation_activity(
     await _authorize(request, workspace_id, session, role="viewer")
     try:
         async with _pool(request).acquire() as conn:
+            exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM whatsapp_conversations WHERE id=$1 AND workspace_id=$2)",
+                conversation_id, workspace_id,
+            )
+            if not exists:
+                raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
+            if before_id is not None:
+                cursor_exists = await conn.fetchval(
+                    """SELECT EXISTS(SELECT 1 FROM whatsapp_conversation_activity
+                       WHERE id=$1 AND workspace_id=$2 AND conversation_id=$3)""",
+                    before_id, workspace_id, conversation_id,
+                )
+                if not cursor_exists:
+                    raise HTTPException(status_code=422, detail="invalid_before_activity_id")
             rows = await conn.fetch(
                 """SELECT a.id,a.actor_user_id,a.event_type,a.details,a.created_at
                    FROM whatsapp_conversation_activity a
-                   JOIN whatsapp_conversations c ON c.id=a.conversation_id
-                     AND c.workspace_id=a.workspace_id
                    WHERE a.workspace_id=$1 AND a.conversation_id=$2
                      AND ($4::uuid IS NULL OR (a.created_at,a.id) < (
                        SELECT created_at,id FROM whatsapp_conversation_activity
@@ -961,16 +973,22 @@ async def list_whatsapp_conversation_notes(
     await _authorize(request, workspace_id, session, "viewer")
     try:
         async with _pool(request).acquire() as conn:
+            exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM whatsapp_conversations WHERE id=$1 AND workspace_id=$2)",
+                conversation_id, workspace_id,
+            )
+            if not exists:
+                raise HTTPException(status_code=404, detail="whatsapp_conversation_not_found")
             rows = await conn.fetch(
                 """SELECT n.id,n.conversation_id,n.author_user_id,n.body,n.created_at,n.updated_at
                    FROM whatsapp_conversation_notes n
-                   JOIN whatsapp_conversations c ON c.id=n.conversation_id
-                     AND c.workspace_id=n.workspace_id
                    WHERE n.workspace_id=$1 AND n.conversation_id=$2
                    ORDER BY n.created_at DESC,n.id DESC LIMIT $3""",
                 workspace_id, conversation_id, limit,
             )
         return {"items": [_serialize(dict(row)) for row in rows], "limit": limit}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_conversation_notes_unavailable") from None
 
