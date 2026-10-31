@@ -110,6 +110,10 @@ export default function DashboardPage() {
   const [whatsappFilterPriority, setWhatsappFilterPriority] = useState("");
   const [whatsappFilterSearch, setWhatsappFilterSearch] = useState("");
   const [whatsappFilterAssignee, setWhatsappFilterAssignee] = useState("all");
+  const [selectedWhatsAppBulkIds, setSelectedWhatsAppBulkIds] = useState<string[]>([]);
+  const [whatsappBulkAssignee, setWhatsappBulkAssignee] = useState("__unchanged__");
+  const [whatsappBulkStatus, setWhatsappBulkStatus] = useState("");
+  const [whatsappBulkPriority, setWhatsappBulkPriority] = useState("");
   const [whatsappNoteDraft, setWhatsappNoteDraft] = useState("");
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
@@ -593,6 +597,28 @@ export default function DashboardPage() {
       setWhatsappConversations(items => items.map(item => item.id === conversation.id ? { ...item, ...updated } : item));
       setNotice("WhatsApp conversation updated.");
     } catch (err) { setError(err instanceof Error ? err.message : "Conversation update failed."); }
+    finally { setWhatsappInboxBusy(false); }
+  }
+
+  async function applyWhatsAppBulkUpdate() {
+    if (!workspaceId || !csrf || !selectedWhatsAppBulkIds.length) return;
+    const patch: Record<string, string | null> = {};
+    if (whatsappBulkAssignee !== "__unchanged__") patch.assigned_to_user_id = whatsappBulkAssignee || null;
+    if (whatsappBulkStatus) patch.inbox_status = whatsappBulkStatus;
+    if (whatsappBulkPriority) patch.priority = whatsappBulkPriority;
+    if (!Object.keys(patch).length) { setError("Choose at least one bulk action."); return; }
+    setWhatsappInboxBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ updated_count: number; items: WhatsAppConversation[] }>(
+        "/api/v1/integrations/whatsapp/inbox/conversations/bulk-update?workspace_id=" + encodeURIComponent(workspaceId),
+        csrf, { method: "POST", body: JSON.stringify({ conversation_ids: selectedWhatsAppBulkIds, ...patch }) },
+      );
+      const byId = new Map(result.items.map(item => [item.id, item]));
+      setWhatsappConversations(items => items.map(item => byId.has(item.id) ? { ...item, ...byId.get(item.id)! } : item));
+      setSelectedWhatsAppBulkIds([]);
+      setWhatsappBulkAssignee("__unchanged__"); setWhatsappBulkStatus(""); setWhatsappBulkPriority("");
+      setNotice(result.updated_count + " WhatsApp conversations updated.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Bulk conversation update failed."); }
     finally { setWhatsappInboxBusy(false); }
   }
 
@@ -1937,7 +1963,34 @@ export default function DashboardPage() {
                     <button className="button secondary" type="button" disabled={whatsappInboxBusy} onClick={clearWhatsAppInboxFilters}>Clear</button>
                   </div>
                 </div>
-                {whatsappConversations.length ? whatsappConversations.map(conversation => <button
+                {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="stack" style={{border:"1px solid var(--border)",borderRadius:"0.75rem",padding:"0.75rem",marginBottom:"0.75rem"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                    <strong>Bulk actions ({selectedWhatsAppBulkIds.length} selected)</strong>
+                    <button className="button secondary" type="button" disabled={whatsappInboxBusy || !whatsappConversations.length} onClick={()=>setSelectedWhatsAppBulkIds(selectedWhatsAppBulkIds.length===whatsappConversations.length?[]:whatsappConversations.map(item=>item.id))}>{selectedWhatsAppBulkIds.length===whatsappConversations.length?"Clear selection":"Select visible"}</button>
+                  </div>
+                  <div className="grid grid-3">
+                    <label>Assign to
+                      <select className="input" value={whatsappBulkAssignee} onChange={event=>setWhatsappBulkAssignee(event.target.value)}>
+                        <option value="__unchanged__">Leave unchanged</option><option value="">Unassigned</option>
+                        {members.filter(member=>member.status==="active").map(member=><option key={member.user_id} value={member.user_id}>{member.email}</option>)}
+                      </select>
+                    </label>
+                    <label>Status
+                      <select className="input" value={whatsappBulkStatus} onChange={event=>setWhatsappBulkStatus(event.target.value)}>
+                        <option value="">Leave unchanged</option><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option>
+                      </select>
+                    </label>
+                    <label>Priority
+                      <select className="input" value={whatsappBulkPriority} onChange={event=>setWhatsappBulkPriority(event.target.value)}>
+                        <option value="">Leave unchanged</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                      </select>
+                    </label>
+                  </div>
+                  <button className="button" type="button" disabled={whatsappInboxBusy || !selectedWhatsAppBulkIds.length} onClick={applyWhatsAppBulkUpdate}>Apply to selected</button>
+                </div>}
+                {whatsappConversations.length ? whatsappConversations.map(conversation => <div key={conversation.id} style={{display:"flex",gap:"0.5rem",alignItems:"stretch",marginBottom:"0.5rem"}}>
+                  {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <label style={{display:"flex",alignItems:"center",padding:"0 0.5rem"}}><input type="checkbox" aria-label={"Select "+(conversation.prospect_name || conversation.wa_id)} checked={selectedWhatsAppBulkIds.includes(conversation.id)} disabled={whatsappInboxBusy} onChange={event=>setSelectedWhatsAppBulkIds(ids=>event.target.checked?[...ids,conversation.id]:ids.filter(id=>id!==conversation.id))}/></label>}
+                  <button
                   className={"button " + (selectedWhatsAppConversation === conversation.id ? "" : "secondary")}
                   type="button" key={conversation.id} disabled={whatsappInboxBusy}
                   onClick={() => openWhatsAppConversation(conversation)}
@@ -1947,7 +2000,7 @@ export default function DashboardPage() {
                   <span className="fine" style={{display:"block"}}>{(conversation.inbox_status || "open").toUpperCase()} · {(conversation.priority || "normal").toUpperCase()} · {conversation.assigned_to_user_id ? (members.find(member=>member.user_id===conversation.assigned_to_user_id)?.email || "Assigned teammate") : "Unassigned"}</span>
                   <span style={{display:"block"}}>{conversation.account_label} · {conversation.prospect_company || "Unmatched contact"}</span>
                   <span style={{display:"block"}}>{conversation.last_message_text || ("Latest message type: " + (conversation.last_message_type || "not available"))}</span>
-                </button>) : <p className="fine">No inbound conversations have been processed yet.</p>}
+                  </button></div>) : <p className="fine">No inbound conversations have been processed yet.</p>}
               </article>
               <article className="card">
                 <h4>Conversation workspace</h4>
