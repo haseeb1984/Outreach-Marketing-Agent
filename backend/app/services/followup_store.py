@@ -335,6 +335,17 @@ class FollowupStore:
                     )
                 return self._serialize(dict(row)) if row else None
 
+    async def pause_for_draft(self, *, workspace_id: str, draft_id: UUID, reason: str) -> bool:
+        safe_reason = reason[:100] if isinstance(reason, str) and reason else "followup_delivery_requires_review"
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                """UPDATE outreach_followup_enrollments SET status='paused',pause_reason='delivery_failed',
+                   last_error_code=$3,next_run_at=NULL,updated_at=now()
+                   WHERE workspace_id=$1 AND current_draft_id=$2 AND status='awaiting_approval'""",
+                workspace_id, draft_id, safe_reason,
+            )
+        return result.endswith(" 1")
+
     async def advance_after_delivery(self, *, workspace_id: str, draft_id: UUID, delivery_id: UUID,
                                     channel: str = "email") -> bool:
         if channel not in {"email", "whatsapp"}:
