@@ -1913,11 +1913,13 @@ export default function DashboardPage() {
       );
       if (requestedSequence !== whatsappInboxQuerySequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappConversations(result.items || []);
-      if (requestedConversationId && !(result.items || []).some(item => item.id === requestedConversationId)) {
+      if (requestedConversationId && selectedWhatsAppConversation === requestedConversationId && !(result.items || []).some(item => item.id === requestedConversationId)) {
+        whatsappDetailSequenceRef.current += 1;
         setSelectedWhatsAppConversation("");
         setWhatsappMessages([]);
         setWhatsappNotes([]);
         setWhatsappActivity([]);
+        setWhatsappNoteDraft("");
       }
     } catch (err) {
       if (requestedSequence === whatsappInboxQuerySequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp inbox filters could not be applied.");
@@ -1932,6 +1934,12 @@ export default function DashboardPage() {
     setWhatsappFilterSearch("");
     setWhatsappFilterAssignee("all");
     setWhatsappSelectedSavedView("");
+    whatsappDetailSequenceRef.current += 1;
+    setSelectedWhatsAppConversation("");
+    setWhatsappMessages([]);
+    setWhatsappNotes([]);
+    setWhatsappActivity([]);
+    setWhatsappNoteDraft("");
     if (!workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
     const requestedSequence = ++whatsappInboxQuerySequenceRef.current;
@@ -1942,10 +1950,6 @@ export default function DashboardPage() {
       );
       if (requestedSequence !== whatsappInboxQuerySequenceRef.current || requestedWorkspaceId !== workspaceId) return;
       setWhatsappConversations(result.items || []);
-      setSelectedWhatsAppConversation("");
-      setWhatsappMessages([]);
-      setWhatsappNotes([]);
-      setWhatsappActivity([]);
     } catch (err) {
       if (requestedSequence === whatsappInboxQuerySequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp inbox could not be refreshed.");
     } finally {
