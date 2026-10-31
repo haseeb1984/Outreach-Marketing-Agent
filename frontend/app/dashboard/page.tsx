@@ -1809,7 +1809,7 @@ export default function DashboardPage() {
       await loadWhatsAppConversationActivity(conversation.id);
     } catch(err) {
       if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Could not update SLA pause state.");
-    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
+    } finally { if (requestedWorkspaceId === workspaceId) setWhatsappInboxBusy(false); }
   }
 
   async function loadWhatsAppSLA() {
@@ -1851,7 +1851,7 @@ export default function DashboardPage() {
       await applyWhatsAppInboxFilters();
     } catch(err) {
       if (requestedSequence === whatsappMutationSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Could not save WhatsApp SLA policy.");
-    } finally { if (requestedSequence === whatsappMutationSequenceRef.current) setWhatsappInboxBusy(false); }
+    } finally { if (requestedWorkspaceId === workspaceId) setWhatsappInboxBusy(false); }
   }
 
   async function applyWhatsAppInboxFilters() {
