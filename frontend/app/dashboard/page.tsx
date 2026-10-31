@@ -115,7 +115,7 @@ export default function DashboardPage() {
   const [whatsappSLAWarningMinutes, setWhatsappSLAWarningMinutes] = useState(15);
   const [whatsappSLAPauseReason, setWhatsappSLAPauseReason] = useState("");
   const [whatsappSLABreachMinutes, setWhatsappSLABreachMinutes] = useState(60);
-  const [whatsappSLASummary, setWhatsappSLASummary] = useState({ overdue: 0, at_risk: 0, within_sla: 0 });
+  const [whatsappSLASummary, setWhatsappSLASummary] = useState({ overdue: 0, at_risk: 0, within_sla: 0, paused: 0 });
   const [whatsappSavedViewName, setWhatsappSavedViewName] = useState("");
   const [whatsappSelectedSavedView, setWhatsappSelectedSavedView] = useState("");
   const [selectedWhatsAppBulkIds, setSelectedWhatsAppBulkIds] = useState<string[]>([]);
@@ -1420,7 +1420,7 @@ export default function DashboardPage() {
     try {
       const [policy, summary] = await Promise.all([
         api<{warning_minutes:number;breach_minutes:number}>("/api/v1/integrations/whatsapp/inbox/sla/policy?workspace_id="+encodeURIComponent(workspaceId),csrf),
-        api<{overdue:number;at_risk:number;within_sla:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(workspaceId),csrf),
+        api<{overdue:number;at_risk:number;within_sla:number;paused:number}>("/api/v1/integrations/whatsapp/inbox/sla/summary?workspace_id="+encodeURIComponent(workspaceId),csrf),
       ]);
       setWhatsappSLAWarningMinutes(policy.warning_minutes);
       setWhatsappSLABreachMinutes(policy.breach_minutes);
@@ -2115,7 +2115,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="stack" style={{border:"1px solid var(--border)",borderRadius:"0.75rem",padding:"0.75rem",marginBottom:"0.75rem"}}>
                   <strong>First-response SLA</strong>
-                  <span className="fine">Overdue: {whatsappSLASummary.overdue} · At risk: {whatsappSLASummary.at_risk} · Within SLA: {whatsappSLASummary.within_sla}</span>
+                  <span className="fine">Overdue: {whatsappSLASummary.overdue} · At risk: {whatsappSLASummary.at_risk} · Within SLA: {whatsappSLASummary.within_sla} · Paused: {whatsappSLASummary.paused}</span>
                   {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="grid grid-2">
                     <label>Warning after (minutes)<input className="input" type="number" min="1" max="1440" value={whatsappSLAWarningMinutes} onChange={event=>setWhatsappSLAWarningMinutes(Number(event.target.value))}/></label>
                     <label>Overdue after (minutes)<input className="input" type="number" min="2" max="10080" value={whatsappSLABreachMinutes} onChange={event=>setWhatsappSLABreachMinutes(Number(event.target.value))}/></label>
@@ -2159,7 +2159,7 @@ export default function DashboardPage() {
                   <span className="fine" style={{display:"block"}}>{(conversation.inbox_status || "open").toUpperCase()} · {(conversation.priority || "normal").toUpperCase()} · {conversation.assigned_to_user_id ? (members.find(member=>member.user_id===conversation.assigned_to_user_id)?.email || "Assigned teammate") : "Unassigned"}</span>
                   <span style={{display:"block"}}>{conversation.account_label} · {conversation.prospect_company || "Unmatched contact"}</span>
                   <span style={{display:"block"}}>{conversation.last_message_text || ("Latest message type: " + (conversation.last_message_type || "not available"))}</span>
-                  <span className="fine" style={{display:"block"}}>First-response SLA: {({within_sla:"Within SLA",at_risk:"At risk",overdue:"Overdue",met:"Response sent",resolved:"Resolved",not_applicable:"No inbound message"} as Record<string,string>)[conversation.sla_state || "not_applicable"]}{conversation.sla_due_at && conversation.sla_state!=="met" && conversation.sla_state!=="resolved" ? " · due " + new Date(conversation.sla_due_at).toLocaleString() : ""}</span>
+                  <span className="fine" style={{display:"block"}}>First-response SLA: {({within_sla:"Within SLA",at_risk:"At risk",overdue:"Overdue",paused:"Paused",met:"Response sent",resolved:"Resolved",not_applicable:"No inbound message"} as Record<string,string>)[conversation.sla_state || "not_applicable"]}{conversation.sla_due_at && conversation.sla_state!=="met" && conversation.sla_state!=="resolved" ? " · due " + new Date(conversation.sla_due_at).toLocaleString() : ""}</span>
                   </button></div>) : <p className="fine">No inbound conversations have been processed yet.</p>}
               </article>
               <article className="card">
