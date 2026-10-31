@@ -27,6 +27,14 @@ class FakeConnection:
             raise result
         return result
 
+    async def fetchval(self, query, *args):
+        self.execute_calls.append((query, args))
+        result = self.execute_results.pop(0) if self.execute_results else "UPDATE 1"
+        if isinstance(result, Exception):
+            raise result
+        parts = result.rsplit(" ", 1)
+        return int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 0
+
 
 class FakePool:
     def __init__(self, rows, execute_results=None):
