@@ -42,7 +42,7 @@ async def reconcile_whatsapp_delivery_statuses(
                    SELECT e.workspace_id, e.account_id, e.provider_message_id,
                           e.status, e.provider_timestamp, e.received_at,
                           CASE e.status
-                            WHEN 'failed' THEN 1
+                            WHEN 'failed' THEN 0
                             WHEN 'sent' THEN 1
                             WHEN 'delivered' THEN 2
                             WHEN 'read' THEN 3
