@@ -137,7 +137,7 @@ def test_paddle_webhook_ignores_unrelated_signed_event_without_billing_store(mon
     from app.main import app
 
     secret = "integration-secret"
-    body = json.dumps({"event_id": "evt_unrelated", "event_type": "transaction.completed"}).encode()
+    body = json.dumps({"event_id": "evt_unrelated", "event_type": "adjustment.created"}).encode()
     monkeypatch.setattr(paddle_routes.settings, "paddle_webhook_secret", secret)
     with TestClient(app) as client:
         response = client.post(
@@ -564,7 +564,7 @@ def test_paddle_subscription_trialing_webhook_updates_subscription_status(monkey
             "data": {
                 "id": "sub_trialing_route",
                 "status": "trialing",
-                "custom_data": {"workspace_id": "workspace-trialing"},
+                "custom_data": {"workspace_id": "workspace-trialing", "plan_id": "starter"},
                 "items": [{"price": {"id": "pri_trialing"}, "quantity": 1}],
                 "current_billing_period": {
                     "starts_at": "2026-10-31T12:00:00Z",
