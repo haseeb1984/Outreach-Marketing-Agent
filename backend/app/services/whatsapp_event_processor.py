@@ -312,7 +312,7 @@ async def process_pending_whatsapp_events(
                                 # trigger a send and must not move delivery state backwards.
                                 target_status = _delivery_status_target(state)
                                 if target_status:
-                                    await conn.execute(
+                                    updated_delivery = await conn.fetchrow(
                                         """UPDATE whatsapp_outbound_deliveries
                                            SET status=$3,
                                                sent_at=CASE
@@ -349,10 +349,37 @@ async def process_pending_whatsapp_events(
                                                WHEN 'failed' THEN 1
                                                WHEN 'delivered' THEN 2
                                                WHEN 'read' THEN 3
-                                               ELSE 5 END""",
+                                               ELSE 5 END
+                                           RETURNING id,draft_id""",
                                         workspace_id, account_id, target_status,
                                         _timestamp(status.get("timestamp")), provider_id, event_received_at,
                                     )
+                                    if updated_delivery and target_status in {"delivered", "read"}:
+                                        await conn.execute(
+                                            """WITH target AS (
+                                                   SELECT e.id,e.sequence_id,e.current_step
+                                                   FROM outreach_followup_enrollments e
+                                                   WHERE e.workspace_id=$1 AND e.current_draft_id=$2
+                                                     AND e.status IN ('awaiting_approval','paused')
+                                                     AND (e.status='awaiting_approval' OR e.pause_reason IN ('delivery_failed','delivery_uncertain'))
+                                                   FOR UPDATE
+                                               ), next_step AS (
+                                                   SELECT t.id,t.current_step+1 AS step_number,st.delay_minutes
+                                                   FROM target t
+                                                   LEFT JOIN outreach_followup_steps st
+                                                     ON st.sequence_id=t.sequence_id AND st.step_number=t.current_step+1
+                                               )
+                                               UPDATE outreach_followup_enrollments e
+                                               SET status=CASE WHEN n.delay_minutes IS NULL THEN 'completed' ELSE 'active' END,
+                                                   current_step=CASE WHEN n.delay_minutes IS NULL THEN e.current_step ELSE n.step_number END,
+                                                   current_draft_id=NULL,last_whatsapp_delivery_id=$3,
+                                                   next_run_at=CASE WHEN n.delay_minutes IS NULL THEN NULL
+                                                                    ELSE now()+(n.delay_minutes * interval '1 minute') END,
+                                                   paused_next_run_at=NULL,pause_reason=NULL,last_error_code=NULL,updated_at=now()
+                                               FROM next_step n WHERE e.id=n.id""",
+                                            workspace_id, updated_delivery["draft_id"], updated_delivery["id"],
+                                        )
+
                     await conn.execute(
                         """UPDATE meta_whatsapp_webhook_events
                            SET processed_at=now(), processing_error_code=NULL WHERE id=$1""",
