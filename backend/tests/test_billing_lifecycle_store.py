@@ -207,3 +207,18 @@ def test_verified_subscription_event_fingerprint_is_stable_and_covers_entire_sna
     assert BillingLifecycleStore._event_fingerprint(original) == BillingLifecycleStore._event_fingerprint(same)
     assert BillingLifecycleStore._event_fingerprint(original) != BillingLifecycleStore._event_fingerprint(changed_status)
     assert BillingLifecycleStore._event_fingerprint(original) != BillingLifecycleStore._event_fingerprint(changed_plan)
+
+
+def test_verified_transaction_event_fingerprint_covers_all_mutable_fields():
+    base = {
+        "event_id": "evt_tx_123", "event_created_at": NOW,
+        "transaction_id": "txn_123", "workspace_id": "workspace-1",
+        "subscription_id": "sub_123", "invoice_number": "INV-123",
+        "status": "completed", "currency_code": "USD", "total_minor": "1000",
+    }
+    fingerprint = BillingLifecycleStore._transaction_event_fingerprint(**base)
+    assert fingerprint == BillingLifecycleStore._transaction_event_fingerprint(**base)
+    for field, value in (("status", "payment_failed"), ("currency_code", "EUR"),
+                         ("total_minor", "1001"), ("invoice_number", "INV-124"),
+                         ("subscription_id", None), ("workspace_id", "workspace-2")):
+        assert fingerprint != BillingLifecycleStore._transaction_event_fingerprint(**{**base, field: value})
