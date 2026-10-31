@@ -343,8 +343,9 @@ async def readiness() -> Response:
                             '042_whatsapp_template_components.sql',
                             '043_whatsapp_inbound_media_storage.sql',
                             '044_whatsapp_inbox_collaboration.sql',
-                            '045_whatsapp_conversation_activity.sql'
-                          )) = 45"""
+                            '045_whatsapp_conversation_activity.sql',
+                            '046_whatsapp_inbox_saved_views.sql'
+                          )) = 46"""
             )
             if not schema_ready:
                 return JSONResponse(
