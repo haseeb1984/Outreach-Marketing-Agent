@@ -173,12 +173,19 @@ async def create_whatsapp_inbox_saved_view(
         raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
     if filters.get("search") is not None and (not isinstance(filters["search"], str) or len(filters["search"]) > 200):
         raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+    if any(key in filters and not isinstance(filters[key], bool) for key in ("assigned_to_me", "unassigned")):
+        raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
     if filters.get("assigned_to_me") and filters.get("unassigned"):
         raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
-    if filters.get("assigned_to_user_id"):
+    if filters.get("assigned_to_user_id") is not None:
+        assignee_id = filters["assigned_to_user_id"]
+        if not isinstance(assignee_id, str) or not assignee_id.strip() or len(assignee_id) > 200:
+            raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
+        if filters.get("assigned_to_me") or filters.get("unassigned"):
+            raise HTTPException(status_code=422, detail="invalid_whatsapp_saved_view")
         auth = getattr(request.app.state, "auth_store", None)
         if auth is None or not await auth.authorize_workspace(
-            user_id=filters["assigned_to_user_id"], workspace_id=workspace_id, minimum_role="viewer"
+            user_id=assignee_id, workspace_id=workspace_id, minimum_role="viewer"
         ):
             raise HTTPException(status_code=422, detail="whatsapp_assignee_not_workspace_member")
     try:
