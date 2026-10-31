@@ -136,6 +136,66 @@ class BillingLifecycleStore:
                 )
                 return {"outcome": "applied"}
 
+    async def record_verified_transaction(self, *, event_id: str, event_created_at: datetime,
+        transaction_id: str, workspace_id: str, subscription_id: str | None,
+        invoice_number: str | None, status: str, currency_code: str | None,
+        total_minor: str | None) -> dict[str, str]:
+        """Persist sanitized invoice state from a signature-verified Paddle transaction event."""
+        if status not in {"completed", "payment_failed"}:
+            raise ValueError("invalid_transaction_status")
+        for name, value, maximum in (("event_id", event_id, 300),
+            ("transaction_id", transaction_id, 120), ("workspace_id", workspace_id, 200)):
+            if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+                raise ValueError(f"invalid_{name}")
+        if subscription_id is not None and (not isinstance(subscription_id, str) or len(subscription_id) > 120):
+            raise ValueError("invalid_subscription_id")
+        if invoice_number is not None and (not isinstance(invoice_number, str) or len(invoice_number) > 120):
+            raise ValueError("invalid_invoice_number")
+        if currency_code is not None and (not isinstance(currency_code, str) or len(currency_code) != 3):
+            raise ValueError("invalid_currency_code")
+        if total_minor is not None and (not isinstance(total_minor, str) or not total_minor.isdigit() or len(total_minor) > 20):
+            raise ValueError("invalid_transaction_total")
+        if not isinstance(event_created_at, datetime) or event_created_at.tzinfo is None:
+            raise ValueError("timezone_required")
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                inserted = await conn.fetchrow(
+                    """INSERT INTO billing_transaction_events(provider,provider_event_id,transaction_id,event_created_at)
+                       VALUES ('paddle',$1,$2,$3) ON CONFLICT(provider,provider_event_id) DO NOTHING
+                       RETURNING provider_event_id""", event_id, transaction_id, event_created_at)
+                if inserted is None:
+                    prior = await conn.fetchrow(
+                        """SELECT transaction_id,event_created_at FROM billing_transaction_events
+                           WHERE provider='paddle' AND provider_event_id=$1 FOR UPDATE""", event_id)
+                    if prior is None or prior["transaction_id"] != transaction_id or prior["event_created_at"] != event_created_at:
+                        raise ValueError("billing_transaction_event_identity_conflict")
+                    return {"outcome": "duplicate"}
+                row = await conn.fetchrow(
+                    """INSERT INTO billing_transactions
+                       (provider,transaction_id,workspace_id,provider_subscription_id,invoice_number,
+                        status,currency_code,total_minor,billed_at,provider_event_created_at,updated_at)
+                       VALUES ('paddle',$1,$2,$3,$4,$5,$6,$7,$8,$8,now())
+                       ON CONFLICT(provider,transaction_id) DO UPDATE SET
+                         provider_subscription_id=COALESCE(EXCLUDED.provider_subscription_id,billing_transactions.provider_subscription_id),
+                         invoice_number=COALESCE(EXCLUDED.invoice_number,billing_transactions.invoice_number),
+                         status=EXCLUDED.status,currency_code=COALESCE(EXCLUDED.currency_code,billing_transactions.currency_code),
+                         total_minor=COALESCE(EXCLUDED.total_minor,billing_transactions.total_minor),
+                         billed_at=EXCLUDED.billed_at,provider_event_created_at=EXCLUDED.provider_event_created_at,updated_at=now()
+                       WHERE billing_transactions.workspace_id=EXCLUDED.workspace_id
+                         AND (billing_transactions.provider_event_created_at IS NULL
+                              OR EXCLUDED.provider_event_created_at > billing_transactions.provider_event_created_at)
+                       RETURNING transaction_id""",
+                    transaction_id, workspace_id, subscription_id, invoice_number, status,
+                    currency_code, total_minor, event_created_at)
+                if row is None:
+                    current = await conn.fetchrow(
+                        """SELECT workspace_id FROM billing_transactions
+                           WHERE provider='paddle' AND transaction_id=$1 FOR UPDATE""", transaction_id)
+                    if current is None or current["workspace_id"] != workspace_id:
+                        raise ValueError("billing_transaction_workspace_conflict")
+                    return {"outcome": "stale"}
+                return {"outcome": "applied"}
+
     @staticmethod
     def _same_event_identity(prior: Mapping[str, Any], event: VerifiedBillingEvent) -> bool:
         return (

@@ -345,6 +345,49 @@ async def paddle_webhook(request: Request):
         raise HTTPException(status_code=400, detail="invalid_webhook_payload")
 
     event_type = payload.get("event_type")
+    if event_type in {"transaction.completed", "transaction.payment_failed"}:
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="invalid_transaction_event")
+        transaction_id, subscription_id = data.get("id"), data.get("subscription_id")
+        custom_data = data.get("custom_data")
+        workspace_id = custom_data.get("workspace_id") if isinstance(custom_data, dict) else None
+        pool = getattr(request.app.state, "db_pool", None)
+        if pool is None:
+            raise HTTPException(status_code=503, detail="billing_service_not_configured")
+        try:
+            occurred_at = _datetime(payload["occurred_at"])
+            if not isinstance(workspace_id, str) or not workspace_id.strip():
+                if not isinstance(subscription_id, str) or not subscription_id.strip():
+                    raise ValueError("transaction_workspace_mapping_missing")
+                async with pool.acquire() as conn:
+                    workspace_id = await conn.fetchval(
+                        """SELECT workspace_id FROM workspace_subscriptions
+                           WHERE provider='paddle' AND provider_subscription_id=$1""", subscription_id)
+            if not isinstance(workspace_id, str) or not workspace_id.strip():
+                raise ValueError("transaction_workspace_mapping_missing")
+            details = data.get("details") if isinstance(data.get("details"), dict) else {}
+            totals = details.get("totals") if isinstance(details.get("totals"), dict) else {}
+            raw_total = totals.get("total")
+            total_minor = str(raw_total) if isinstance(raw_total, (str, int)) and not isinstance(raw_total, bool) else None
+            if total_minor is not None and (not total_minor.isdigit() or len(total_minor) > 20):
+                raise ValueError("invalid_transaction_total")
+            store = getattr(request.app.state, "billing_lifecycle_store", None)
+            if store is None:
+                raise HTTPException(status_code=503, detail="billing_service_not_configured")
+            outcome = await store.record_verified_transaction(
+                event_id=payload["event_id"], event_created_at=occurred_at,
+                transaction_id=transaction_id, workspace_id=workspace_id,
+                subscription_id=subscription_id, invoice_number=data.get("invoice_number"),
+                status="completed" if event_type == "transaction.completed" else "payment_failed",
+                currency_code=data.get("currency_code"), total_minor=total_minor)
+        except HTTPException:
+            raise
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="transaction_event_invalid") from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="billing_transaction_processing_unavailable") from None
+        return {"received": True, **outcome}
     if event_type not in {
         "subscription.created", "subscription.updated", "subscription.canceled",
         "subscription.past_due", "subscription.paused", "subscription.resumed",
