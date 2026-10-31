@@ -260,6 +260,40 @@ async def _exercise_billing_lifecycle() -> None:
             assert str(transaction_snapshot["total_minor"]) == "1200"
             assert transaction_snapshot["currency_code"] == "USD"
 
+        # A later transaction.updated event may enrich the invoice number.
+        # Replaying the original completed event must remain a duplicate even though
+        # the joined billing_transactions row now contains newer metadata.
+        enrichment_transaction_id = "txn_enrichment_" + uuid4().hex
+        original_without_invoice = {
+            **transaction_args,
+            "event_id": "evt_tx_original_" + uuid4().hex,
+            "transaction_id": enrichment_transaction_id,
+            "event_created_at": NOW + timedelta(minutes=4),
+            "invoice_number": None,
+            "status": "completed",
+        }
+        assert await store.record_verified_transaction(**original_without_invoice) == {"outcome": "applied"}
+        invoice_enrichment = {
+            **original_without_invoice,
+            "event_id": "evt_tx_enrichment_" + uuid4().hex,
+            "event_created_at": NOW + timedelta(minutes=5),
+            "invoice_number": "INV-ENRICHED",
+        }
+        assert await store.record_verified_transaction(**invoice_enrichment) == {"outcome": "applied"}
+        assert await store.record_verified_transaction(**original_without_invoice) == {"outcome": "duplicate"}
+        with pytest.raises(ValueError, match="billing_transaction_event_payload_conflict"):
+            await store.record_verified_transaction(
+                **{**original_without_invoice, "invoice_number": "INV-TAMPERED"}
+            )
+        async with pool.acquire() as conn:
+            enriched = await conn.fetchrow(
+                """SELECT invoice_number,status FROM billing_transactions
+                   WHERE provider='paddle' AND transaction_id=$1""",
+                enrichment_transaction_id,
+            )
+            assert enriched["invoice_number"] == "INV-ENRICHED"
+            assert enriched["status"] == "completed"
+
         # A transaction's settled currency and total are immutable across later events.
         for value_overrides in (
             {"currency_code": "EUR"},
