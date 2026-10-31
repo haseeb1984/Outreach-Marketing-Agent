@@ -128,6 +128,9 @@ export default function DashboardPage() {
   const [whatsappBulkPriority, setWhatsappBulkPriority] = useState("");
   const [whatsappNoteDraft, setWhatsappNoteDraft] = useState("");
   const [whatsappDeadLetterEvents, setWhatsappDeadLetterEvents] = useState<WhatsAppWebhookEvent[]>([]);
+  const [whatsappDeadLetterOffset, setWhatsappDeadLetterOffset] = useState(25);
+  const [whatsappDeadLetterHasMore, setWhatsappDeadLetterHasMore] = useState(false);
+  const [whatsappDeadLetterLoadingMore, setWhatsappDeadLetterLoadingMore] = useState(false);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
   const [unifiedReplyThreads, setUnifiedReplyThreads] = useState<UnifiedReplyThread[]>([]);
   const [selectedReplyProspectId, setSelectedReplyProspectId] = useState("");
@@ -350,12 +353,15 @@ export default function DashboardPage() {
     setWhatsappTemplates(loadedTemplates);
     const [inboxResult, webhookDeadLetterResult] = await Promise.allSettled([
       api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
-      api<{ items: WhatsAppWebhookEvent[] }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25", token),
+      api<{ items: WhatsAppWebhookEvent[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25&offset=0", token),
     ]);
     if (!isCurrentLoad()) return;
     const loadedConversations = inboxResult.status === "fulfilled" ? (inboxResult.value.items || []) : [];
     setWhatsappConversations(loadedConversations);
     setWhatsappDeadLetterEvents(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.items || []) : []);
+    setWhatsappDeadLetterOffset(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.next_offset ?? 25) : 25);
+    setWhatsappDeadLetterHasMore(webhookDeadLetterResult.status === "fulfilled" && Boolean(webhookDeadLetterResult.value.has_more));
+    setWhatsappDeadLetterLoadingMore(false);
     setSelectedWhatsAppConversation(current => {
       if (loadedConversations.some(item => item.id === current)) return current;
       setWhatsappMessages([]);
@@ -512,7 +518,7 @@ export default function DashboardPage() {
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
     setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
     setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
-    setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappSavedViews([]);
+    setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappDeadLetterOffset(25); setWhatsappDeadLetterHasMore(false); setWhatsappDeadLetterLoadingMore(false); setWhatsappSavedViews([]);
     setWhatsappFilterStatus(""); setWhatsappFilterPriority(""); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
     setWhatsappSelectedSavedView(""); setWhatsappSavedViewName(""); setWhatsappSavedViewsUnavailable(false); setWhatsappSLAUnavailable(false); setWhatsappSLAWarningMinutes(15); setWhatsappSLABreachMinutes(60);
     setWhatsappSLAPauseReason(""); setWhatsappSLASummary({ overdue: 0, at_risk: 0, within_sla: 0, paused: 0 });
@@ -1833,6 +1839,31 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
+  async function loadMoreWhatsAppDeadLetterEvents() {
+    if (!workspaceId || !csrf || !whatsappDeadLetterHasMore || whatsappDeadLetterLoadingMore) return;
+    const requestedWorkspaceId = workspaceId;
+    const requestedOffset = whatsappDeadLetterOffset;
+    const requestedToken = csrf;
+    setWhatsappDeadLetterLoadingMore(true);
+    try {
+      const result = await api<{ items: WhatsAppWebhookEvent[]; next_offset?: number | null; has_more?: boolean }>(
+        "/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&state=dead_letter&limit=25&offset=" + requestedOffset,
+        requestedToken,
+      );
+      if (requestedWorkspaceId !== workspaceId) return;
+      setWhatsappDeadLetterEvents(current => {
+        const known = new Set(current.map(event => event.id));
+        return [...current, ...(result.items || []).filter(event => !known.has(event.id))];
+      });
+      setWhatsappDeadLetterOffset(result.next_offset ?? requestedOffset + (result.items || []).length);
+      setWhatsappDeadLetterHasMore(Boolean(result.has_more));
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "More webhook events could not be loaded.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId) setWhatsappDeadLetterLoadingMore(false);
+    }
+  }
+
   async function processWhatsAppInboxEvents() {
     if (!workspaceId || !csrf || !window.confirm("Process up to 25 pending inbound Meta webhook events for this workspace's active WhatsApp accounts? This will not send any messages.")) return;
     const requestedWorkspaceId = workspaceId;
@@ -2617,6 +2648,7 @@ export default function DashboardPage() {
                 {event.processing_error_code && <p className="fine">Last error: {event.processing_error_code}</p>}
                 <button className="button secondary" type="button" disabled={busy || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={()=>retryWhatsAppDeadLetter(event)}>Requeue event</button>
               </article>)}</div>
+              {whatsappDeadLetterHasMore && <button className="button secondary" type="button" disabled={whatsappDeadLetterLoadingMore || busy} onClick={loadMoreWhatsAppDeadLetterEvents}>{whatsappDeadLetterLoadingMore ? "Loading…" : "Load more webhook events"}</button>}
             </article>}
             <div className="cards">
               <article className="card">
