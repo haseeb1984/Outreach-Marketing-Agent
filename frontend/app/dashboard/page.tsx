@@ -380,6 +380,7 @@ export default function DashboardPage() {
     if (memberResult[0].status === "rejected") failedSections.push("team members");
     if (emailAccountResult[0].status === "rejected") failedSections.push("email accounts");
     if (whatsappAccountResult[0].status === "rejected") failedSections.push("WhatsApp accounts");
+    if (templateResults.some(result => result.status === "rejected")) failedSections.push("WhatsApp message templates");
     if (inboxResult.status === "rejected") failedSections.push("WhatsApp inbox");
     if (webhookDeadLetterResult.status === "rejected") failedSections.push("webhook events");
     if (entitlementResults.some(result => result.status === "rejected")) failedSections.push("billing entitlements");
