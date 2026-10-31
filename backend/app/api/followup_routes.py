@@ -118,6 +118,41 @@ async def enroll_followup(sequence_id: UUID, payload: FollowupEnroll, request: R
     except Exception:
         raise HTTPException(status_code=503, detail="followup_enrollment_unavailable") from None
 
+@router.get("/follow-up-sequences/{sequence_id}/enrollments")
+async def list_followup_enrollments(sequence_id: UUID, request: Request,
+                                    workspace_id: str = Query(min_length=1, max_length=200),
+                                    limit: int = Query(default=100, ge=1, le=200),
+                                    offset: int = Query(default=0, ge=0, le=100000)):
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    from app.services.followup_store import FollowupStore
+    try:
+        return {"items": await FollowupStore(_pool(request)).list_enrollments(
+            workspace_id=workspace_id, sequence_id=sequence_id, limit=limit, offset=offset,
+        ), "limit": limit, "offset": offset}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="followup_enrollment_list_unavailable") from None
+
+@router.patch("/follow-up-enrollments/{enrollment_id}")
+async def update_followup_enrollment(enrollment_id: UUID, payload: SequenceStatusUpdate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    from app.services.followup_store import FollowupStore
+    try:
+        result = await FollowupStore(_pool(request)).set_enrollment_status(
+            workspace_id=payload.workspace_id, enrollment_id=enrollment_id, status=payload.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="followup_enrollment_update_unavailable") from None
+    if result is None:
+        raise HTTPException(status_code=404, detail="followup_enrollment_not_found_or_terminal")
+    return result
+
 @router.post("/follow-up-sequences/process-due")
 async def process_due_followups(request: Request, limit: int = Query(default=50, ge=1, le=100)):
     expected = (os.getenv("CRON_SECRET") or "").strip()
