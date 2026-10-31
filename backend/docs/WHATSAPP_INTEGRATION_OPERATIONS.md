@@ -102,3 +102,11 @@ The sender supports plain text inside the 24-hour customer-service window and ap
 - `assigned_to_me` is evaluated against the authenticated session user; clients cannot supply an arbitrary assignee identity for this filter.
 - Search matches the WhatsApp contact identifier, linked prospect name/company, and latest inbound message text. All conditions remain scoped to the authorized workspace.
 - The dashboard provides assignment, status, priority and text-search controls with apply and clear actions.
+
+
+## WhatsApp inbox first-response SLA
+
+- Migration `047_whatsapp_inbox_sla_policies.sql` stores workspace-scoped warning and breach thresholds. Defaults are 15 minutes (at risk) and 60 minutes (overdue).
+- Workspace viewers can read thresholds from `GET /api/v1/integrations/whatsapp/inbox/sla/policy` and team counts from `GET /api/v1/integrations/whatsapp/inbox/sla/summary`. Workspace admins update thresholds with `PUT /api/v1/integrations/whatsapp/inbox/sla/policy`.
+- Conversation list records include `sla_started_at`, `sla_first_response_at`, `sla_due_at`, and `sla_state` (`within_sla`, `at_risk`, `overdue`, `met`, `resolved`, `not_applicable`).
+- First response is measured from the latest inbound WhatsApp message to the earliest sent outbound delivery for the same workspace, WhatsApp account and prospect. This is a continuous elapsed-time operational indicator; business-hours calendars and pause rules are not modeled.
