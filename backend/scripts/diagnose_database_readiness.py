@@ -143,7 +143,8 @@ def evaluate_schema_state(
     present_indexes: Iterable[str] = REQUIRED_INDEXES,
 ) -> dict:
     """Pure evaluator, separated from DB I/O for deterministic unit tests."""
-    local = set(local_migrations)
+    local_migration_names = list(local_migrations)
+    local = set(local_migration_names)
     applied = set(applied_migrations)
     tables = set(present_tables)
     columns = set(present_columns)
@@ -151,7 +152,7 @@ def evaluate_schema_state(
     indexes = set(present_indexes)
 
     missing_local = [name for name in REQUIRED_MIGRATIONS if name not in local]
-    missing_applied = [name for name in local_migrations if name not in applied]
+    missing_applied = [name for name in local_migration_names if name not in applied]
     missing_tables = [name for name in REQUIRED_TABLES if name not in tables]
     missing_columns = [f"{table}.{column}" for table, column in REQUIRED_COLUMNS
                        if (table, column) not in columns]
@@ -188,7 +189,7 @@ async def inspect_database(database_url: str, root: Path) -> dict:
     connection = await asyncpg.connect(database_url, timeout=5, command_timeout=10)
     try:
         migrations_dir = root / "migrations"
-        local_migrations = [path.name for path in migrations_dir.glob("[0-9][0-9][0-9]_*.sql")]
+        local_migrations = sorted(path.name for path in migrations_dir.glob("[0-9][0-9][0-9]_*.sql"))
 
         ledger_exists = await connection.fetchval(
             "SELECT to_regclass('public.schema_migrations') IS NOT NULL"
