@@ -356,10 +356,37 @@ async def readiness() -> Response:
                             '048_whatsapp_inbox_sla_pause_resume.sql',
                              '049_campaign_followup_sequences.sql',
                              '050_followup_delivery_resolutions.sql',
-                             '051_billing_transactions.sql'
-                          )) = 51
+                             '051_billing_transactions.sql',
+                             '052_billing_event_fingerprints.sql',
+                             '053_billing_transaction_event_fingerprints.sql',
+                             '054_whatsapp_tenant_integrity.sql',
+                             '055_whatsapp_webhook_retry_tracking.sql',
+                             '056_billing_transaction_past_due.sql'
+                          )) = 56
                      AND to_regclass('public.outreach_followup_delivery_resolutions') IS NOT NULL
                      AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
+                     AND to_regclass('public.whatsapp_conversation_activity') IS NOT NULL
+                     AND to_regclass('public.whatsapp_inbox_saved_views') IS NOT NULL
+                     AND to_regclass('public.billing_transaction_events') IS NOT NULL
+                     AND to_regclass('public.billing_transactions') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='website_audit_reports' AND column_name='job_id')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_message_templates' AND column_name='components')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='template_parameters')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_conversations' AND column_name='sla_paused_at')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_conversation_activity' AND column_name='event_type')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='meta_whatsapp_webhook_events' AND column_name='attempts')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='billing_provider_events' AND column_name='event_fingerprint')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='billing_transaction_events' AND column_name='event_fingerprint')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='billing_transactions' AND column_name='status')
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='whatsapp_conversations_account_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='whatsapp_conversations_prospect_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='whatsapp_inbound_messages_conversation_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='whatsapp_conversation_notes_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='whatsapp_conversation_activity_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='whatsapp_delivery_status_events_account_workspace_fk' AND convalidated)
+                     AND to_regclass('public.workspace_whatsapp_accounts_id_workspace_uidx') IS NOT NULL
+                     AND to_regclass('public.crm_prospects_id_workspace_uidx') IS NOT NULL
+                     AND to_regclass('public.whatsapp_conversations_id_workspace_uidx') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversations') IS NOT NULL"""
             )
             if not schema_ready:
