@@ -114,7 +114,7 @@ The restore helper rejects the same source and target database identity and does
 
 - `GET /health` is a liveness check only; HTTP 200 does not prove PostgreSQL or migrations are ready.
 - `GET /ready` checks PostgreSQL connectivity and required schema/migration state. Treat non-200 as a release/traffic gate.
-- Run `python -m scripts.diagnose_database_readiness` from `backend/` for a read-only migration/table/column diagnostic. It must not be used as a migration command.
+- Run `python -m scripts.diagnose_database_readiness` from `backend/` for a read-only check of every local migration file and ledger entry, required tables/columns, and the WhatsApp tenant-isolation foreign keys and unique indexes. It must not be used as a migration command.
 - Run `python -m scripts.launch_preflight --require-launch-ready` from the repository root for local release-artifact/configuration checks. It intentionally reports remote deployment, provider acceptance, applied migrations, and restore rehearsal as warnings until those facts are independently verified.
 
 Configure external uptime monitoring against `/health` and `/ready` from outside the hosting network. Alert on:
