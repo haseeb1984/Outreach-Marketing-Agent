@@ -74,6 +74,24 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "036_growth_schedule_quota_status.sql",
         "037_whatsapp_outbound_template_persistence.sql",
         "038_whatsapp_outbound_queue_leases.sql",
+        "039_website_audit_job_idempotency.sql",
+        "040_email_provider_feedback.sql",
+        "041_campaign_delivery_scheduling.sql",
+        "042_whatsapp_template_components.sql",
+        "043_whatsapp_inbound_media_storage.sql",
+        "044_whatsapp_inbox_collaboration.sql",
+        "045_whatsapp_conversation_activity.sql",
+        "046_whatsapp_inbox_saved_views.sql",
+        "047_whatsapp_inbox_sla_policies.sql",
+        "048_whatsapp_inbox_sla_pause_resume.sql",
+        "049_campaign_followup_sequences.sql",
+        "050_followup_delivery_resolutions.sql",
+        "051_billing_transactions.sql",
+        "052_billing_event_fingerprints.sql",
+        "053_billing_transaction_event_fingerprints.sql",
+        "054_whatsapp_tenant_integrity.sql",
+        "055_whatsapp_webhook_retry_tracking.sql",
+        "056_billing_transaction_past_due.sql",
     ):
         assert migration in connection.schema_query
     for table in (
@@ -85,8 +103,28 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "whatsapp_outbound_deliveries",
     ):
         assert f"public.{table}" in connection.schema_query
-    for column in ("template_name", "language_code", "lease_token", "lease_expires_at"):
+    for column in (
+        "template_name", "language_code", "lease_token", "lease_expires_at",
+        "job_id", "components", "template_parameters", "sla_paused_at",
+        "event_type", "attempts", "event_fingerprint", "status",
+    ):
         assert f"column_name='{column}'" in connection.schema_query
+    for constraint in (
+        "whatsapp_conversations_account_workspace_fk",
+        "whatsapp_conversations_prospect_workspace_fk",
+        "whatsapp_inbound_messages_conversation_workspace_fk",
+        "whatsapp_conversation_notes_workspace_fk",
+        "whatsapp_conversation_activity_workspace_fk",
+        "whatsapp_delivery_status_events_account_workspace_fk",
+    ):
+        assert constraint in connection.schema_query
+    for index in (
+        "workspace_whatsapp_accounts_id_workspace_uidx",
+        "crm_prospects_id_workspace_uidx",
+        "whatsapp_conversations_id_workspace_uidx",
+    ):
+        assert index in connection.schema_query
+    assert ")) = 56" in connection.schema_query
 
 
 def test_readiness_rejects_incomplete_migration_chain():
