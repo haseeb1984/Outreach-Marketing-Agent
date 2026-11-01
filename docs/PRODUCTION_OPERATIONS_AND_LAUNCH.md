@@ -127,7 +127,16 @@ Configure external uptime monitoring against `/health` and `/ready` from outside
 
 Send alerts to an actively monitored operator channel. Keep dashboards and logs free of credentials, authorization headers, session cookies, raw provider tokens, and full database URLs. Define a named on-call owner and escalation route before launch. The repository does not itself provision an external monitoring vendor or alert destination.
 
-## 5. Smoke acceptance checklist
+## 5. GitHub Actions scheduled dispatch
+
+The repository workflow `.github/workflows/process-due-deliveries.yml` runs every five minutes and calls the authenticated API scheduler endpoints. Configure these repository Actions secrets before expecting scheduled processing:
+
+- `BACKEND_BASE_URL`: HTTPS origin of the deployed FastAPI API, for example `https://outreach-marketing-agent.vercel.app`. Use the origin only; the workflow appends the API paths.
+- `CRON_SECRET`: a high-entropy secret of at least 32 bytes. Configure the exact same value as the backend deployment's `CRON_SECRET` environment variable. Do not reuse the SMTP password, Paddle secret, Meta token, or application signing key.
+
+In GitHub, open the repository **Settings → Secrets and variables → Actions → New repository secret** and add each secret by name. Secret values are write-only and must not be committed or pasted into logs. The workflow intentionally fails before dispatch if either value is missing, the URL is not HTTPS, or the cron secret is too short. After configuration, manually run the workflow once and confirm the email, WhatsApp inbox processing and WhatsApp queue task outcomes individually. A successful workflow dispatch is not proof that any eligible work existed; inspect sanitized API/worker outcomes. WhatsApp outbound dispatch must remain disabled until its separate consent, template, quota, provider and owner-approval gates pass.
+
+## 6. Smoke acceptance checklist
 
 Run after each production release and record evidence:
 
