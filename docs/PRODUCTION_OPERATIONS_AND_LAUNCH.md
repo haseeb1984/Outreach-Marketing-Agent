@@ -154,7 +154,7 @@ Run after each production release and record evidence:
 
 A missing result is **unverified**, not a pass.
 
-## 6. Incident response and rollback
+## 7. Incident response and rollback
 
 1. Declare incident severity, assign an incident lead, and record start time and affected services/workspaces.
 2. For suspected unintended outreach, provider abuse, consent breach, or credential exposure: disable the relevant sender/credential first; stop the WhatsApp dispatch and campaign follow-up workers as appropriate. Preserve webhook and audit evidence.
@@ -165,7 +165,7 @@ A missing result is **unverified**, not a pass.
 7. Confirm readiness, worker state, queue age, provider webhook flow, backup health and customer-visible behavior before closing the incident.
 8. Publish a concise post-incident review with timeline, impact, root cause, corrective actions, owner and due date.
 
-## 7. External launch gates that source code cannot complete
+## 8. External launch gates that source code cannot complete
 
 These require authorized access to the actual production accounts and operator acceptance:
 
