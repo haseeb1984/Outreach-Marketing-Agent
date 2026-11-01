@@ -58,6 +58,14 @@ def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: 
     assert result["summary"]["total"] >= 15
 
 
+def test_preflight_requires_latest_tenant_whatsapp_and_billing_migrations():
+    assert {
+        "054_whatsapp_tenant_integrity.sql",
+        "055_whatsapp_webhook_retry_tracking.sql",
+        "056_billing_transaction_past_due.sql",
+    }.issubset(set(REQUIRED_RELEASE_MIGRATIONS))
+
+
 def test_legacy_exit_code_stays_green_for_valid_local_configuration(tmp_path: Path):
     _release_root(tmp_path)
     assert exit_code(evaluate_config(_env(), tmp_path)) == 0
