@@ -43,6 +43,9 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "051_billing_transactions.sql",
     "052_billing_event_fingerprints.sql",
     "053_billing_transaction_event_fingerprints.sql",
+    "054_whatsapp_tenant_integrity.sql",
+    "055_whatsapp_webhook_retry_tracking.sql",
+    "056_billing_transaction_past_due.sql",
 )
 
 
