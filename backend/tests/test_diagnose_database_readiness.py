@@ -1,5 +1,7 @@
 from scripts.diagnose_database_readiness import (
     REQUIRED_COLUMNS,
+    REQUIRED_CONSTRAINTS,
+    REQUIRED_INDEXES,
     REQUIRED_MIGRATIONS,
     REQUIRED_TABLES,
     evaluate_schema_state,
@@ -19,7 +21,7 @@ def test_complete_schema_snapshot_is_ready():
     result = _complete_state()
     assert result["ok"] is True
     assert result["status"] == "ready"
-    assert result["summary"] == {"passed": 4, "failed": 0, "total": 4}
+    assert result["summary"] == {"passed": 6, "failed": 0, "total": 6}
 
 
 def test_missing_migration_is_named_in_diagnostic():
@@ -78,3 +80,22 @@ def test_every_local_migration_is_checked_in_the_database_ledger():
     )
     ledger = next(check for check in result["checks"] if check["name"] == "migration_ledger")
     assert ledger["missing"] == [future_migration]
+
+def test_missing_tenant_integrity_constraint_and_index_are_reported():
+    result = evaluate_schema_state(
+        local_migrations=REQUIRED_MIGRATIONS,
+        applied_migrations=REQUIRED_MIGRATIONS,
+        present_tables=REQUIRED_TABLES,
+        present_columns=REQUIRED_COLUMNS,
+        present_constraints=REQUIRED_CONSTRAINTS[:-1],
+        present_indexes=REQUIRED_INDEXES[:-1],
+    )
+    constraint_check = next(
+        check for check in result["checks"] if check["name"] == "tenant_integrity_constraints"
+    )
+    index_check = next(
+        check for check in result["checks"] if check["name"] == "tenant_integrity_indexes"
+    )
+    assert constraint_check["missing"] == [REQUIRED_CONSTRAINTS[-1]]
+    assert index_check["missing"] == [REQUIRED_INDEXES[-1]]
+
