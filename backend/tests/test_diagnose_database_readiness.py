@@ -43,7 +43,7 @@ def test_missing_repository_migration_is_separate_from_database_state():
     )
     local = next(check for check in result["checks"] if check["name"] == "migration_files")
     ledger = next(check for check in result["checks"] if check["name"] == "migration_ledger")
-    assert local["missing"] == ["038_whatsapp_outbound_queue_leases.sql"]
+    assert local["missing"] == ["056_billing_transaction_past_due.sql"]
     assert ledger["status"] == "pass"
 
 
@@ -65,6 +65,7 @@ def test_diagnostic_does_not_report_ready_when_schema_migrations_table_is_missin
     result = evaluate_schema_state(REQUIRED_MIGRATIONS, [], tables, [])
     assert result["status"] == "not_ready"
     assert result["ok"] is False
+
 
 def test_every_local_migration_is_checked_in_the_database_ledger():
     future_migration = "057_future_migration.sql"
