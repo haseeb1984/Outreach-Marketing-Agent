@@ -56,6 +56,24 @@ REQUIRED_MIGRATIONS = (
     "036_growth_schedule_quota_status.sql",
     "037_whatsapp_outbound_template_persistence.sql",
     "038_whatsapp_outbound_queue_leases.sql",
+    "039_website_audit_job_idempotency.sql",
+    "040_email_provider_feedback.sql",
+    "041_campaign_delivery_scheduling.sql",
+    "042_whatsapp_template_components.sql",
+    "043_whatsapp_inbound_media_storage.sql",
+    "044_whatsapp_inbox_collaboration.sql",
+    "045_whatsapp_conversation_activity.sql",
+    "046_whatsapp_inbox_saved_views.sql",
+    "047_whatsapp_inbox_sla_policies.sql",
+    "048_whatsapp_inbox_sla_pause_resume.sql",
+    "049_campaign_followup_sequences.sql",
+    "050_followup_delivery_resolutions.sql",
+    "051_billing_transactions.sql",
+    "052_billing_event_fingerprints.sql",
+    "053_billing_transaction_event_fingerprints.sql",
+    "054_whatsapp_tenant_integrity.sql",
+    "055_whatsapp_webhook_retry_tracking.sql",
+    "056_billing_transaction_past_due.sql",
 )
 
 REQUIRED_TABLES = (
@@ -69,6 +87,12 @@ REQUIRED_TABLES = (
     "meta_whatsapp_webhook_events", "workspace_whatsapp_accounts", "whatsapp_conversations",
     "whatsapp_inbound_messages", "whatsapp_delivery_status_events", "whatsapp_contact_preferences",
     "whatsapp_message_templates", "whatsapp_outbound_deliveries",
+    "email_provider_events", "whatsapp_conversation_notes",
+    "whatsapp_conversation_activity", "whatsapp_inbox_saved_views",
+    "whatsapp_inbox_sla_policies", "outreach_followup_sequences",
+    "outreach_followup_steps", "outreach_followup_enrollments",
+    "outreach_followup_delivery_resolutions", "billing_transaction_events",
+    "billing_transactions",
 )
 
 REQUIRED_COLUMNS = (
@@ -78,6 +102,20 @@ REQUIRED_COLUMNS = (
     ("whatsapp_outbound_deliveries", "language_code"),
     ("whatsapp_outbound_deliveries", "lease_token"),
     ("whatsapp_outbound_deliveries", "lease_expires_at"),
+    ("website_audit_reports", "job_id"),
+    ("outreach_deliveries", "provider_status"),
+    ("outreach_deliveries", "scheduled_at"),
+    ("outreach_contact_controls", "email_suppression_reason"),
+    ("whatsapp_message_templates", "components"),
+    ("whatsapp_outbound_deliveries", "template_parameters"),
+    ("whatsapp_inbound_messages", "media_ciphertext"),
+    ("whatsapp_conversations", "inbox_status"),
+    ("whatsapp_conversations", "sla_paused_at"),
+    ("whatsapp_conversation_activity", "event_type"),
+    ("meta_whatsapp_webhook_events", "attempts"),
+    ("billing_provider_events", "event_fingerprint"),
+    ("billing_transaction_events", "event_fingerprint"),
+    ("billing_transactions", "status"),
 )
 
 
@@ -94,7 +132,7 @@ def evaluate_schema_state(
     columns = set(present_columns)
 
     missing_local = [name for name in REQUIRED_MIGRATIONS if name not in local]
-    missing_applied = [name for name in REQUIRED_MIGRATIONS if name not in applied]
+    missing_applied = [name for name in local_migrations if name not in applied]
     missing_tables = [name for name in REQUIRED_TABLES if name not in tables]
     missing_columns = [f"{table}.{column}" for table, column in REQUIRED_COLUMNS
                        if (table, column) not in columns]
@@ -132,7 +170,7 @@ async def inspect_database(database_url: str, root: Path) -> dict:
         if ledger_exists:
             rows = await connection.fetch(
                 "SELECT version FROM schema_migrations WHERE version = ANY($1::text[])",
-                list(REQUIRED_MIGRATIONS),
+                local_migrations,
             )
             applied = [row["version"] for row in rows]
 
@@ -148,13 +186,10 @@ async def inspect_database(database_url: str, root: Path) -> dict:
                FROM information_schema.columns
                WHERE table_schema='public'
                  AND (table_name, column_name) IN (
-                   ('workspace_growth_schedules','last_error_code'),
-                   ('crm_prospects','contact_phone_e164'),
-                   ('whatsapp_outbound_deliveries','template_name'),
-                   ('whatsapp_outbound_deliveries','language_code'),
-                   ('whatsapp_outbound_deliveries','lease_token'),
-                   ('whatsapp_outbound_deliveries','lease_expires_at')
-                 )"""
+                   SELECT * FROM unnest($1::text[], $2::text[])
+                 )""",
+            [table for table, _ in REQUIRED_COLUMNS],
+            [column for _, column in REQUIRED_COLUMNS],
         )
         present_columns = [(row["table_name"], row["column_name"]) for row in column_rows]
         return evaluate_schema_state(local_migrations, applied, present_tables, present_columns)
