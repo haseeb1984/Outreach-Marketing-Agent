@@ -532,7 +532,7 @@ export default function DashboardPage() {
     setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
     setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
-    setWhatsappAccounts([]); setWhatsappTemplates([]); setWhatsappConversations([]); setWhatsappMessages([]);
+    setWhatsappAccounts([]); setWhatsappTemplates({}); setWhatsappConversations([]); setWhatsappMessages([]);
     whatsappDeadLetterLoadSequenceRef.current += 1; whatsappDeadLetterLoadLockRef.current = false;
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappDeadLetterOffset(25); setWhatsappDeadLetterHasMore(false); setWhatsappDeadLetterLoadingMore(false); setWhatsappSavedViews([]);
     setWhatsappFilterStatus(""); setWhatsappFilterPriority(""); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
@@ -1928,7 +1928,7 @@ export default function DashboardPage() {
       setWhatsappSLAPauseReason("");
       await applyWhatsAppInboxFilters();
       if (requestedWorkspaceId !== workspaceId) return;
-      await loadWhatsAppConversationActivity(conversation.id);
+      await openWhatsAppConversation(conversation);
     } catch(err) {
       if (requestedSequence === whatsappSLAActionSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Could not update SLA pause state.");
     } finally { endWhatsAppInboxOperation(busyEpoch); }
@@ -2702,7 +2702,7 @@ export default function DashboardPage() {
                   </label>
                   <div className="grid grid-2">
                     <label>Saved views
-                      <select className="input" value={whatsappSelectedSavedView} onFocus={loadWhatsAppSavedViews} onChange={event=>void applyWhatsAppSavedView(event.target.value)}>
+                      <select className="input" value={whatsappSelectedSavedView} onFocus={()=>void loadWhatsAppSavedViews()} onChange={event=>void applyWhatsAppSavedView(event.target.value)}>
                         <option value="">Choose saved view</option>{whatsappSavedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}
                       </select>
                     </label>
