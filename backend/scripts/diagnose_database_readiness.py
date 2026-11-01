@@ -95,6 +95,21 @@ REQUIRED_TABLES = (
     "billing_transactions",
 )
 
+REQUIRED_CONSTRAINTS = (
+    "whatsapp_conversations_account_workspace_fk",
+    "whatsapp_conversations_prospect_workspace_fk",
+    "whatsapp_inbound_messages_conversation_workspace_fk",
+    "whatsapp_conversation_notes_workspace_fk",
+    "whatsapp_conversation_activity_workspace_fk",
+    "whatsapp_delivery_status_events_account_workspace_fk",
+)
+
+REQUIRED_INDEXES = (
+    "workspace_whatsapp_accounts_id_workspace_uidx",
+    "crm_prospects_id_workspace_uidx",
+    "whatsapp_conversations_id_workspace_uidx",
+)
+
 REQUIRED_COLUMNS = (
     ("workspace_growth_schedules", "last_error_code"),
     ("crm_prospects", "contact_phone_e164"),
@@ -124,18 +139,24 @@ def evaluate_schema_state(
     applied_migrations: Iterable[str],
     present_tables: Iterable[str],
     present_columns: Iterable[tuple[str, str]],
+    present_constraints: Iterable[str] = REQUIRED_CONSTRAINTS,
+    present_indexes: Iterable[str] = REQUIRED_INDEXES,
 ) -> dict:
     """Pure evaluator, separated from DB I/O for deterministic unit tests."""
     local = set(local_migrations)
     applied = set(applied_migrations)
     tables = set(present_tables)
     columns = set(present_columns)
+    constraints = set(present_constraints)
+    indexes = set(present_indexes)
 
     missing_local = [name for name in REQUIRED_MIGRATIONS if name not in local]
     missing_applied = [name for name in local_migrations if name not in applied]
     missing_tables = [name for name in REQUIRED_TABLES if name not in tables]
     missing_columns = [f"{table}.{column}" for table, column in REQUIRED_COLUMNS
                        if (table, column) not in columns]
+    missing_constraints = [name for name in REQUIRED_CONSTRAINTS if name not in constraints]
+    missing_indexes = [name for name in REQUIRED_INDEXES if name not in indexes]
 
     checks = [
         {"name": "migration_files", "status": "pass" if not missing_local else "fail",
@@ -146,6 +167,12 @@ def evaluate_schema_state(
          "missing": missing_tables},
         {"name": "required_columns", "status": "pass" if not missing_columns else "fail",
          "missing": missing_columns},
+        {"name": "tenant_integrity_constraints",
+         "status": "pass" if not missing_constraints else "fail",
+         "missing": missing_constraints},
+        {"name": "tenant_integrity_indexes",
+         "status": "pass" if not missing_indexes else "fail",
+         "missing": missing_indexes},
     ]
     failed = sum(check["status"] == "fail" for check in checks)
     return {
@@ -192,7 +219,24 @@ async def inspect_database(database_url: str, root: Path) -> dict:
             [column for _, column in REQUIRED_COLUMNS],
         )
         present_columns = [(row["table_name"], row["column_name"]) for row in column_rows]
-        return evaluate_schema_state(local_migrations, applied, present_tables, present_columns)
+        constraint_rows = await connection.fetch(
+            """SELECT conname FROM pg_constraint
+               WHERE connamespace = 'public'::regnamespace
+                 AND convalidated = TRUE
+                 AND conname = ANY($1::text[])""",
+            list(REQUIRED_CONSTRAINTS),
+        )
+        present_constraints = [row["conname"] for row in constraint_rows]
+        index_rows = await connection.fetch(
+            """SELECT indexname FROM pg_indexes
+               WHERE schemaname = 'public' AND indexname = ANY($1::text[])""",
+            list(REQUIRED_INDEXES),
+        )
+        present_indexes = [row["indexname"] for row in index_rows]
+        return evaluate_schema_state(
+            local_migrations, applied, present_tables, present_columns,
+            present_constraints, present_indexes,
+        )
     finally:
         await connection.close()
 
