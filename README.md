@@ -114,3 +114,7 @@ For persistent worker deployment and production-like acceptance, see [docs/GROWT
 ## Production operations
 
 The production release, health/readiness, supervised-worker, PostgreSQL backup/restore, monitoring, incident response, rollback, and external launch acceptance procedures are maintained in [Production Operations and Launch Runbook](docs/PRODUCTION_OPERATIONS_AND_LAUNCH.md). The runbook distinguishes repository artifacts from verified live production acceptance; a checked-in unit or preflight pass does not prove a service is deployed.
+
+## Project context for future development
+
+Read [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) before making changes. It contains the current source-reviewed architecture and Mermaid diagrams, end-to-end flow, feature inventory, prioritized roadmap, and a separate gap/verification register. It distinguishes implemented behavior from planned enhancements and review observations.
