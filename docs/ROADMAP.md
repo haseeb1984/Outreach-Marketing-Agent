@@ -1,36 +1,29 @@
-# Delivery and conversation roadmap
+# Outreach Marketing Agent — Roadmap
 
-Percentages represent verified implementation scope, not launch readiness. A phase is complete only after its acceptance checks pass. See [Implementation status and release blockers](IMPLEMENTATION_STATUS.md) for the current evidence-based matrix.
+> Existing implemented foundations are inventoried in FEATURES.md and must not be described as future work. This roadmap contains only remaining product work and release acceptance.
 
-## Implemented foundations (automated tests pass; external operation still needs staging verification)
+## Priority 1 — Core customer experience
+1. Complete workspace/project settings, invitations and account export/deletion UX.
+2. Finish connected-provider management and guided onboarding.
+3. Complete the end-to-end customer-facing campaign workflow, including prospect research, evidence review, draft review and delivery activity.
+4. Complete live research-provider adapters, scalable evidence capture and provenance-backed competitor/search analytics.
 
-- Authentication/session and CSRF foundations, workspace roles, rate-limiting foundations, and PostgreSQL-backed identity.
-- Workspace-scoped prospect/CRM operations, campaign records, evidence-aware draft generation, explicit human review, and contact controls.
-- Durable outbound delivery queue with workspace isolation, per-draft uniqueness, idempotency keys, explicit admin send actions, and send-time approval/suppression checks.
-- TLS-only SMTP adapter and safe integration-status diagnostics. Configuration presence is not proof that provider authentication or inbox delivery works.
-- Provider-neutral signed inbound-reply webhook with bounded payloads, validation, event deduplication, persistence, and conversation history.
-- Read-only website discovery/audit/growth-report services with domain-authorization and SSRF/egress guardrails.
-- Responsive same-origin `/app` dashboard wired to authenticated APIs: registration/sign-in, active workspace selection, prospect and campaign creation/listing, draft review, and read-only delivery activity. UI actions respect workspace roles; automated route tests and JavaScript syntax validation pass.
-- Public marketing HTML routes, canonical/robots/sitemap helpers, readiness checks, and AI-discoverability requirements.
+## Priority 2 — External delivery and monetization acceptance
+1. Complete encrypted staging SMTP acceptance, inbox-delivery evidence, ESP feedback integration and operational alerts.
+2. Complete Meta account/number/webhook acceptance without disrupting the existing WhatsApp Business App number.
+3. Keep WhatsApp outbound disabled until the dispatcher enforces account-scoped consent, opt-out, approved templates, 24-hour window, idempotency, entitlement/rate limits and provider reconciliation.
+4. Complete Paddle merchant eligibility, sandbox checkout, signed subscription lifecycle, cancellation/failed-payment handling and reconciliation.
+5. Keep paid operations fail-closed until transactional entitlement/quota enforcement is covered by concurrency tests.
 
-## Deferred: WhatsApp Business Platform
+## Priority 3 — Production readiness
+1. Complete tenant-isolation and authorization review across APIs, background workers, exports, CRM and billing.
+2. Verify Hostinger frontend, Vercel backend and supervised persistent worker deployment/environment parity.
+3. Complete PostgreSQL backup/restore drill, monitoring, incident runbook and rollback procedure.
+4. Complete accessibility/manual screen-reader, performance/load, privacy/legal and security acceptance.
+5. Add measured reporting for verified sends, delivery, replies, clicks, conversions and SEO outcomes only where trustworthy provider/first-party data exists.
 
-WhatsApp is intentionally **PENDING** while Meta account setup and same-number Coexistence eligibility are unresolved. Do not delete or deregister the existing WhatsApp Business App number. No live WhatsApp sends are enabled.
-
-Still required before connecting Meta: eligible Coexistence onboarding, provider-specific GET verification handshake, raw-body `X-Hub-Signature-256` validation, native payload normalization, workspace/phone asset mapping, durable inbound/status event persistence, idempotency, official outbound adapter, opt-in/template checks, and staging acceptance. Configuration-status output is diagnostic only.
-
-## Remaining product and launch work
-
-- **Dashboard extensions:** workspace/project settings, invitations, account export/deletion UI, connected-provider management, and a full browser-based onboarding journey remain incomplete. The current dashboard is a functional core foundation, not a claim that the entire SaaS is launch-ready.
-- **Subscriptions and paid entitlements:** billing provider selection, hosted checkout, signed/idempotent billing webhooks, server-side entitlements, atomic quotas, subscription lifecycle, and reconciliation remain incomplete.
-- **Research integrations:** live search/provider adapters, provider account connections, evidence capture at scale, and production analytics require implementation and staging verification.
-- **Email release verification:** actual encrypted staging SMTP configuration, provider-authenticated smoke test, deliverability evidence, and operational alerts have not been verified from this repository review.
-- **Production operations:** security review, tenant-isolation review across all resources, accessibility/manual screen-reader checks, performance measurements, backup/restore drill, incident runbook, and legal/policy launch review remain release gates.
-- **Analytics:** report only provider-verified sends, delivery, replies, clicks, conversions, and ROI where data exists; do not infer successful external events from local state alone.
-
-## Release rules
-
-1. Work on `main` only; no extra branches.
-2. Keep real credentials in encrypted environment/secret storage; never commit or log them.
-3. Keep external sending, real payments, and website writes gated until staging acceptance and explicit release approval.
-4. CI success verifies only the tested commit and checks; it does not prove production readiness or external provider operation.
+## Release safeguards
+- Human approval remains the default for outreach.
+- Do not enable live WhatsApp sends or real billing before explicit staging acceptance.
+- Do not claim production readiness from CI alone.
+- Do not fabricate SEO ranking, AI-crawler adoption, delivery, conversion or ROI metrics.
