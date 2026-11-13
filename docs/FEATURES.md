@@ -71,3 +71,43 @@
 - WhatsApp outbound sending is disabled.
 - Paddle paid access is not production-ready until provider lifecycle acceptance and complete transactional enforcement are verified.
 - Read-only website audits are not automatic website modifications.
+
+## Additional implemented workflows recorded in implementation history
+
+The following capabilities are also present in the repository implementation history and are included here so the feature register is not limited to the initial module summaries. Their current runtime/database acceptance must still be checked against the release matrix:
+
+### Prospect research and CRM handoff
+- Public research-result handoff to the CRM form, pre-filling title, source URL and description while company and website remain user-verified fields.
+- Workspace-scoped prospect creation and management; research evidence is retained as context rather than silently treating inferred company details as verified.
+
+### Campaign and draft lifecycle
+- Workspace-member campaign editing for name, offer, target profile and lifecycle status.
+- Campaign pause/archive enforcement at draft generation, email enqueue and send claim; paused or archived campaigns cannot create or dispatch new outreach.
+- Pending-approval draft editing with email subject/body validation, row locking and an activity event recording the edit.
+- Saved growth-review reports retain project identity and can be reopened from audit history.
+
+### Website growth engine
+- End-to-end code workflow: workspace-authorized project lookup, verified project-domain requirement, website-audit entitlement reservation, bounded crawl, persistence of evidence-led strategy, and dashboard presentation of cited actions plus a measurement plan.
+- The workflow is a read-only audit/strategy experience; it does not autonomously publish website changes.
+
+### Paddle billing experience
+- Canonical Paddle route supports plan listing, workspace-authorized hosted checkout and customer-portal session creation, alongside signed subscription webhook ingestion and server-side plan/price association.
+- Checkout and portal UI controls are present in the dashboard.
+- These are implemented integration surfaces, not proof of live merchant eligibility, configured sandbox credentials, successful payment lifecycle, production reconciliation or release-ready paid entitlements.
+
+### Platform administration and operational recovery
+- Platform-admin client inventory, feature-usage history and audit-event views with bounded server-side pagination and totals; client search is explicitly scoped to the loaded page where documented.
+- Workspace-admin WhatsApp webhook-event visibility, bounded workspace-scoped processing and dead-letter retry controls; these operate on inbound event processing only and never send outbound messages.
+- Workspace-admin recovery action can move stale ambiguous email sends to an operator-visible uncertain state without automatic retry.
+- Bounded reconciliation utility for stale WhatsApp quota reservations is present; it is an operational script and must not be treated as a continuously running worker unless separately scheduled and verified.
+
+### Deployment packaging and CI
+- Backend, frontend, migration and scheduled delivery workflow definitions are checked in.
+- A PowerShell Hostinger frontend source-packaging script is present; its existence does not prove that a ZIP has been built, uploaded or accepted on the live Hostinger environment.
+
+## Important implementation boundaries
+- WhatsApp outbound queue records eligible send intents only; no dispatcher sends WhatsApp messages.
+- Generic ESP feedback/reply endpoints require provider-native signature verification and normalization by the relay/provider integration; generic SMTP itself does not supply mailbox synchronization or delivery webhooks.
+- Website growth is read-only. No autonomous site publishing is implemented in the documented workflow.
+- Paddle checkout, portal and webhook code remain gated on actual sandbox/provider acceptance and complete transactional entitlement enforcement.
+- A source file, migration, CI pass or historical implementation note is not evidence that a live database has applied the migration or that an external provider is operating.
