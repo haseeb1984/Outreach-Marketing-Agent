@@ -1,64 +1,48 @@
 # Outreach Marketing Agent — Project Context
 
-> Source-based product map, reviewed 2026-11-13. Product is being actively evolved; progress scorecards are estimates, not test results.
+> Source-based product map reconciled against the repository implementation-status and roadmap documents on 2026-11-13. CI and code inventory are not proof of external provider or production acceptance.
 
 ## Purpose
-Multi-tenant SaaS for business-aware prospect discovery, personalized email/WhatsApp outreach, competitor intelligence and SEO/crawlability improvement, with CRM, approvals and subscription access.
+Multi-tenant SaaS for business-aware prospect discovery, CRM, personalized email outreach, WhatsApp Business inbound foundations, competitor intelligence, website crawlability/SEO growth, human approvals and subscription entitlements.
 
 ## Stack and dependencies
-- Backend: FastAPI / Python; dependencies in `backend/requirements.txt`.
-- Frontend: Next.js 15, React 19, TypeScript; `frontend/package.json`.
-- Persistence: PostgreSQL / asyncpg.
-- External provider integrations: LLM, search, email, official WhatsApp Business Platform and billing.
-- Deployment architecture includes Vercel frontend and backend/worker deployment paths; confirm current environment configuration before release.
+- Backend: FastAPI / Python; backend/requirements.txt.
+- Frontend: Next.js 15, React 19, TypeScript; frontend/package.json.
+- Persistence: PostgreSQL / asyncpg with checked-in migrations.
+- Background processing: durable delivery queue, webhook processing and website-growth worker/scheduler architecture.
+- External systems: LLM, search, SMTP/ESP, Meta WhatsApp Business Platform and Paddle; source code presence does not prove provider acceptance.
+- Intended deployment: Hostinger Business frontend, Vercel FastAPI backend, and a separately supervised persistent worker host. Verify current live configuration before release.
 
 ## Architecture
-```mermaid
-flowchart TB
- U[Business customer / agency] --> FE[Next.js workspace UI]
- FE --> API[FastAPI backend]
- API --> AUTH[Identity / tenant / entitlement checks]
- AUTH --> CRM[Workspace, CRM and project services]
- CRM --> DISC[Prospect discovery + qualification]
- CRM --> SEO[Site crawl / SEO / competitor intelligence]
- DISC --> DRAFT[Personalized outreach drafts]
- SEO --> REC[Recommendations]
- DRAFT --> APPROVE[Human approval]
- APPROVE --> SEND[Email / WhatsApp provider adapters]
- SEND --> TRACK[Delivery / replies / opt-out / CRM]
- API --> DB[(PostgreSQL)]
- API --> BILL[Subscription / entitlement verification]
-```
+- Customer uses the same-origin Next.js workspace dashboard.
+- FastAPI applies identity, session, CSRF, workspace-role and entitlement checks.
+- CRM/campaign services connect to prospect discovery, draft generation and read-only website-growth services.
+- Approved email drafts enter the durable idempotent queue and TLS SMTP adapter.
+- Signed feedback/reply events update delivery state, conversations and suppression records.
+- Meta webhook intake and bounded workers process inbound WhatsApp events into workspace-scoped conversations; outbound sending is disabled.
+- Billing and entitlement foundations persist provider events and usage; paid release remains gated on provider acceptance and transactional enforcement.
+- PostgreSQL is the shared persistence layer; background work runs through durable queue/worker infrastructure.
 
-## Flow
-1. Business configures workspace, offer, market and ideal customer profile.
-2. Discovery gathers public-source evidence and qualifies prospects.
-3. SEO/competitor workflows collect evidence and recommendations.
-4. Agent drafts personalized outreach; human reviews before sending.
-5. Approved messages go through provider adapters; replies and opt-outs update CRM.
-6. Verified subscription entitlements govern paid capabilities.
+## Main workflows
+1. Customer registers, signs in and selects an authorized workspace.
+2. Workspace users create prospects and campaigns; discovery and audit services collect public, authorized evidence.
+3. Agent generates evidence-grounded outreach drafts; users edit, approve or reject them.
+4. Approved email sends enter a durable queue with send-time approval and suppression checks.
+5. Signed inbound replies and ESP feedback update conversations, delivery state and suppression records.
+6. Meta webhook events can be verified, mapped to a workspace account and processed into inbound CRM conversations; outbound WhatsApp sending remains disabled.
+7. Website growth scans are read-only and run through durable worker infrastructure.
+8. Paddle catalog, signed event and entitlement foundations exist; paid release remains gated on merchant/provider acceptance and complete transactional enforcement.
 
 ## Feature inventory
-- Multi-tenant workspaces and CRM.
-- Prospect discovery and qualification.
-- Campaign and outreach drafting/approval.
-- Email workflow foundations and WhatsApp Business integration foundations.
-- Website crawlability/SEO and competitor intelligence.
-- PostgreSQL persistence and durable-worker architecture.
-- Billing/subscription foundations.
-- Hostinger-compatible frontend packaging and Vercel backend deployment paths.
+See FEATURES.md for the detailed register covering identity/workspaces, CRM, campaign and draft approval, email queue/SMTP/reply/feedback foundations, WhatsApp inbound/consent/queue boundaries, website growth, public discoverability, platform administration and billing/entitlement foundations.
 
-## Roadmap
-1. Complete and document production acceptance for email, Meta/WhatsApp and billing provider flows.
-2. Run tenant-isolation and authorization tests across API, background jobs, exports and CRM.
-3. Verify payment webhooks and server-side entitlement transitions.
-4. Add delivery retries, idempotency, suppression/opt-out enforcement and provider rate limits.
-5. Document migrations, backup/restore, worker deployment and operational alerts.
-6. Improve evidence provenance for prospect/competitor claims and enforce human approval defaults.
+## Roadmap and gaps
+See ROADMAP.md and GAPS.md. These are reconciled with the existing implementation-status and roadmap references so implemented capabilities are not repeated as future work. External provider acceptance and launch blockers remain separate from implemented source capabilities.
 
-## Gaps and verification register
-- Production acceptance of live SMTP, Meta/WhatsApp and billing provider flows must be confirmed in target accounts.
-- Verify database migrations and tenant isolation before broad multi-tenant release.
-- Confirm frontend/backend deployment and environment variable parity.
-- Historical readiness scorecards are not test verdicts; run current CI and live integration checks.
-- Keep research evidence, inferred fit scores and generated suggestions clearly distinguished.
+## Source-of-truth rules
+- Keep docs/IMPLEMENTATION_STATUS.md as the evidence-based implementation and release matrix.
+- Keep docs/ROADMAP.md as the canonical product/release roadmap.
+- Distinguish checked-in implementation, passing automated tests, deployed service and externally accepted provider workflow; these are different statuses.
+- Never claim outbound WhatsApp sending is enabled; it remains disabled.
+- Never claim paid billing is production-ready until Paddle lifecycle acceptance and transactional quota/entitlement enforcement are complete.
+- Do not describe read-only website audits as automatic website modifications.
