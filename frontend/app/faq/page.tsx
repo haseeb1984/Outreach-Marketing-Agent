@@ -14,7 +14,7 @@ const qa = [
   ["Can I use WhatsApp outreach?", "Only through the official WhatsApp Business Platform when account, recipient, consent and message eligibility meet applicable provider rules. Availability depends on completed onboarding and authorization."],
   ["How does billing work?", "Paddle is the selected billing provider. Workspace access must follow signed, verified server-side subscription events. The live plan catalog and checkout availability are determined by the current platform configuration."],
   ["Can the platform guarantee better search rankings?", "No. The platform can help diagnose and prioritize evidence-backed improvements, then measure observable changes over time. Rankings depend on many factors outside the service's control."],
-  ["How do I contact support or request a refund?", "The Contact page shows whether the service operator has published a verified support channel. Until one is available, use the account recovery and billing information pages. Never send passwords, session cookies, full payment-card details or provider access tokens."],
+  ["How do I contact support or request a refund?", "The Contact page shows whether the service operator has published a verified support channel. Until one is available, this website cannot receive support or refund requests. Review the Refund Policy for the current pre-launch status. Never send passwords, session cookies, full payment-card details or provider access tokens."],
 ];
 
 export default function FAQPage() {
