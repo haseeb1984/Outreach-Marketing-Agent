@@ -183,3 +183,17 @@ def test_account_export_marks_workspace_scoped_collections_when_memberships_are_
     truncated = response.json()["limits"]["truncated_collections"]
     assert "workspaces" in truncated
     assert "workspace_scoped_collections" in truncated
+
+
+def test_account_export_discloses_operational_collections_not_included(monkeypatch):
+    conn = FakeExportConnection()
+    monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
+    with TestClient(app) as client:
+        app.state.db_pool = FakePool(conn)
+        response = client.get("/api/v1/account/export")
+
+    assert response.status_code == 200
+    limits = response.json()["limits"]
+    assert "campaign_follow_up_sequences_and_enrollments" in limits["not_included_collections"]
+    assert "email_provider_feedback_events" in limits["not_included_collections"]
+    assert "not_included_collections" in limits["note"]
