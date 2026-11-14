@@ -11,6 +11,7 @@ from app.services.email_delivery import EmailDeliveryFailed, EmailDeliveryNotCon
 router = APIRouter(prefix="/api/v1/platform-admin", tags=["platform administration"])
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,79}$")
 PRICE = re.compile(r"^pri_[A-Za-z0-9_-]+$")
+REQUIRED_ENTITLEMENT_KEYS = frozenset({"ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends", "prospect_research"})
 
 class PlanInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -41,6 +42,9 @@ class PlanInput(BaseModel):
     def valid_entitlements(cls, value):
         encoded = json.dumps(value, allow_nan=False, separators=(",", ":"))
         if len(encoded) > 100_000: raise ValueError("entitlements_too_large")
+        missing = REQUIRED_ENTITLEMENT_KEYS.difference(value)
+        if missing:
+            raise ValueError("required_entitlements_missing:" + ",".join(sorted(missing)))
         for feature, rule in value.items():
             if not isinstance(feature, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", feature):
                 raise ValueError("invalid_entitlement_feature")
