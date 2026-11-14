@@ -12,6 +12,24 @@ type Plan = {
   checkout_available: boolean;
 };
 
+function parsePlans(payload: unknown): Plan[] {
+  if (!payload || typeof payload !== "object" || !("items" in payload) || !Array.isArray(payload.items)) return [];
+  return payload.items.flatMap((item): Plan[] => {
+    if (!item || typeof item !== "object") return [];
+    const value = item as Record<string, unknown>;
+    if (typeof value.id !== "string" || !value.id || typeof value.name !== "string" || !value.name) return [];
+    return [{
+      id: value.id,
+      name: value.name,
+      description: typeof value.description === "string" ? value.description : "",
+      display_price: typeof value.display_price === "string" ? value.display_price : null,
+      currency: typeof value.currency === "string" ? value.currency : null,
+      billing_interval: typeof value.billing_interval === "string" ? value.billing_interval : null,
+      checkout_available: value.checkout_available === true,
+    }];
+  });
+}
+
 export default function PricingPlanCatalog() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -23,9 +41,9 @@ export default function PricingPlanCatalog() {
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error("The plan catalog is temporarily unavailable.");
-        return data as { items?: Plan[] };
+        return parsePlans(data);
       })
-      .then(data => { if (!cancelled) setPlans(data.items || []); })
+      .then(items => { if (!cancelled) setPlans(items); })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "The plan catalog is temporarily unavailable."); })
       .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
