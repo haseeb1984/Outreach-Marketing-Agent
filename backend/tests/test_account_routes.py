@@ -194,6 +194,35 @@ def test_account_export_discloses_operational_collections_not_included(monkeypat
 
     assert response.status_code == 200
     limits = response.json()["limits"]
-    assert "campaign_follow_up_sequences_and_enrollments" in limits["not_included_collections"]
-    assert "email_provider_feedback_events" in limits["not_included_collections"]
-    assert "not_included_collections" in limits["note"]
+    assert limits["not_included_collections"] == []
+    assert "workspace_growth_schedules" in response.json()
+    assert "workspace_jobs" in response.json()
+    assert "followup_sequences" in response.json()
+    assert "followup_steps" in response.json()
+    assert "followup_enrollments" in response.json()
+    assert "followup_delivery_resolutions" in response.json()
+    assert "email_provider_events" in response.json()
+    assert "whatsapp_conversation_notes" in response.json()
+    assert "whatsapp_conversation_activity" in response.json()
+    assert "whatsapp_inbox_saved_views" in response.json()
+    assert "whatsapp_inbox_sla_policies" in response.json()
+    assert "not a complete system backup" in limits["note"]
+
+
+def test_account_export_queries_all_operational_workspace_histories(monkeypatch):
+    conn = FakeExportConnection()
+    monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
+    with TestClient(app) as client:
+        app.state.db_pool = FakePool(conn)
+        response = client.get("/api/v1/account/export")
+
+    assert response.status_code == 200
+    expected_tables = (
+        "workspace_growth_schedules", "workspace_jobs", "outreach_followup_sequences",
+        "outreach_followup_steps", "outreach_followup_enrollments",
+        "outreach_followup_delivery_resolutions", "email_provider_events",
+        "whatsapp_conversation_notes", "whatsapp_conversation_activity",
+        "whatsapp_inbox_saved_views", "whatsapp_inbox_sla_policies",
+    )
+    for table in expected_tables:
+        assert any(table in query for query in conn.fetch_queries), table
