@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PricingPage() {
-  return <><SiteHeader/><main className="wrap"><PricingPlanCatalog/></main><SiteFooter/></>;
+  return <><SiteHeader/><main id="main" className="wrap"><PricingPlanCatalog/></main><SiteFooter/></>;
 }
