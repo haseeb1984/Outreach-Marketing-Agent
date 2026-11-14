@@ -23,6 +23,15 @@ from app.services.website_audit import validate_page_url
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
+def validate_fetch_configuration() -> str | None:
+    """Fail before reserving quota when production crawler egress is not configured."""
+    if settings.environment.strip().lower() != "production":
+        return None
+    if not settings.trusted_egress_proxy_url:
+        raise ValueError("Trusted egress proxy is required in production")
+    return _validate_trusted_proxy_url(settings.trusted_egress_proxy_url)
+
+
 def _validate_trusted_proxy_url(value: str | None) -> str:
     """Validate proxy URL shape without echoing potentially sensitive configuration."""
     if not isinstance(value, str) or not value or value != value.strip():
@@ -106,11 +115,7 @@ async def fetch_html(
     requested_url = validate_page_url(url)
     owns_client = client is None
     is_production = settings.environment.strip().lower() == "production"
-    proxy_url = None
-    if is_production:
-        if not settings.trusted_egress_proxy_url:
-            raise ValueError("Trusted egress proxy is required in production")
-        proxy_url = _validate_trusted_proxy_url(settings.trusted_egress_proxy_url)
+    proxy_url = validate_fetch_configuration()
     if is_production and client is not None:
         raise ValueError("Injected HTTP clients are disabled in production")
     active_client = client or httpx.AsyncClient(
