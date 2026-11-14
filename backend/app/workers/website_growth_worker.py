@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.services.domain_authorization_store import DomainAuthorizationStore
 from app.services.persisted_website_growth_pipeline import discover_persisted_workspace_site
 from app.services.subscription_store import SubscriptionStore
+from app.services.website_fetch import validate_fetch_configuration
 from app.services.workspace_job_queue import WorkspaceJobQueue
 
 logger = logging.getLogger("outreach.worker")
@@ -124,6 +125,23 @@ async def process_claimed_job(
         if subscription_store is None:
             return await queue.fail(
                 job_id=job["id"], worker_id=worker_id, error_code="billing_service_unavailable"
+            )
+        try:
+            validate_fetch_configuration()
+        except ValueError:
+            reservation_id = job.get("payload", {}).get("usage_reservation_id")
+            if reservation_id:
+                try:
+                    await subscription_store.finish_reservation(
+                        workspace_id=str(job["workspace_id"]),
+                        reservation_id=str(reservation_id),
+                        outcome="released",
+                    )
+                except Exception:
+                    logger.warning("website growth quota release failed after egress preflight rejection")
+            return await queue.fail(
+                job_id=job["id"], worker_id=worker_id,
+                error_code="website_growth_egress_not_configured", retry=False,
             )
         try:
             reservation_id = job.get("payload", {}).get("usage_reservation_id")
