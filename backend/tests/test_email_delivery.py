@@ -19,7 +19,7 @@ def test_verification_url_requires_clean_frontend_origin(origin):
 
 
 def test_verification_url_uses_frontend_route_and_fragment_token():
-    assert verification_url("opaque-token-123") == "https://app.example/verify-email#token=opaque-token-123"
+    assert verification_url("opaque-token-123", "https://app.example") == "https://app.example/verify-email#token=opaque-token-123"
 
 
 def test_verification_url_encodes_fragment_token():
