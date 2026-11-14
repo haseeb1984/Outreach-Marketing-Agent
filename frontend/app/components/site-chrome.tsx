@@ -11,6 +11,7 @@ const legal = [
 
 export function SiteHeader() {
   return <header className="wrap topbar">
+    <a className="skip" href="#main">Skip to main content</a>
     <Link className="brand" href="/" aria-label="Outreach Marketing Agent home">
       <span className="brand-symbol" aria-hidden="true"><svg viewBox="0 0 40 40" role="img"><path d="M20 3.5 35.5 12.4v15.2L20 36.5 4.5 27.6V12.4L20 3.5Z" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round"/><path d="M11.5 26V14h7.8c3.4 0 5.2 1.6 5.2 4.2s-1.8 4.1-5.2 4.1h-7.8m12.2-1.2 7 5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M27.8 10.8 30 13l-2.2 2.2-2.2-2.2 2.2-2.2Z" fill="currentColor"/></svg></span>
       <span>Outreach Marketing Agent</span>
