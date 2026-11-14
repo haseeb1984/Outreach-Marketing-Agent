@@ -148,7 +148,7 @@ def test_password_reset_email_uses_backend_landing_route(monkeypatch):
         token="a-very-long-dummy-reset-token-123456789",
         expires_at=datetime.now(timezone.utc),
     ))
-    assert "https://app.example/api/v1/auth/reset-password?token=" in captured["body"]
+    assert "https://backend.example/api/v1/auth/reset-password?token=" in captured["body"]
 
 def test_workspace_invitation_links_to_authenticated_dashboard(monkeypatch):
     delivery = SMTPEmailDelivery(_config(frontend_public_url="https://host.example", frontend_origins=""))
