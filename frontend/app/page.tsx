@@ -45,7 +45,6 @@ function ProductPreview() {
 
 export default function HomePage() {
   return <>
-    <a className="skip" href="#main">Skip to main content</a>
     <SiteHeader/>
     <main id="main">
       <section className="hero hero-premium">
