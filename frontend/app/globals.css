@@ -46,3 +46,6 @@ html{scroll-behavior:smooth}body{background:#fff;color:var(--ink);letter-spacing
 /* About page narrative */
 .about-hero{max-width:920px;padding-bottom:3rem}.about-hero .lead{max-width:800px}.about-hero .actions{margin-top:1.6rem}.about-principles{padding:1rem 0 3.5rem}.about-principle{min-height:235px}.about-principle h3{font-size:1.15rem;letter-spacing:-.025em}.about-principle p{line-height:1.8}.about-workflow{display:grid;grid-template-columns:1fr 1.1fr;gap:1rem 3rem;align-items:start;padding:2.5rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.about-workflow h2{font-size:clamp(1.6rem,3vw,2.2rem);letter-spacing:-.045em;line-height:1.1;margin:.3rem 0}.about-workflow>p{color:var(--muted);line-height:1.85;margin:0}.about-workflow>a{grid-column:2;color:#4562e5;font-weight:750;text-decoration:none;font-size:.86rem}.about-workflow>a:hover{text-decoration:underline}
 @media(max-width:700px){.about-workflow{grid-template-columns:1fr;gap:1rem}.about-workflow>a{grid-column:1}.about-principle{min-height:0}}
+
+/* Use the full OM mark in the illustrative workspace preview, not a text-only initial. */
+.preview-brand-mark svg{display:block;width:100%;height:100%;padding:.12rem}
