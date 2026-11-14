@@ -81,7 +81,15 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
                         "truncated_collections": [],
-                        "note": "A collection listed in truncated_collections exceeded the export cap; this export is incomplete for that collection.",
+                        "not_included_collections": [
+                            "website_growth_schedules_and_job_history",
+                            "campaign_follow_up_sequences_and_enrollments",
+                            "follow_up_delivery_resolution_history",
+                            "whatsapp_conversation_notes_activity_and_saved_views",
+                            "whatsapp_sla_policies",
+                            "email_provider_feedback_events",
+                        ],
+                        "note": "A collection listed in truncated_collections exceeded the export cap. Collections listed in not_included_collections are not part of this export; this is not a complete archive of all workspace activity.",
                     },
                 }
                 if export_memberships_truncated:
