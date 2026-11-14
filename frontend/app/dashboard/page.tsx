@@ -1766,7 +1766,12 @@ export default function DashboardPage() {
   }
 
   async function queueDraft(draft: Draft) {
-    if (!workspaceId || !csrf || !window.confirm(deliveryScheduleLocal ? "Schedule this approved email draft for " + new Date(deliveryScheduleLocal).toLocaleString() + "? It will send automatically when due if the scheduler is configured." : "Queue this approved email draft for immediate eligibility? It will not send until the scheduler runs or an admin chooses Send now.")) return;
+    if (!workspaceId || !csrf) return;
+    if (!selectedEmailAccountId || !emailAccounts.some(account => account.id === selectedEmailAccountId && account.status === "active")) {
+      setError("Connect and successfully test an active SMTP account in this workspace before queuing outreach.");
+      return;
+    }
+    if (!window.confirm(deliveryScheduleLocal ? "Schedule this approved email draft for " + new Date(deliveryScheduleLocal).toLocaleString() + "? It will send automatically when due if the scheduler is configured." : "Queue this approved email draft for immediate eligibility? It will not send until the scheduler runs or an admin chooses Send now.")) return;
     const requestedWorkspaceId = workspaceId;
     setBusy(true); setError(""); setNotice("");
     try {
