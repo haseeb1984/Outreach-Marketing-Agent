@@ -23,7 +23,7 @@ const sections: [string, string][] = [
 export default function TermsPage() {
   return <>
     <SiteHeader/>
-    <main className="wrap"><section className="page-head"><p className="eyebrow">Responsible use</p><h1>Terms of Use</h1><p className="lead">Rules for using research, outreach, integrations and analytics responsibly.</p><p className="notice" role="note">Pre-launch terms draft: operator identity, governing law, refund/cancellation rules and other jurisdiction-specific clauses require review before production billing.</p></section>
+    <main id="main" className="wrap"><section className="page-head"><p className="eyebrow">Responsible use</p><h1>Terms of Use</h1><p className="lead">Rules for using research, outreach, integrations and analytics responsibly.</p><p className="notice" role="note">Pre-launch terms draft: operator identity, governing law, refund/cancellation rules and other jurisdiction-specific clauses require review before production billing.</p></section>
       <div className="cards policy-grid">{sections.map(([heading, body]) => <article className="card" key={heading}><h2>{heading}</h2><p>{body}</p></article>)}</div>
     </main>
     <SiteFooter/>
