@@ -74,6 +74,7 @@ REQUIRED_MIGRATIONS = (
     "054_whatsapp_tenant_integrity.sql",
     "055_whatsapp_webhook_retry_tracking.sql",
     "056_billing_transaction_past_due.sql",
+    "057_core_outreach_tenant_integrity.sql",
 )
 
 REQUIRED_TABLES = (
@@ -102,12 +103,19 @@ REQUIRED_CONSTRAINTS = (
     "whatsapp_conversation_notes_workspace_fk",
     "whatsapp_conversation_activity_workspace_fk",
     "whatsapp_delivery_status_events_account_workspace_fk",
+    "outreach_drafts_campaign_workspace_fk",
+    "outreach_drafts_prospect_workspace_fk",
+    "outreach_deliveries_draft_workspace_fk",
+    "outreach_deliveries_email_account_workspace_fk",
 )
 
 REQUIRED_INDEXES = (
     "workspace_whatsapp_accounts_id_workspace_uidx",
     "crm_prospects_id_workspace_uidx",
     "whatsapp_conversations_id_workspace_uidx",
+    "outreach_campaigns_id_workspace_uidx",
+    "outreach_drafts_id_workspace_uidx",
+    "workspace_email_accounts_id_workspace_uidx",
 )
 
 REQUIRED_COLUMNS = (
