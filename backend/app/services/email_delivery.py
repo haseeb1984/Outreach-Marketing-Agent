@@ -19,12 +19,20 @@ class EmailDeliveryFailed(RuntimeError):
     pass
 
 def verification_url(token: str, base_url: str | None = None) -> str:
-    base = (base_url if base_url is not None else settings.public_base_url) or ""
+    # Verification links always land on the public frontend. The token is placed
+    # in the URL fragment so it is not sent in HTTP requests, access logs, or referrers.
+    base = (base_url if base_url is not None else (
+        getattr(settings, "frontend_public_url", None)
+        or next((item.strip() for item in (getattr(settings, "frontend_origins", "") or "").split(",") if item.strip()), "")
+    )) or ""
     parts = urlsplit(base)
-    if parts.scheme.lower() != "https" or not parts.hostname or parts.username is not None or parts.password is not None or parts.query or parts.fragment:
-        raise ValueError("public_https_origin_required")
-    path = parts.path.rstrip("/") + "/api/v1/auth/verify-email"
-    return urlunsplit(("https", parts.netloc, path, urlencode({"token": token}), ""))
+    if (
+        parts.scheme.lower() != "https" or not parts.hostname
+        or parts.username is not None or parts.password is not None
+        or parts.path not in ("", "/") or parts.query or parts.fragment
+    ):
+        raise ValueError("frontend_https_origin_required")
+    return urlunsplit(("https", parts.netloc, "/verify-email", "", "token=" + token))
 
 class SMTPEmailDelivery:
     def __init__(self, configuration: Any = settings) -> None:
