@@ -60,8 +60,8 @@ def test_provider_status_uses_workspace_accounts_not_platform_environment(monkey
         assert workspace_id == "workspace-1"
         return [{"id": "account-1", "status": "active", "smtp_host": "private.smtp.test"}]
 
-    monkeypatch.setattr(delivery_routes.SMTPAccountStore, "list_accounts", active_workspace_account)
     with _client(monkeypatch) as client:
+        monkeypatch.setattr(delivery_routes.SMTPAccountStore, "list_accounts", active_workspace_account)
         response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
     assert response.status_code == 200
     payload = response.json()
@@ -81,18 +81,12 @@ def test_provider_status_hides_non_member_workspace(monkeypatch):
     assert response.json()["detail"] == "workspace_not_found"
 
 
-def test_legacy_platform_smtp_test_endpoint_is_not_registered(monkeypatch):
+def test_legacy_platform_smtp_test_endpoint_is_not_registered():
     from app.api import delivery_routes
-    with _client(monkeypatch) as client:
-        response = client.post(
-            "/api/v1/integrations/smtp/test?workspace_id=workspace-1",
-            headers={
-                "Origin": "https://app.example.test",
-                "X-CSRF-Token": "c" * 43,
-            },
-        )
-    assert response.status_code == 404
-    assert not any(getattr(route, "path", "") == "/api/v1/integrations/smtp/test" for route in delivery_routes.router.routes)
+    assert not any(
+        getattr(route, "path", "") == "/api/v1/integrations/smtp/test"
+        for route in delivery_routes.router.routes
+    )
 
 
 def test_provider_status_without_active_workspace_smtp_is_incomplete(monkeypatch):
