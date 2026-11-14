@@ -105,10 +105,12 @@ async def _exercise_email_enqueue_lifecycle() -> None:
         await seed_draft("paused-after-queue")
         await seed_draft("suppressed-after-queue")
         await seed_draft("archived-prospect-after-queue")
+        await seed_draft("draft-after-queue")
         await seed_draft("pending", status="pending_approval")
         await seed_draft("rejected", status="rejected")
         await seed_draft("paused", campaign_status="paused")
         await seed_draft("archived", campaign_status="archived")
+        await seed_draft("draft-campaign", campaign_status="draft")
         await seed_draft("suppressed")
         await connection.execute(
             """INSERT INTO outreach_contact_controls(workspace_id,prospect_id,email_suppressed,updated_by)
@@ -134,6 +136,7 @@ async def _exercise_email_enqueue_lifecycle() -> None:
             ("rejected", "draft_not_approved"),
             ("paused", "campaign_paused"),
             ("archived", "campaign_archived"),
+            ("draft-campaign", "campaign_not_active"),
             ("suppressed", "contact_suppressed"),
             ("do-not-contact", "contact_suppressed"),
             ("missing-email", "prospect_email_required"),
@@ -177,7 +180,7 @@ async def _exercise_email_enqueue_lifecycle() -> None:
 
         # Recheck mutable policy immediately before a queued delivery is claimed.
         queued_for_recheck = {}
-        for key in ("paused-after-queue", "suppressed-after-queue", "archived-prospect-after-queue"):
+        for key in ("paused-after-queue", "suppressed-after-queue", "archived-prospect-after-queue", "draft-after-queue"):
             queued_for_recheck[key] = await store.enqueue(
                 workspace_id=workspace_id, draft_id=draft_ids[key], actor_id=actor_id,
                 idempotency_key="enqueue-" + key + "-001",
@@ -197,6 +200,9 @@ async def _exercise_email_enqueue_lifecycle() -> None:
             (queued_for_recheck["archived-prospect-after-queue"]["id"],
              "UPDATE crm_prospects SET archived_at=now() WHERE id=$1",
              (prospect_ids["archived-prospect-after-queue"],), "prospect_archived"),
+            (queued_for_recheck["draft-after-queue"]["id"],
+             "UPDATE outreach_campaigns SET status='draft' WHERE id=$1",
+             (campaign_ids["draft-after-queue"],), "campaign_not_active"),
         )
         for delivery_id, mutate_sql, args, expected in checks:
             async with pool.acquire() as conn:
