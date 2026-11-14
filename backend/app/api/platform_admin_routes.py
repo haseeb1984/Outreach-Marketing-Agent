@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
+from app.services.email_delivery import EmailDeliveryFailed, EmailDeliveryNotConfigured, SMTPEmailDelivery
 
 router = APIRouter(prefix="/api/v1/platform-admin", tags=["platform administration"])
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,79}$")
@@ -68,6 +69,54 @@ async def require_platform_admin(request, write=False):
     if not isinstance(email, str) or email.strip().casefold() not in allowed:
         raise HTTPException(status_code=403, detail="platform_admin_required")
     return session
+
+
+def platform_smtp_status(configuration=settings):
+    """Expose platform SMTP readiness without returning credentials or host details."""
+    required = {
+        "SMTP_HOST": configuration.smtp_host,
+        "SMTP_USERNAME": configuration.smtp_username,
+        "SMTP_PASSWORD": configuration.smtp_password,
+        "SMTP_FROM_EMAIL": configuration.smtp_from_email,
+    }
+    missing = sorted(name for name, value in required.items() if not isinstance(value, str) or not value.strip())
+    port_valid = isinstance(configuration.smtp_port, int) and not isinstance(configuration.smtp_port, bool) and 1 <= configuration.smtp_port <= 65535
+    if not port_valid:
+        missing.append("SMTP_PORT")
+    tls_enabled = configuration.smtp_starttls is True
+    if not tls_enabled:
+        missing.append("SMTP_STARTTLS")
+    return {
+        "provider": "smtp",
+        "configuration_complete": not missing,
+        "missing_fields": missing,
+        "port_valid": port_valid,
+        "starttls_enabled": tls_enabled,
+        "connection_tested": False,
+    }
+
+
+@router.get("/smtp/status")
+async def platform_smtp_configuration_status(request: Request):
+    await require_platform_admin(request)
+    return platform_smtp_status()
+
+
+@router.post("/smtp/test")
+async def test_platform_smtp_connection(request: Request):
+    """Test only the platform-owned SMTP credentials; no email is sent."""
+    await require_platform_admin(request, write=True)
+    try:
+        await SMTPEmailDelivery().test_connection()
+    except EmailDeliveryNotConfigured as exc:
+        code = str(exc)
+        if code not in {"smtp_configuration_incomplete", "smtp_port_invalid", "smtp_tls_required"}:
+            code = "smtp_configuration_invalid"
+        raise HTTPException(status_code=400, detail=code) from None
+    except EmailDeliveryFailed:
+        raise HTTPException(status_code=502, detail="platform_smtp_connection_test_failed") from None
+    return {"status": "connected", "email_sent": False}
+
 
 def public_plan(row):
     result = dict(row)

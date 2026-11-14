@@ -31,6 +31,8 @@ export default function PlatformAdminPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [platformSmtp, setPlatformSmtp] = useState<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean } | null>(null);
+  const [smtpBusy, setSmtpBusy] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
@@ -59,6 +61,8 @@ export default function PlatformAdminPage() {
         if (!active) return;
         setCsrf(session.csrf_token);
         await refresh(session.csrf_token);
+        const smtp = await api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", session.csrf_token);
+        if (active) setPlatformSmtp(smtp);
       } catch (e) { if (active) setError(e instanceof Error ? e.message : "Admin access unavailable."); }
     })();
     return () => { active = false; };
@@ -68,6 +72,19 @@ export default function PlatformAdminPage() {
     setEditing(plan.slug);
     setForm({ slug: plan.slug, name: plan.name, description: plan.description || "", price_id: plan.price_id, display_price: plan.display_price || "", currency: plan.currency || "USD", billing_interval: plan.billing_interval || "month", entitlements: JSON.stringify(plan.entitlements, null, 2), active: plan.active });
     setError(""); setNotice("");
+  }
+
+
+  async function testPlatformSmtp() {
+    setSmtpBusy(true); setError(""); setNotice("");
+    try {
+      await api<{ status: string; email_sent: boolean }>("/api/v1/platform-admin/smtp/test", csrf, { method: "POST", body: "{}" });
+      setPlatformSmtp(current => current ? { ...current, connection_tested: true } : current);
+      setNotice("Platform SMTP connection authenticated successfully. No email was sent.");
+    } catch (e) {
+      setPlatformSmtp(current => current ? { ...current, connection_tested: false } : current);
+      setError(e instanceof Error ? e.message : "Platform SMTP connection test failed.");
+    } finally { setSmtpBusy(false); }
   }
 
   async function savePlan(event: FormEvent) {
@@ -105,6 +122,17 @@ export default function PlatformAdminPage() {
     {error && <p className="notice" role="alert">{error}</p>}{notice && <p className="notice" role="status">{notice}</p>}
     {!overview && !error && <section className="card"><p>Loading protected platform summary…</p></section>}
     {overview && <>
+
+      <section className="section" aria-labelledby="platform-smtp-title">
+        <h2 id="platform-smtp-title">Platform SMTP (system emails)</h2>
+        <p className="fine">Used only for platform account verification, password resets and operational emails. Customer outreach continues to use each workspace's own SMTP account.</p>
+        <div className="card">
+          <p>{platformSmtp ? (platformSmtp.configuration_complete ? "Configuration complete" : "Configuration incomplete") : "Checking platform SMTP configuration…"}</p>
+          {platformSmtp && !platformSmtp.configuration_complete && <p className="fine">Missing or invalid settings: {platformSmtp.missing_fields.join(", ")}</p>}
+          <p className="fine">Connection test: {platformSmtp?.connection_tested ? "Passed" : "Not tested in this session"}</p>
+          <button className="button secondary" type="button" disabled={smtpBusy || !csrf || !platformSmtp?.configuration_complete} onClick={testPlatformSmtp}>{smtpBusy ? "Testing…" : "Test Platform SMTP (no email sent)"}</button>
+        </div>
+      </section>
       <section className="section" aria-labelledby="totals-title"><h2 id="totals-title">Platform totals</h2><div className="metric-grid">
         {Object.entries(overview.totals).map(([key,value]) => <article className="card" key={key}><p className="fine">{key.replaceAll("_"," ")}</p><p className="metric-value">{value.toLocaleString()}</p></article>)}
       </div></section>

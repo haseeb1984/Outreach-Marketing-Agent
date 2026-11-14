@@ -399,63 +399,29 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
 
 
 
-def smtp_configuration_status(configuration=settings)->dict:
- """Return safe SMTP configuration diagnostics without exposing values or testing credentials."""
- required = {
-  "SMTP_HOST": configuration.smtp_host,
-  "SMTP_USERNAME": configuration.smtp_username,
-  "SMTP_PASSWORD": configuration.smtp_password,
-  "SMTP_FROM_EMAIL": configuration.smtp_from_email,
- }
- missing = sorted(name for name, value in required.items() if not isinstance(value, str) or not value.strip())
- port = configuration.smtp_port
- port_valid = isinstance(port, int) and not isinstance(port, bool) and port == 587
- tls_enabled = configuration.smtp_starttls is True
- if not port_valid:
-  missing.append("SMTP_PORT")
- if not tls_enabled:
-  missing.append("SMTP_STARTTLS")
- return {
-  "configuration_complete": not missing,
-  "missing_fields": sorted(set(missing)),
-  "port_valid": port_valid,
-  "starttls_enabled": tls_enabled,
-  "connection_tested": False,
- }
-
-
-@router.post("/integrations/smtp/test")
-async def test_smtp_connection(request: Request, workspace_id: str = Query(min_length=1, max_length=200)):
- """Explicit workspace-admin staging test; authenticates SMTP but never sends email."""
- _, _, session = await _authenticated(request)
- _check_csrf(request, session)
- await _authorize(request, workspace_id, "admin", session)
- runtime_environment = settings.environment.strip().lower()
- platform_environment = os.getenv("VERCEL_ENV", "").strip().lower()
- if runtime_environment not in {"staging", "production"} and platform_environment not in {"preview", "production"}:
-  raise HTTPException(status_code=404, detail="smtp_connection_test_unavailable")
- try:
-  await SMTPEmailDelivery().test_connection()
- except EmailDeliveryNotConfigured:
-  raise HTTPException(status_code=422, detail="smtp_configuration_incomplete") from None
- except EmailDeliveryFailed:
-  raise HTTPException(status_code=502, detail="smtp_connection_test_failed") from None
- return {"status": "authenticated", "email_sent": False,
-         "message": "SMTP TLS connection and authentication succeeded; no email was sent."}
-
-
 @router.get("/integrations/status")
 async def integrations_status(request: Request, workspace_id: str=Query(min_length=1,max_length=200)):
  """Workspace-scoped integration readiness without returning any credential material."""
  _,_,session=await _authenticated(request)
  await _authorize(request,workspace_id,"viewer",session)
- smtp=smtp_configuration_status()
+ pool = getattr(request.app.state, "db_pool", None)
+ if pool is None:
+  raise HTTPException(status_code=503, detail="email_account_service_not_configured")
+ workspace_accounts = await SMTPAccountStore(pool).list_accounts(workspace_id=workspace_id)
+ active_accounts = [account for account in workspace_accounts if account.get("status") == "active"]
+ email_status = {
+  "provider": "smtp",
+  "configuration_complete": bool(active_accounts),
+  "missing_fields": [] if active_accounts else ["ACTIVE_WORKSPACE_SMTP_ACCOUNT"],
+  "connection_tested": bool(active_accounts),
+  "active_workspace_accounts": len(active_accounts),
+  "workspace_accounts": len(workspace_accounts),
+  "note": "Only SMTP accounts configured and successfully tested in this workspace count as ready.",
+ }
  return {
   "workspace_id": workspace_id,
   "email": {
-   "provider": "smtp",
-   **smtp,
-   "note": "Configuration presence is not proof that SMTP authentication or delivery works.",
+   **email_status,
    "provider_feedback_webhook_configured": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32),
    "provider_feedback_events": ["delivered", "deferred", "bounced", "complained", "unsubscribed"],
    "signed_one_click_unsubscribe": bool(settings.outreach_webhook_secret and len(settings.outreach_webhook_secret.strip().encode("utf-8")) >= 32 and settings.public_base_url and settings.public_base_url.strip().lower().startswith("https://")),

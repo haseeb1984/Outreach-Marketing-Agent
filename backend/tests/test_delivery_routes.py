@@ -24,26 +24,11 @@ def test_ambiguous_provider_failure_is_not_reported_as_definite_failure():
  assert 'error_code="provider_delivery_failed"' not in src
 
 
-def test_smtp_configuration_status_reports_missing_names_only():
- from types import SimpleNamespace
- from app.api.delivery_routes import smtp_configuration_status
- cfg=SimpleNamespace(smtp_host="smtp.example.test",smtp_username="user",smtp_password="super-secret-never-return",
-  smtp_from_email="sender@example.test",smtp_port=587,smtp_starttls=True)
- status=smtp_configuration_status(cfg)
- assert status["configuration_complete"] is True
- assert status["missing_fields"] == []
- assert status["connection_tested"] is False
- assert "super-secret-never-return" not in repr(status)
-
-
-def test_smtp_configuration_status_fails_closed_when_tls_or_credentials_missing():
- from types import SimpleNamespace
- from app.api.delivery_routes import smtp_configuration_status
- cfg=SimpleNamespace(smtp_host="",smtp_username="user",smtp_password=None,
-  smtp_from_email="sender@example.test",smtp_port=0,smtp_starttls=False)
- status=smtp_configuration_status(cfg)
- assert status["configuration_complete"] is False
- assert {"SMTP_HOST","SMTP_PASSWORD","SMTP_PORT","SMTP_STARTTLS"}.issubset(set(status["missing_fields"]))
+def test_platform_level_smtp_status_and_test_helpers_are_not_exposed():
+ from app.api import delivery_routes
+ assert not hasattr(delivery_routes, "smtp_configuration_status")
+ assert not hasattr(delivery_routes, "test_smtp_connection")
+ assert not any(getattr(route, "path", "") == "/api/v1/integrations/smtp/test" for route in delivery_routes.router.routes)
 
 
 def test_whatsapp_configuration_status_reports_missing_names_and_never_values():
@@ -100,18 +85,6 @@ def test_send_route_checks_replayed_quota_reservation_before_claiming_delivery()
  assert guard < claim
  assert 'detail="delivery_send_key_already_used"' in src
 
-
-
-def test_smtp_connection_test_endpoint_is_staging_only_admin_and_never_sends(monkeypatch):
- from app.api import delivery_routes
- src=inspect.getsource(delivery_routes.test_smtp_connection)
- assert "_check_csrf(request, session)" in src
- assert '_authorize(request, workspace_id, "admin", session)' in src
- assert 'platform_environment = os.getenv("VERCEL_ENV", "").strip().lower()' in src
- assert 'platform_environment not in {"preview", "production"}' in src
- assert "test_connection()" in src
- assert "send_outreach_email" not in src
- assert '"email_sent": False' in src
 
 
 def test_delivery_settlement_attempts_quota_even_if_delivery_status_write_raises():
@@ -215,3 +188,29 @@ def test_concurrent_email_claim_loser_never_releases_the_winning_reservation():
  send_src=inspect.getsource(delivery_routes.send_delivery)
  assert 'str(exc) != "delivery_not_queued"' in due_src
  assert 'str(exc) != "delivery_not_queued"' in send_src
+
+def test_platform_smtp_test_is_owner_only_and_never_sends_email():
+ from app.api import platform_admin_routes
+ src=inspect.getsource(platform_admin_routes.test_platform_smtp_connection)
+ assert 'require_platform_admin(request, write=True)' in src
+ assert 'SMTPEmailDelivery().test_connection()' in src
+ assert 'send_message' not in src
+ assert 'email_sent' in src
+ assert any(getattr(route, "path", "") == "/api/v1/platform-admin/smtp/test" for route in platform_admin_routes.router.routes)
+ assert not any(getattr(route, "path", "") == "/api/v1/integrations/smtp/test" for route in platform_admin_routes.router.routes)
+
+
+def test_platform_smtp_status_never_returns_credential_values():
+ from types import SimpleNamespace
+ from app.api.platform_admin_routes import platform_smtp_status
+ cfg=SimpleNamespace(smtp_host="smtp.private.test",smtp_username="private-user",
+  smtp_password="private-password",smtp_from_email="noreply@example.test",
+  smtp_port=587,smtp_starttls=True)
+ status=platform_smtp_status(cfg)
+ assert status["configuration_complete"] is True
+ assert status["connection_tested"] is False
+ assert "private-password" not in repr(status)
+ assert "private-user" not in repr(status)
+ assert "smtp.private.test" not in repr(status)
+ assert "noreply@example.test" not in repr(status)
+
