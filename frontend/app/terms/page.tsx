@@ -3,7 +3,7 @@ import { SiteHeader, SiteFooter } from "../components/site-chrome";
 export const metadata = {
   title: "Terms of Use",
   description: "Terms for responsible use of Outreach Marketing Agent.",
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: false },
 };
 
 const sections: [string, string][] = [
