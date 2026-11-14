@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const primary = [
-  ["/features", "Features"], ["/how-it-works", "How it works"],
+  ["/product", "Product"], ["/features", "Features"], ["/how-it-works", "How it works"],
   ["/pricing", "Pricing"], ["/about", "About"], ["/faq", "FAQ"], ["/contact", "Contact"],
 ] as const;
 const legal = [
