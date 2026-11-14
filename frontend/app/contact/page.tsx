@@ -32,7 +32,7 @@ export default function ContactPage() {
           <p>For account-specific, billing or privacy requests, use the published support address. Never include passwords, session cookies, verification links, full payment-card details or provider access tokens.</p>
         </div>
         <div className="contact-support-action">
-          {validSupportEmail ? <><span className="contact-status">SUPPORT EMAIL PUBLISHED</span><a className="button" href={`mailto:${validSupportEmail}`}>Email support <span aria-hidden="true">↗</span></a><span className="contact-email">{validSupportEmail}</span></> : <><span className="contact-status contact-status-pending">SUPPORT CONTACT PENDING</span><p className="contact-pending">The service operator has not published a support email address yet.</p></>}
+          {validSupportEmail ? <><span className="contact-status">SUPPORT EMAIL PUBLISHED</span><a className="button" href={`mailto:${validSupportEmail}`}>Email support <span aria-hidden="true">↗</span></a><span className="contact-email">{validSupportEmail}</span></> : <><span className="contact-status contact-status-pending">SUPPORT CONTACT PENDING</span><p className="contact-pending">Direct email support is not configured yet. Use the self-service resources below while the service operator finalizes a verified support channel.</p></>}
         </div>
       </section>
       <section className="contact-resources">
