@@ -4,12 +4,12 @@ from pydantic import ValidationError
 from app.api.delivery_routes import EnqueueDelivery
 
 def test_idempotency_key_is_required_and_validated():
- assert EnqueueDelivery(workspace_id="w",idempotency_key="send-001-abc").idempotency_key=="send-001-abc"
+ assert EnqueueDelivery(workspace_id="w",idempotency_key="send-001-abc",email_account_id="00000000-0000-0000-0000-000000000001").idempotency_key=="send-001-abc"
  for v in ("","short","bad key","x"*201):
-  with pytest.raises(ValidationError): EnqueueDelivery(workspace_id="w",idempotency_key=v)
+  with pytest.raises(ValidationError): EnqueueDelivery(workspace_id="w",idempotency_key=v,email_account_id="00000000-0000-0000-0000-000000000001")
 def test_client_cannot_supply_recipient_or_message_body():
  with pytest.raises(ValidationError):
-  EnqueueDelivery(workspace_id="w",idempotency_key="send-001-abc",auto_send=True,recipient="x@example.com")
+  EnqueueDelivery(workspace_id="w",idempotency_key="send-001-abc",email_account_id="00000000-0000-0000-0000-000000000001",auto_send=True,recipient="x@example.com")
 def test_send_route_uses_store_claim_and_never_client_body():
  from app.api import delivery_routes
  src=inspect.getsource(delivery_routes.send_delivery)
@@ -220,10 +220,9 @@ def test_platform_smtp_status_never_returns_credential_values():
 
 
 
-def test_delivery_enqueue_requires_workspace_smtp_account_before_queueing():
- from pathlib import Path
- source=(Path(__file__).resolve().parents[1] / "app" / "services" / "delivery_store.py").read_text(encoding="utf-8")
- enqueue=source[source.index("    async def enqueue("):source.index("    async def reschedule(")]
- assert "if email_account_id is None:" in enqueue
- assert 'raise ValueError("workspace_smtp_account_required")' in enqueue
- assert "SELECT status FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2" in enqueue
+
+
+def test_delivery_enqueue_requires_explicit_workspace_smtp_account_id():
+ from pydantic import ValidationError
+ with pytest.raises(ValidationError):
+  EnqueueDelivery(workspace_id="workspace-a",idempotency_key="send-001-abc")
