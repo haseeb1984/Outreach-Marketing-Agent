@@ -87,6 +87,10 @@ class FakeSubscriptions:
         self.calls.append(("check", kwargs))
         return self.decision
 
+    async def finish_reservation(self, **kwargs):
+        self.calls.append(("finish", kwargs))
+        return True
+
 
 def test_process_claimed_job_completes_and_uses_database_workspace_identity():
     queue = FakeQueue()
@@ -276,3 +280,39 @@ def test_worker_marks_scan_rejection_non_retryable():
     assert outcome == "failed"
     assert queue.failed["error_code"] == "website_scan_rejected"
     assert queue.failed["retry"] is False
+
+
+
+def test_worker_releases_quota_when_production_egress_is_not_configured(monkeypatch):
+    queue = FakeQueue()
+    subscriptions = FakeSubscriptions()
+    monkeypatch.setattr(
+        worker_module, "validate_fetch_configuration",
+        lambda: (_ for _ in ()).throw(ValueError("proxy missing")),
+    )
+
+    outcome = asyncio.run(process_claimed_job(
+        queue=queue,
+        domain_store=object(),
+        job={
+            "id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            "workspace_id": "workspace-a",
+            "payload": {
+                "start_url": "https://example.com",
+                "business_type": "Retail",
+                "target_market": "Pakistan",
+                "usage_reservation_id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+            },
+        },
+        worker_id="worker-1",
+        subscription_store=subscriptions,
+    ))
+
+    assert outcome == "failed"
+    assert queue.failed["error_code"] == "website_growth_egress_not_configured"
+    assert queue.failed["retry"] is False
+    assert ("finish", {
+        "workspace_id": "workspace-a",
+        "reservation_id": "f4c3b4a8-10e0-4a52-9c10-0c7a7ec3b2a1",
+        "outcome": "released",
+    }) in subscriptions.calls
