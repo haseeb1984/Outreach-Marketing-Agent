@@ -21,7 +21,7 @@ const sections: [string, string][] = [
 export default function PrivacyPage() {
   return <>
     <SiteHeader/>
-    <main className="wrap"><section className="page-head"><p className="eyebrow">Privacy and data</p><h1>Privacy Policy</h1><p className="lead">A plain-language overview of the data this product is designed to handle and the safeguards that should govern it.</p><p className="notice" role="note">Pre-launch policy draft: verify the deployed data flows, providers, retention periods and applicable legal requirements before production use.</p></section>
+    <main id="main" className="wrap"><section className="page-head"><p className="eyebrow">Privacy and data</p><h1>Privacy Policy</h1><p className="lead">A plain-language overview of the data this product is designed to handle and the safeguards that should govern it.</p><p className="notice" role="note">Pre-launch policy draft: verify the deployed data flows, providers, retention periods and applicable legal requirements before production use.</p></section>
       <div className="cards policy-grid">{sections.map(([heading, body]) => <article className="card" key={heading}><h2>{heading}</h2><p>{body}</p></article>)}</div>
       <section className="section"><h2>Questions or data requests</h2><p>Use the support channel published by the service operator for privacy questions, data access requests, corrections or deletion requests. A verified support contact must be published before launch.</p><p className="fine">This page intentionally does not invent a support email address or claim that account export/deletion workflows are already available.</p></section>
     </main>
