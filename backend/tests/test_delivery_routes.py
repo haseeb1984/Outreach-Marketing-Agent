@@ -210,5 +210,7 @@ def test_platform_smtp_status_never_returns_credential_values():
  assert status["configuration_complete"] is True
  assert status["connection_tested"] is False
  assert "private-password" not in repr(status)
+ assert "private-user" not in repr(status)
  assert "smtp.private.test" not in repr(status)
+ assert "noreply@example.test" not in repr(status)
 
