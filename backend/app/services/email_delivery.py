@@ -32,7 +32,7 @@ def verification_url(token: str, base_url: str | None = None) -> str:
         or parts.path not in ("", "/") or parts.query or parts.fragment
     ):
         raise ValueError("frontend_https_origin_required")
-    return urlunsplit(("https", parts.netloc, "/verify-email", "", urlencode({"token": token})))
+    return urlunsplit(("https", parts.netloc, "/verify-email", "", "")) + "#" + urlencode({"token": token} )
 
 class SMTPEmailDelivery:
     def __init__(self, configuration: Any = settings) -> None:
