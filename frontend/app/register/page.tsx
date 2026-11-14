@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 import { FormEvent, useState } from "react";
 
 export default function RegisterPage() {
@@ -42,7 +43,7 @@ export default function RegisterPage() {
   }
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Main navigation"><Link href="/product">Product</Link><Link href="/pricing">Pricing</Link><Link href="/login">Sign in</Link></nav></header>
+    <SiteHeader/>
     <main className="wrap"><section className="form-card" aria-labelledby="register-title"><p className="eyebrow">Create an account</p><h1 id="register-title">Start with your workspace</h1><p className="fine">Use a unique password with at least 12 characters. You must verify your email before signing in.</p>
       <form onSubmit={submit}><div className="field"><label htmlFor="email">Work email</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div>
       <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></div>
@@ -50,6 +51,6 @@ export default function RegisterPage() {
       {message && <p className="notice" role={success ? "status" : "alert"} aria-live="polite">{message}</p>}
       <p className="fine">By creating an account, you acknowledge the <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy notice</Link>.</p>
       <p className="fine">Already registered? <Link href="/login">Sign in</Link></p></section></main>
-    <footer className="wrap"><Link href="/">Home</Link> · <Link href="/faq">FAQ</Link></footer>
+    <SiteFooter/>
   </>;
 }

@@ -1,0 +1,35 @@
+import Link from "next/link";
+
+const primary = [
+  ["/features", "Features"], ["/how-it-works", "How it works"],
+  ["/pricing", "Pricing"], ["/about", "About"], ["/faq", "FAQ"], ["/contact", "Contact"],
+] as const;
+const legal = [
+  ["/privacy", "Privacy"], ["/terms", "Terms"], ["/cookies", "Cookies"],
+  ["/refunds", "Refunds"], ["/disclaimer", "Disclaimer"], ["/security", "Security"],
+] as const;
+
+export function SiteHeader() {
+  return <header className="wrap topbar">
+    <Link className="brand" href="/" aria-label="Outreach Marketing Agent home">
+      <span className="brand-symbol" aria-hidden="true"><svg viewBox="0 0 40 40" role="img"><path d="M20 3.5 35 12v16L20 36.5 5 28V12L20 3.5Z" fill="none" stroke="currentColor" strokeWidth="2.5"/><path d="M12 25V15h7.5a4 4 0 0 1 0 8H12m8 0 7 5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="28" cy="12" r="2.2" fill="currentColor"/></svg></span>
+      <span>Outreach Marketing Agent</span>
+    </Link>
+    <nav className="nav" aria-label="Main navigation">
+      {primary.map(([href, label]) => <Link href={href} key={href}>{label}</Link>)}
+      <Link href="/login">Sign in</Link><Link className="button" href="/register">Get started</Link>
+    </nav>
+  </header>;
+}
+
+export function SiteFooter() {
+  return <footer className="wrap site-footer">
+    <div className="footer-columns">
+      <div><Link className="brand footer-brand" href="/"><span className="brand-symbol" aria-hidden="true">O</span> Outreach Marketing Agent</Link><p className="fine">Evidence-led prospect research, responsible outreach and practical growth insights.</p></div>
+      <div><strong>Explore</strong><nav className="footer-links">{primary.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
+      <div><strong>Policies</strong><nav className="footer-links">{legal.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
+    </div>
+    <div className="footer-bottom"><span>© {new Date().getFullYear()} Outreach Marketing Agent</span><span>Powered by <a href="https://juncsys.com" target="_blank" rel="noopener noreferrer">Junction Systems</a></span></div>
+    <p className="fine">Features and integrations are subject to availability, eligibility and verification. No ranking, delivery or revenue outcome is guaranteed.</p>
+  </footer>;
+}

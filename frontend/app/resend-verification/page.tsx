@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 import { FormEvent, useState } from "react";
 
 export default function ResendVerificationPage() {
@@ -35,11 +36,11 @@ export default function ResendVerificationPage() {
   }
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Main navigation"><Link href="/login">Sign in</Link><Link href="/register">Create account</Link></nav></header>
+    <SiteHeader/>
     <main className="wrap"><section className="form-card" aria-labelledby="verification-title"><p className="eyebrow">Email verification</p><h1 id="verification-title">Resend verification email</h1><p className="fine">Enter your registration email. We will show a generic confirmation to protect account privacy.</p>
       <form onSubmit={submit}><div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div><button className="button" type="submit" disabled={busy}>{busy ? "Requesting…" : "Resend verification"}</button></form>
       {message && <p className="notice" role={submitted ? "status" : "alert"} aria-live="polite">{message}</p>}
       <p className="fine"><Link href="/login">Return to sign in</Link></p></section></main>
-    <footer className="wrap"><Link href="/">Home</Link> · <Link href="/privacy">Privacy</Link></footer>
+    <SiteFooter/>
   </>;
 }

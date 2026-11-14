@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 import { FormEvent, useState } from "react";
 
 export default function ForgotPasswordPage() {
@@ -35,11 +36,11 @@ export default function ForgotPasswordPage() {
   }
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Main navigation"><Link href="/login">Sign in</Link><Link href="/register">Create account</Link></nav></header>
+    <SiteHeader/>
     <main className="wrap"><section className="form-card" aria-labelledby="reset-request-title"><p className="eyebrow">Account recovery</p><h1 id="reset-request-title">Reset your password</h1><p className="fine">Enter the email address used for your account. For privacy, the same confirmation is shown whether or not an eligible account exists.</p>
       <form onSubmit={submit}><div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div><button className="button" type="submit" disabled={busy}>{busy ? "Requesting…" : "Send reset link"}</button></form>
       {message && <p className="notice" role={submitted ? "status" : "alert"} aria-live="polite">{message}</p>}
       <p className="fine"><Link href="/login">Return to sign in</Link></p></section></main>
-    <footer className="wrap"><Link href="/">Home</Link> · <Link href="/privacy">Privacy</Link></footer>
+    <SiteFooter/>
   </>;
 }
