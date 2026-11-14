@@ -23,7 +23,7 @@ def test_verification_url_uses_frontend_route_and_fragment_token():
 
 
 def test_verification_url_encodes_fragment_token():
-    assert verification_url("token+/=", "https://app.example/") == "https://app.example/verify-email#token=token+/="
+    assert verification_url("token+/=", "https://app.example/") == "https://app.example/verify-email#token=token%2B%2F%3D"
 
 
 def _config(**overrides):
