@@ -20,7 +20,7 @@ export default function AboutPage() {
       <section className="page-head about-hero">
         <p className="eyebrow">About the product</p>
         <h1>Better business growth starts with better evidence.</h1>
-        <p className="lead">Outreach Marketing Agent brings prospect research, qualification, campaign preparation and website-growth analysis into one accountable workspace—so teams can make informed decisions without losing sight of the evidence.</p>
+        <p className="lead">Outreach Marketing Agent is being developed around public prospect research, qualification, reviewed campaign preparation and observable website signals—so teams can make informed decisions without losing sight of the evidence.</p>
         <div className="actions"><Link className="button" href="/features">Explore the platform <span aria-hidden="true">↗</span></Link><Link className="button secondary" href="/how-it-works">See how it works</Link></div>
       </section>
       <section className="about-principles" aria-label="Product principles">
