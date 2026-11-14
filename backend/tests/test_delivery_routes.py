@@ -214,3 +214,12 @@ def test_platform_smtp_status_never_returns_credential_values():
  assert "smtp.private.test" not in repr(status)
  assert "noreply@example.test" not in repr(status)
 
+
+
+def test_delivery_enqueue_requires_workspace_smtp_account_before_queueing():
+ from pathlib import Path
+ source=(Path(__file__).resolve().parents[1] / "app" / "services" / "delivery_store.py").read_text(encoding="utf-8")
+ enqueue=source[source.index("    async def enqueue("):source.index("    async def reschedule(")]
+ assert "if email_account_id is None:" in enqueue
+ assert 'raise ValueError("workspace_smtp_account_required")' in enqueue
+ assert "SELECT status FROM workspace_email_accounts WHERE id=$1 AND workspace_id=$2" in enqueue
