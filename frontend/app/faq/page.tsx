@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 const qa = [
-  ["Does the platform send messages automatically?", "Outreach drafts start in a pending-review state. An authorized workspace admin must approve a draft before it can be queued for email delivery. Email delivery also depends on a configured workspace SMTP account, server scheduler and usage entitlement; SMTP acceptance is not proof of inbox delivery."],
+  ["Does the platform send messages automatically?", "Outreach drafts start in a pending-review state. An authorized workspace admin must approve a draft before it can be queued for email delivery. Email sending depends on a configured workspace SMTP account and server-side usage entitlements; scheduled queue processing additionally requires a configured scheduler. SMTP acceptance is not proof of inbox delivery."],
   ["Where does prospect information come from?", "The current research endpoint searches the public web through a configured Brave Search provider. Results include source URLs and lexical query-overlap hints, are deduplicated by hostname, and are not automatically saved or verified leads. Review and qualify each result before using it."],
   ["Is a sent message the same as delivered?", "No. The email analytics count records marked sent after the SMTP adapter accepts the send operation; this does not prove inbox delivery. Clicks, attributed signups, verified sales revenue and ROI are not currently available analytics metrics."],
   ["Can I connect my own email provider?", "Yes. Workspace owners and admins can configure their own supported SMTP account in workspace settings and test its connection. Platform operational email—such as account verification and password resets—uses a separate platform-owned configuration."],
