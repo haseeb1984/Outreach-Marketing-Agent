@@ -33,7 +33,7 @@ export default function FAQPage() {
         </details>)}
       </section>
       <section className="section">
-        <div className="callout"><div><h2>Still need a hand?</h2><p>Check the product guides or reach out through the published support channel.</p></div><Link className="button" href="/contact">Contact support</Link></div>
+        <div className="callout"><div><h2>Still need a hand?</h2><p>Check the product guides and visit Contact to see whether a verified support channel is available.</p></div><Link className="button" href="/contact">Contact support</Link></div>
       </section>
     </main>
     <SiteFooter/>
