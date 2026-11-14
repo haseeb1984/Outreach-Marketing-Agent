@@ -8,7 +8,7 @@ retained so tests/operators can independently force the worker off. The default 
 
 ## Before enabling in a non-production environment
 
-1. Apply migrations through `038_whatsapp_outbound_queue_leases.sql`.
+1. Apply the reviewed WhatsApp schema migrations through `055_whatsapp_webhook_retry_tracking.sql` (including outbound queue/template/lease migrations 031, 037 and 038, plus tenant-integrity migration 054 and webhook retry tracking 055). Keep outbound disabled until the separate acceptance and approval checklist passes.
 2. Configure a valid 32-byte base64 credential encryption key and a supported Meta Graph API version.
 3. Verify the account through the account API and confirm its active status.
 4. Confirm documented opt-in for that specific account, no current opt-out, approved draft,
