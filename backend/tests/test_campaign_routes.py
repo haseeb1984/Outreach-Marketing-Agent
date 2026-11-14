@@ -88,3 +88,17 @@ def test_paused_and_archived_campaigns_are_blocked_in_draft_and_delivery_paths()
     for source in (enqueue_source, claim_source):
         assert 'campaign_status"] == "paused"' in source
         assert 'campaign_status"] == "archived"' in source
+
+
+
+def test_template_fallback_does_not_consume_ai_generation_quota():
+    import inspect
+    from app.api.campaign_routes import create_draft, regenerate_draft
+
+    create_source = inspect.getsource(create_draft)
+    regenerate_source = inspect.getsource(regenerate_draft)
+    assert 'quota_outcome = "consumed" if generated_content is not None else "released"' in create_source
+    assert 'quota_outcome = "consumed" if generated_content is not None else "released"' in regenerate_source
+    assert 'outcome=quota_outcome' in create_source
+    assert 'outcome=quota_outcome' in regenerate_source
+    assert "settings.ai_api_key and settings.ai_api_key.strip()" in regenerate_source
