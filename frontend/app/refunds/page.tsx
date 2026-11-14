@@ -3,7 +3,7 @@ import { SiteHeader, SiteFooter } from "../components/site-chrome";
 export const metadata: Metadata = { title: "Refund Policy", description: "Draft refund and cancellation information for subscriptions." };
 const sections:[string,string][]=[
 ["Subscription cancellation","If subscription billing is enabled for your account, cancellation should be managed through the billing controls made available to you or the published support channel. The effective date and access period should be shown before you confirm."],
-["Refund requests","Refund eligibility may depend on applicable law, the plan purchased, billing status, service availability and the payment provider's rules. Submit a request through the support contact published by the operator and include the relevant invoice or transaction reference—never send full card details."],
+["Refund requests","Refund eligibility may depend on applicable law, the plan purchased, billing status, service availability and the payment provider's rules. A verified support contact must be published before paid subscriptions are offered. Once available, include the relevant invoice or transaction reference in a refund request—never send full card details."],
 ["Billing errors","If you believe you were charged incorrectly, contact support promptly with the date, amount, currency and payment-provider transaction reference. Do not send card numbers, security codes or passwords."],
 ["Operator details and final terms","The operator must confirm its legal identity, support contact, refund eligibility, time limits, cancellation effects, taxes and governing jurisdiction before accepting paid subscriptions. This draft does not create a guaranteed refund period or override mandatory consumer rights."]
 ];
