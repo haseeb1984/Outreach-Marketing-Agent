@@ -14,7 +14,7 @@ const capabilities = [
 ];
 
 function ProductPreview() {
-  return <div className="product-preview" aria-label="Illustrative Outreach Marketing Agent workspace preview">
+  return <div className="product-preview" role="img" aria-label="Illustrative workspace preview with fictional sample prospect counts, draft totals and activity metrics">
     <div className="preview-sidebar">
       <div className="preview-brand"><span className="preview-brand-mark">O</span><span>outreach<span className="preview-brand-muted">.ai</span></span></div>
       <span className="preview-side-label">WORKSPACE</span>
