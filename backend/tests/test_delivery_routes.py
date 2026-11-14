@@ -31,27 +31,31 @@ def test_platform_level_smtp_status_and_test_helpers_are_not_exposed():
  assert not any(getattr(route, "path", "") == "/api/v1/integrations/smtp/test" for route in delivery_routes.router.routes)
 
 
-def test_whatsapp_configuration_status_reports_missing_names_and_never_values():
+def test_whatsapp_configuration_status_reports_only_platform_meta_prerequisites():
  from types import SimpleNamespace
  from app.api.delivery_routes import whatsapp_configuration_status
- cfg=SimpleNamespace(meta_whatsapp_access_token="private-access-token",meta_whatsapp_app_secret="private-app-secret",
-  meta_whatsapp_webhook_verify_token="private-verify-token",meta_whatsapp_phone_number_id="12345",meta_whatsapp_waba_id="67890")
+ cfg=SimpleNamespace(meta_whatsapp_access_token=None,meta_whatsapp_app_secret="private-app-secret",
+  meta_whatsapp_webhook_verify_token="private-verify-token",meta_whatsapp_phone_number_id=None,
+  meta_whatsapp_waba_id=None,meta_graph_api_version="v22.0")
  status=whatsapp_configuration_status(cfg)
  assert status["configuration_complete"] is True
  assert status["missing_fields"] == []
+ assert status["customer_credentials_are_workspace_scoped"] is True
  assert status["live_send_enabled"] is False
  assert status["webhook_signature_verification_implemented"] is True
- assert "private-access-token" not in repr(status)
  assert "private-app-secret" not in repr(status)
+ assert "private-verify-token" not in repr(status)
 
-def test_whatsapp_configuration_status_fails_closed_until_adapter_and_assets_are_ready():
+def test_whatsapp_configuration_status_fails_closed_for_missing_platform_webhook_prerequisites():
  from types import SimpleNamespace
  from app.api.delivery_routes import whatsapp_configuration_status
- cfg=SimpleNamespace(meta_whatsapp_access_token=None,meta_whatsapp_app_secret=" ",
-  meta_whatsapp_webhook_verify_token=None,meta_whatsapp_phone_number_id=None,meta_whatsapp_waba_id=None)
+ cfg=SimpleNamespace(meta_whatsapp_access_token="tenant-token",meta_whatsapp_app_secret=" ",
+  meta_whatsapp_webhook_verify_token=None,meta_whatsapp_phone_number_id="tenant-phone",
+  meta_whatsapp_waba_id="tenant-waba",meta_graph_api_version=None)
  status=whatsapp_configuration_status(cfg)
  assert status["configuration_complete"] is False
- assert len(status["missing_fields"]) == 5
+ assert set(status["missing_fields"]) == {"META_WHATSAPP_APP_SECRET","META_WHATSAPP_WEBHOOK_VERIFY_TOKEN","META_GRAPH_API_VERSION"}
+ assert status["customer_credentials_are_workspace_scoped"] is True
  assert status["live_send_enabled"] is False
  assert status["coexistence_onboarding_required"] is True
 
