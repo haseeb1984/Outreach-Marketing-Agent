@@ -186,10 +186,28 @@ def test_preflight_accepts_valid_unique_sandbox_plan_catalog(tmp_path: Path):
     assert _statuses(result)["paddle_plan_catalog_shape"] == "pass"
 
 
-def test_preflight_flags_partial_meta_configuration(tmp_path: Path):
+def test_preflight_flags_partial_platform_meta_configuration(tmp_path: Path):
     env = _env()
-    env["META_WHATSAPP_ACCESS_TOKEN"] = "configured"
+    env["META_WHATSAPP_APP_SECRET"] = "configured"
     assert _statuses(evaluate_config(env, tmp_path))["meta_whatsapp_configuration"] == "fail"
+
+
+def test_preflight_does_not_require_customer_whatsapp_credentials_globally(tmp_path: Path):
+    env = _env()
+    env["META_WHATSAPP_ACCESS_TOKEN"] = "tenant-owned-token-placeholder"
+    env["META_WHATSAPP_PHONE_NUMBER_ID"] = "123456789"
+    env["META_WHATSAPP_WABA_ID"] = "987654321"
+    assert _statuses(evaluate_config(env, tmp_path))["meta_whatsapp_configuration"] == "pass"
+
+
+def test_preflight_surfaces_missing_feature_configuration_without_echoing_secrets(tmp_path: Path):
+    result = evaluate_config(_env(), tmp_path)
+    status = _statuses(result)
+    assert status["trusted_egress_proxy"] == "warning"
+    assert status["platform_admin_allowlist"] == "warning"
+    assert status["prospect_research_provider"] == "warning"
+    assert status["ai_draft_provider"] == "warning"
+    assert "tenant-owned-token-placeholder" not in str(result)
 
 
 def test_preflight_accepts_valid_meta_graph_version(tmp_path: Path):
