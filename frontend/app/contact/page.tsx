@@ -2,10 +2,16 @@ import Link from "next/link";
 import { SiteHeader, SiteFooter } from "../components/site-chrome";
 
 export const metadata = {
-  title: "Contact support | Outreach Marketing Agent",
-  description: "Find support options for Outreach Marketing Agent account, billing, privacy, and product questions.",
+  title: "Contact support",
+  description: "Find the right support route for Outreach Marketing Agent account, billing, privacy and product questions.",
   robots: { index: false, follow: false },
 };
+
+const resources = [
+  { number: "01", title: "Account access", text: "Having trouble signing in or verifying your email? Start with the account recovery options.", href: "/forgot-password", link: "Recover account access" },
+  { number: "02", title: "Product questions", text: "Find answers about prospect research, outreach approvals, connected providers and workspace controls.", href: "/faq", link: "Browse common questions" },
+  { number: "03", title: "Billing and privacy", text: "Review plan information, billing terms and the current privacy notice before raising a request.", href: "/pricing", link: "Review plans and policies" },
+];
 
 export default function ContactPage() {
   const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim();
@@ -13,10 +19,28 @@ export default function ContactPage() {
 
   return <>
     <SiteHeader/>
-    <main className="wrap"><article className="form-card" aria-labelledby="contact-title"><p className="eyebrow">We can help</p><h1 id="contact-title">Contact support</h1><p>If you need help with access, billing, privacy, or product behavior, start with the support route configured by the site operator.</p>
-      {validSupportEmail ? <p>For support, email <a href={`mailto:${validSupportEmail}`}>{validSupportEmail}</a>. Please do not send passwords, session cookies, verification links, payment-card details, or provider access tokens.</p> : <p className="notice" role="status">A support email address has not been published on this site yet. Please use the FAQ for general questions or contact the service operator through your existing support channel.</p>}
-      <h2>Helpful links</h2><ul><li><Link href="/faq">Frequently asked questions</Link></li><li><Link href="/pricing">Plans and pricing</Link></li><li><Link href="/privacy">Privacy notice and account-data questions</Link></li><li><Link href="/terms">Terms of service</Link></li><li><Link href="/forgot-password">Recover account access</Link></li></ul>
-    </article></main>
+    <main className="wrap contact-page">
+      <section className="page-head contact-head">
+        <p className="eyebrow">Support and enquiries</p>
+        <h1>Let's get you to the right place.</h1>
+        <p className="lead">Whether it is account access, a billing question or product guidance, use the route that best fits what you need.</p>
+      </section>
+      <section className="contact-support-panel">
+        <div className="contact-support-copy">
+          <span className="contact-kicker">DIRECT SUPPORT</span>
+          <h2>Talk to the support team.</h2>
+          <p>For account-specific, billing or privacy requests, use the published support address. Never include passwords, session cookies, verification links, full payment-card details or provider access tokens.</p>
+        </div>
+        <div className="contact-support-action">
+          {validSupportEmail ? <><span className="contact-status">SUPPORT EMAIL PUBLISHED</span><a className="button" href={`mailto:${validSupportEmail}`}>Email support <span aria-hidden="true">↗</span></a><span className="contact-email">{validSupportEmail}</span></> : <><span className="contact-status contact-status-pending">SUPPORT CONTACT PENDING</span><p className="contact-pending">The service operator has not published a support email address yet.</p></>}
+        </div>
+      </section>
+      <section className="contact-resources">
+        <div className="section-intro"><div><p className="eyebrow">Quick help</p><h2>Start with the right resource.</h2></div><p>These pages can help resolve common questions without sharing sensitive account or payment information.</p></div>
+        <div className="cards">{resources.map(item=><article className="card contact-resource-card" key={item.number}><span className="contact-resource-number">{item.number}</span><h3>{item.title}</h3><p>{item.text}</p><Link href={item.href}>{item.link} <span aria-hidden="true">↗</span></Link></article>)}</div>
+      </section>
+      <p className="contact-privacy-note">For personal-data requests, review the <Link href="/privacy">Privacy Policy</Link>. A verified operator contact and the production data-handling details must be confirmed before launch.</p>
+    </main>
     <SiteFooter/>
   </>;
 }
