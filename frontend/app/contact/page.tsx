@@ -27,8 +27,8 @@ export default function ContactPage() {
       </section>
       <section className="contact-support-panel">
         <div className="contact-support-copy">
-          <span className="contact-kicker">DIRECT SUPPORT</span>
-          <h2>Talk to the support team.</h2>
+          <span className="contact-kicker">SUPPORT CHANNEL</span>
+          <h2>Find the right support route.</h2>
           <p>If a verified support address is published, use it for account-specific, billing or privacy requests. Its current availability is shown alongside this notice. Never include passwords, session cookies, verification links, full payment-card details or provider access tokens.</p>
         </div>
         <div className="contact-support-action">
