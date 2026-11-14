@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -44,7 +45,7 @@ export default function LoginPage() {
   }
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Main navigation"><Link href="/product">Product</Link><Link href="/pricing">Pricing</Link><Link href="/register">Create account</Link></nav></header>
+    <SiteHeader/>
     <main className="wrap"><section className="form-card" aria-labelledby="login-title"><p className="eyebrow">Welcome back</p><h1 id="login-title">Sign in to your workspace</h1><p className="fine">Your session is handled by the backend through a same-origin secure connection.</p>
       <form onSubmit={submit}><div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div>
       <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="current-password" maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></div>
@@ -53,6 +54,6 @@ export default function LoginPage() {
       <p className="fine"><Link href="/forgot-password">Forgot your password?</Link></p>
       <p className="fine">Need another verification email? <Link href="/resend-verification">Resend verification</Link></p>
       <p className="fine">New here? <Link href="/register">Create an account</Link></p></section></main>
-    <footer className="wrap"><Link href="/">Home</Link> · <Link href="/faq">FAQ</Link></footer>
+    <SiteFooter/>
   </>;
 }
