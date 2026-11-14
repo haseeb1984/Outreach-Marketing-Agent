@@ -25,6 +25,7 @@ class DeliveryStore:
                 if d["status"]!="approved": raise ValueError("draft_not_approved")
                 if d["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if d["campaign_status"] == "paused": raise ValueError("campaign_paused")
+                if d["campaign_status"] != "active": raise ValueError("campaign_not_active")
                 if d["channel"]!="email": raise ValueError("provider_channel_not_configured")
                 if not d["contact_email"]: raise ValueError("prospect_email_required")
                 if d["email_suppressed"] or d["stage"] == "do_not_contact": raise ValueError("contact_suppressed")
@@ -106,6 +107,7 @@ class DeliveryStore:
                 if r["draft_status"]!="approved": raise ValueError("draft_not_approved")
                 if r["campaign_status"] == "archived": raise ValueError("campaign_archived")
                 if r["campaign_status"] == "paused": raise ValueError("campaign_paused")
+                if r["campaign_status"] != "active": raise ValueError("campaign_not_active")
                 if r["followup_enrollment_status"] is not None and (r["followup_enrollment_status"] != "awaiting_approval" or r["followup_sequence_status"] != "active"):
                     raise ValueError("followup_sequence_paused")
                 if r["channel"]!="email": raise ValueError("provider_channel_not_configured")
