@@ -69,6 +69,17 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "invitations": [],
                     "email_accounts": [],
                     "website_audits": [],
+                    "workspace_growth_schedules": [],
+                    "workspace_jobs": [],
+                    "followup_sequences": [],
+                    "followup_steps": [],
+                    "followup_enrollments": [],
+                    "followup_delivery_resolutions": [],
+                    "email_provider_events": [],
+                    "whatsapp_conversation_notes": [],
+                    "whatsapp_conversation_activity": [],
+                    "whatsapp_inbox_saved_views": [],
+                    "whatsapp_inbox_sla_policies": [],
                     "whatsapp_accounts": [],
                     "whatsapp_conversations": [],
                     "whatsapp_inbound_messages": [],
@@ -81,15 +92,8 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
                         "truncated_collections": [],
-                        "not_included_collections": [
-                            "website_growth_schedules_and_job_history",
-                            "campaign_follow_up_sequences_and_enrollments",
-                            "follow_up_delivery_resolution_history",
-                            "whatsapp_conversation_notes_activity_and_saved_views",
-                            "whatsapp_sla_policies",
-                            "email_provider_feedback_events",
-                        ],
-                        "note": "A collection listed in truncated_collections exceeded the export cap. Collections listed in not_included_collections are not part of this export; this is not a complete archive of all workspace activity.",
+                        "not_included_collections": [],
+                        "note": "This export includes the listed account, CRM, campaign, delivery, billing, website-growth, follow-up, email-provider and WhatsApp workspace records, subject to the per-collection and workspace limits. Passwords, sessions, provider credentials, worker lease internals and raw payment details are excluded; this is not a complete system backup.",
                     },
                 }
                 if export_memberships_truncated:
@@ -157,6 +161,42 @@ async def export_account_data(request: Request) -> JSONResponse:
                             recipient_wa_id,status,provider_timestamp,received_at,errors
                             FROM whatsapp_delivery_status_events WHERE workspace_id=ANY($1::text[])
                             ORDER BY received_at,id LIMIT $2""",
+                        "workspace_growth_schedules": """SELECT id,workspace_id,job_type,payload,interval_hours,status,
+                            next_run_at,last_enqueued_at,last_attempted_at,last_error_code,created_by,created_at,updated_at
+                            FROM workspace_growth_schedules WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "workspace_jobs": """SELECT id,workspace_id,job_type,status,payload,result,error_code,idempotency_key,
+                            attempt_count,max_attempts,run_after,created_at,updated_at,started_at,finished_at
+                            FROM workspace_jobs WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "followup_sequences": """SELECT id,workspace_id,campaign_id,name,channel,status,created_by,created_at,updated_at
+                            FROM outreach_followup_sequences WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "followup_steps": """SELECT st.id,st.sequence_id,st.step_number,st.delay_minutes,
+                            st.subject_template,st.body_template,st.created_at
+                            FROM outreach_followup_steps st JOIN outreach_followup_sequences s ON s.id=st.sequence_id
+                            WHERE s.workspace_id=ANY($1::text[]) ORDER BY s.created_at,st.sequence_id,st.step_number LIMIT $2""",
+                        "followup_enrollments": """SELECT id,workspace_id,sequence_id,prospect_id,created_by,current_step,status,
+                            next_run_at,paused_next_run_at,pause_reason,current_draft_id,last_delivery_id,
+                            last_whatsapp_delivery_id,last_error_code,created_at,updated_at
+                            FROM outreach_followup_enrollments WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "followup_delivery_resolutions": """SELECT id,workspace_id,enrollment_id,draft_id,delivery_id,channel,
+                            outcome,provider_status,reason,evidence_url,resolved_by,resolved_at
+                            FROM outreach_followup_delivery_resolutions WHERE workspace_id=ANY($1::text[])
+                            ORDER BY resolved_at,id LIMIT $2""",
+                        "whatsapp_conversation_notes": """SELECT id,workspace_id,conversation_id,author_user_id,body,created_at,updated_at
+                            FROM whatsapp_conversation_notes WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "whatsapp_conversation_activity": """SELECT id,workspace_id,conversation_id,actor_user_id,event_type,details,created_at
+                            FROM whatsapp_conversation_activity WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "whatsapp_inbox_saved_views": """SELECT id,workspace_id,user_id,name,filters,created_at,updated_at
+                            FROM whatsapp_inbox_saved_views WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "whatsapp_inbox_sla_policies": """SELECT workspace_id,warning_minutes,breach_minutes,updated_by,created_at,updated_at
+                            FROM whatsapp_inbox_sla_policies WHERE workspace_id=ANY($1::text[])
+                            ORDER BY workspace_id LIMIT $2""",
                         "subscriptions": """SELECT workspace_id,provider,provider_customer_id,provider_subscription_id,status,
                             billing_period_starts_at,billing_period_ends_at,entitlements,provider_event_created_at,updated_at
                             FROM workspace_subscriptions WHERE workspace_id=ANY($1::text[])
@@ -174,6 +214,16 @@ async def export_account_data(request: Request) -> JSONResponse:
                         if truncated:
                             export["limits"]["truncated_collections"].append(collection)
                         export[collection] = [dict(row) for row in rows]
+                    email_event_rows = await conn.fetch(
+                        """SELECT e.id,e.provider,e.provider_event_id,e.delivery_id,e.event_type,e.occurred_at,e.received_at
+                           FROM email_provider_events e JOIN outreach_deliveries d ON d.id=e.delivery_id
+                           WHERE d.workspace_id=ANY($1::text[]) ORDER BY e.received_at,e.id LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
+                    )
+                    email_event_rows, truncated = _bounded_export_rows(email_event_rows, limit=_MAX_EXPORT_ROWS)
+                    if truncated:
+                        export["limits"]["truncated_collections"].append("email_provider_events")
+                    export["email_provider_events"] = [dict(row) for row in email_event_rows]
                     invitation_rows = await conn.fetch(
                         """SELECT workspace_id,invited_email,role,status,created_at,expires_at,accepted_at,revoked_at
                            FROM workspace_invitations WHERE workspace_id=ANY($1::text[])
