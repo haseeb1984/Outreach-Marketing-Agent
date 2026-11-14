@@ -258,9 +258,13 @@ async def create_draft(payload: DraftCreate, request: Request):
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
         )
         raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
+    # Template fallback drafts are useful, but they did not consume an AI generation.
+    # Release the reservation after persistence so the request key remains one-use
+    # without charging the workspace's AI-generation allowance.
+    quota_outcome = "consumed" if generated_content is not None else "released"
     try:
         finished = await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome=quota_outcome
         )
     except Exception:
         raise HTTPException(status_code=503, detail="draft_quota_persistence_failed") from None
@@ -401,9 +405,11 @@ async def regenerate_draft(draft_id: UUID, payload: DraftRegenerate, request: Re
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
         )
         raise HTTPException(status_code=404, detail="draft_not_found")
+    # As above, a locally generated fallback is not an AI-provider generation.
+    quota_outcome = "consumed" if generated_content is not None else "released"
     try:
         finished = await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome=quota_outcome
         )
     except Exception:
         raise HTTPException(status_code=503, detail="draft_quota_persistence_failed") from None
