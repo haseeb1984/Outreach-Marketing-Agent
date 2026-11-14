@@ -12,21 +12,25 @@ from app.services.email_delivery import (
 )
 
 
-@pytest.mark.parametrize("origin", ["http://example.com", "https://user:pass@example.com", "https://example.com/?x=1", "https://example.com/#fragment", ""])
-def test_verification_url_requires_clean_https_origin(origin):
-    with pytest.raises(ValueError, match="public_https_origin_required"):
+@pytest.mark.parametrize("origin", ["http://example.com", "https://user:pass@example.com", "https://example.com/path", "https://example.com/?x=1", "https://example.com/#fragment", ""])
+def test_verification_url_requires_clean_frontend_origin(origin):
+    with pytest.raises(ValueError, match="frontend_https_origin_required"):
         verification_url("opaque-token", origin)
 
 
-def test_verification_url_encodes_token():
-    assert verification_url("token+/=", "https://app.example/") == "https://app.example/api/v1/auth/verify-email?token=token%2B%2F%3D"
+def test_verification_url_uses_frontend_route_and_fragment_token():
+    assert verification_url("opaque-token-123") == "https://app.example/verify-email#token=opaque-token-123"
+
+
+def test_verification_url_encodes_fragment_token():
+    assert verification_url("token+/=", "https://app.example/") == "https://app.example/verify-email#token=token+/="
 
 
 def _config(**overrides):
     values = dict(
         smtp_host="smtp.example", smtp_username="user", smtp_password="dummy-secret",
         smtp_from_email="no-reply@example.com", smtp_port=587, smtp_starttls=True,
-        public_base_url="https://app.example", smtp_from_name="Test",
+        public_base_url="https://backend.example", frontend_public_url="https://app.example", frontend_origins="", smtp_from_name="Test",
     )
     values.update(overrides)
     return SimpleNamespace(**values)
