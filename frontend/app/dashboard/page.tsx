@@ -2238,20 +2238,6 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setIntegrationBusy(false); }
   }
 
-  async function testSmtpConnection() {
-    if (!workspaceId || !csrf || !window.confirm("Test the configured SMTP TLS connection and authentication? No email will be sent.")) return;
-    const requestedWorkspaceId = workspaceId;
-    setIntegrationBusy(true); setError(""); setNotice("");
-    try {
-      await api("/api/v1/integrations/smtp/test?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "POST" });
-      if (requestedWorkspaceId !== workspaceId) return;
-      setNotice("SMTP TLS connection and authentication succeeded. No email was sent.");
-      await refreshIntegrationStatus();
-    } catch (err) {
-      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "SMTP connection test failed.");
-    } finally { if (requestedWorkspaceId === workspaceId) setIntegrationBusy(false); }
-  }
-
   async function enqueueGrowthScanNow() {
     if (!workspaceId || !csrf) return;
     const requestedWorkspaceId = workspaceId;
@@ -2643,10 +2629,10 @@ export default function DashboardPage() {
             <p className="fine">Workspace SMTP accounts are encrypted at rest, tested before activation, and selected for queued outreach. Campaigns require an active SMTP account configured in this workspace; platform SMTP is reserved for transactional messages such as verification and password reset. Use Test connection and Send test email here to validate your own account. Provider diagnostics never return credentials.</p>
             <div className="actions">
               <button className="button secondary" type="button" onClick={refreshIntegrationStatus} disabled={integrationBusy || !workspaceId || !csrf}>Refresh status</button>
-              <button className="button" type="button" onClick={testSmtpConnection} disabled={integrationBusy || !workspaceId || !csrf || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Test SMTP (no email sent)</button>
+              
             </div>
             {integrationStatus ? <div className="cards">
-              <div className="metric"><strong>{integrationStatus.email?.configuration_complete ? "Configured" : "Incomplete"}</strong><span>Email / SMTP</span><p className="fine">{integrationStatus.email?.configuration_complete ? "Required settings are present; use the test button to verify TLS/authentication." : "Missing: " + (integrationStatus.email?.missing_fields || []).join(", ")}</p></div>
+              <div className="metric"><strong>{integrationStatus.email?.configuration_complete ? "Configured" : "Incomplete"}</strong><span>Email / SMTP</span><p className="fine">{integrationStatus.email?.configuration_complete ? "An active workspace SMTP account has passed its connection test." : "Connect and test a workspace SMTP account above. Missing: " + (integrationStatus.email?.missing_fields || []).join(", ")}</p></div>
               <div className="metric"><strong>{integrationStatus.whatsapp?.live_send_enabled ? "Enabled" : "Disabled"}</strong><span>Official WhatsApp Business</span><p className="fine">{integrationStatus.whatsapp?.reason || "Configure Meta app credentials, verify a workspace account, and complete Meta's external onboarding."} {integrationStatus.whatsapp?.active_workspace_accounts ?? 0} active account(s); dispatch {integrationStatus.whatsapp?.dispatch_feature_enabled ? "enabled" : "disabled"}.</p></div>
               <div className="metric"><strong>{integrationStatus.ai_outreach?.configured ? "AI provider configured" : "Template fallback"}</strong><span>AI outreach generation</span><p className="fine">{integrationStatus.ai_outreach?.configured ? "Personalized copy uses the configured " + (integrationStatus.ai_outreach.model || "AI model") + " provider, then enters mandatory human review." : "Configure AI_API_KEY to enable provider-generated copy. Evidence-grounded templates remain available; every draft still requires human approval."}</p></div>
             </div> : <p className="fine">Provider status has not been loaded for this workspace.</p>}
