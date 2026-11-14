@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeader, SiteFooter } from "../components/site-chrome";
-export const metadata: Metadata = { title: "Security principles", description: "Current application safeguards, operational limitations and responsible account practices." };
+export const metadata: Metadata = { title: "Security principles", description: "Current application safeguards, operational limitations and responsible account practices." , robots: { index: false, follow: false }};
 const sections:[string,string][]=[
 ["Workspace isolation and authorization","Protected workspace actions are intended to be authorized on the server against the signed-in user and workspace role. Never assume a hidden button or client-side check is an access control."],
 ["Sessions and request protection","The application is designed to use secure session handling, request-origin checks and CSRF protection for state-changing actions. Keep your browser and account credentials protected."],
