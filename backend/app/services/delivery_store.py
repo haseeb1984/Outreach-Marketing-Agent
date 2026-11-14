@@ -8,6 +8,10 @@ class DeliveryStore:
     def __init__(self,pool: Any)->None: self._pool=pool
 
     async def enqueue(self,*,workspace_id: str,draft_id: UUID,actor_id: UUID|str,idempotency_key: str,email_account_id: UUID|None=None,scheduled_at: datetime|None=None)->dict[str,Any]:
+        # Sending always requires an explicitly selected, active workspace-owned SMTP account.
+        # Reject at queue time instead of creating a delivery that can only fail in the worker.
+        if email_account_id is None:
+            raise ValueError("workspace_smtp_account_required")
         if scheduled_at is not None:
             if scheduled_at.tzinfo is None or scheduled_at.utcoffset() is None:
                 raise ValueError("scheduled_at_must_include_timezone")
