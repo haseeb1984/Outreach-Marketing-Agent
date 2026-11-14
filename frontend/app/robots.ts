@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
+  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || "https://outreach.juncsys.com";
   let sitemap: string | undefined;
   if (configured) {
     try {
