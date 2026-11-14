@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 import { useEffect, useState } from "react";
 
 type VerificationState = "checking" | "success" | "invalid" | "unavailable";
@@ -63,10 +64,7 @@ export default function VerifyEmailPage() {
   }, []);
 
   return <>
-    <header className="wrap topbar">
-      <Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link>
-      <nav className="nav" aria-label="Main navigation"><Link href="/login">Sign in</Link><Link href="/register">Create account</Link></nav>
-    </header>
+    <SiteHeader/>
     <main className="wrap">
       <section className="form-card" aria-labelledby="verification-title">
         <p className="eyebrow">Email verification</p>
@@ -75,6 +73,6 @@ export default function VerifyEmailPage() {
         {state === "success" ? <Link className="button" href="/login">Continue to sign in</Link> : state !== "checking" ? <p className="fine"><Link href="/resend-verification">Request a new verification email</Link></p> : null}
       </section>
     </main>
-    <footer className="wrap"><Link href="/">Home</Link> · <Link href="/privacy">Privacy</Link></footer>
+    <SiteFooter/>
   </>;
 }
