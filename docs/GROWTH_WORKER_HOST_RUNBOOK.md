@@ -21,7 +21,7 @@ The service uses a fixed working directory and virtualenv path. If your host lay
 1. Copy `ops/systemd/outreach-growth-worker.service` to `/etc/systemd/system/outreach-growth-worker.service`.
 2. Confirm `/etc/outreach-marketing-agent/worker.env` exists with restrictive permissions and the worker can read it.
 3. From the release's `backend/` directory, install dependencies and apply reviewed migrations using the project's migration process. Do not auto-run migrations from worker startup.
-4. Verify the deployed schema includes migrations through `036_growth_schedule_quota_status.sql` and the worker account can access the required tables.
+4. Verify the deployed schema includes migrations through `039_website_audit_job_idempotency.sql` and the worker account can access the required tables. Migration 039 adds the audit-report job linkage used by the current worker; migrations 035 and 036 establish the growth schedules and quota status.
 5. Run a one-shot smoke test as the service account: `sudo -u oma-worker /opt/outreach-marketing-agent/venv/bin/python /opt/outreach-marketing-agent/backend/scripts/run_workspace_growth_worker.py --once`.
 6. Install and start the service:
    ```sh
