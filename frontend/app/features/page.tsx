@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Features", description: "Explore pub
 const features = [
 ["Public-web prospect research","Search the configured public-web provider for relevant pages. Results include source URLs and lexical relevance hints, are deduplicated by hostname, and are not automatically saved as qualified leads."],
 ["Personalized outreach drafts","Prepare email drafts from saved campaign and prospect facts. Drafts remain pending until an authorized workspace admin reviews and approves them."],
-["Email campaign operations","Queue or explicitly send approved email through a customer's own workspace SMTP account, when the account, scheduler, database and usage entitlements are configured."],
+["Email campaign operations","Queue or explicitly send approved email through a customer's own workspace SMTP account, when the account, backend configuration and usage entitlements are ready. Scheduled queue processing additionally requires a configured scheduler."],
 ["WhatsApp controls","Workspace account, consent and template eligibility controls are implemented, but outbound WhatsApp dispatch is disabled. Queueing a draft does not send a message."],
 ["Workspace and account controls","Prospect, campaign, draft and provider operations use server-side workspace membership and role authorization. Workspace SMTP is separate from platform operational email."],
 ["Evidence-led activity reporting","Review persisted activity and distinguish SMTP-accepted sends from inbox delivery. Opens, clicks, attributed signups, verified revenue and ROI are not currently available metrics."]
