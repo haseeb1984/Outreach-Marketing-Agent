@@ -4,7 +4,7 @@ The API stores one-off and recurring website-growth scans in PostgreSQL. A separ
 
 ## Run locally or on a dedicated worker host
 
-From `backend/`, install `requirements.txt`, configure the same trusted `DATABASE_URL` and required encryption/secret settings as the backend, and apply migrations through `036_growth_schedule_quota_status.sql`.
+From `backend/`, install `requirements.txt`, configure the same trusted `DATABASE_URL` and required encryption/secret settings as the backend, and apply migrations through `039_website_audit_job_idempotency.sql` for the current durable growth worker. The scheduler also requires migrations 035 and 036.
 
 Run one scheduling/processing pass:
 
