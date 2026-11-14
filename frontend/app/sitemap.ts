@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 const publicPaths = [
   "/", "/product", "/features", "/how-it-works", "/pricing", "/about",
-  "/faq", "/privacy", "/terms", "/cookies", "/refunds", "/disclaimer", "/security",
+  "/faq",
 ] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
