@@ -16,7 +16,7 @@ const principles = [
 export default function AboutPage() {
   return <>
     <SiteHeader/>
-    <main className="wrap about-page">
+    <main id="main" className="wrap about-page">
       <section className="page-head about-hero">
         <p className="eyebrow">About the product</p>
         <h1>Better business growth starts with better evidence.</h1>
