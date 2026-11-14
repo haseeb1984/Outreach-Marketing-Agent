@@ -33,7 +33,7 @@ def test_missing_migration_is_named_in_diagnostic():
     )
     assert result["ok"] is False
     ledger = next(check for check in result["checks"] if check["name"] == "migration_ledger")
-    assert ledger["missing"] == ["056_billing_transaction_past_due.sql"]
+    assert ledger["missing"] == ["057_core_outreach_tenant_integrity.sql"]
 
 
 def test_missing_repository_migration_is_separate_from_database_state():
@@ -99,3 +99,22 @@ def test_missing_tenant_integrity_constraint_and_index_are_reported():
     assert constraint_check["missing"] == [REQUIRED_CONSTRAINTS[-1]]
     assert index_check["missing"] == [REQUIRED_INDEXES[-1]]
 
+
+
+def test_core_outreach_tenant_integrity_constraints_and_indexes_are_required():
+    result = evaluate_schema_state(
+        local_migrations=REQUIRED_MIGRATIONS,
+        applied_migrations=REQUIRED_MIGRATIONS,
+        present_tables=REQUIRED_TABLES,
+        present_columns=REQUIRED_COLUMNS,
+        present_constraints=REQUIRED_CONSTRAINTS[:6],
+        present_indexes=REQUIRED_INDEXES[:3],
+    )
+    constraint_check = next(
+        check for check in result["checks"] if check["name"] == "tenant_integrity_constraints"
+    )
+    index_check = next(
+        check for check in result["checks"] if check["name"] == "tenant_integrity_indexes"
+    )
+    assert constraint_check["missing"] == list(REQUIRED_CONSTRAINTS[6:])
+    assert index_check["missing"] == list(REQUIRED_INDEXES[3:])
