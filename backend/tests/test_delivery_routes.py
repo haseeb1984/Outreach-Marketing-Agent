@@ -188,3 +188,27 @@ def test_concurrent_email_claim_loser_never_releases_the_winning_reservation():
  send_src=inspect.getsource(delivery_routes.send_delivery)
  assert 'str(exc) != "delivery_not_queued"' in due_src
  assert 'str(exc) != "delivery_not_queued"' in send_src
+
+def test_platform_smtp_test_is_owner_only_and_never_sends_email():
+ from app.api import platform_admin_routes
+ src=inspect.getsource(platform_admin_routes.test_platform_smtp_connection)
+ assert 'require_platform_admin(request, write=True)' in src
+ assert 'SMTPEmailDelivery().test_connection()' in src
+ assert 'send_message' not in src
+ assert 'email_sent' in src
+ assert any(getattr(route, "path", "") == "/api/v1/platform-admin/smtp/test" for route in platform_admin_routes.router.routes)
+ assert not any(getattr(route, "path", "") == "/api/v1/integrations/smtp/test" for route in platform_admin_routes.router.routes)
+
+
+def test_platform_smtp_status_never_returns_credential_values():
+ from types import SimpleNamespace
+ from app.api.platform_admin_routes import platform_smtp_status
+ cfg=SimpleNamespace(smtp_host="smtp.private.test",smtp_username="private-user",
+  smtp_password="private-password",smtp_from_email="noreply@example.test",
+  smtp_port=587,smtp_starttls=True)
+ status=platform_smtp_status(cfg)
+ assert status["configuration_complete"] is True
+ assert status["connection_tested"] is False
+ assert "private-password" not in repr(status)
+ assert "smtp.private.test" not in repr(status)
+
