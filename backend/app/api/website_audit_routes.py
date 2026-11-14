@@ -15,7 +15,7 @@ from app.services.competitor_research import discover_competitor_candidates
 from app.services.competitor_page_analysis import analyze_competitor_pages
 from app.services.seo_strategy import merge_competitor_content_gaps
 from app.services.website_discovery import discover_and_crawl
-from app.services.website_fetch import FetchLimits
+from app.services.website_fetch import FetchLimits, validate_fetch_configuration
 
 router = APIRouter(prefix="/api/v1/website-audits", tags=["website growth"])
 
@@ -148,6 +148,11 @@ async def create_website_audit(payload: WebsiteAuditRequest, request: Request) -
         raise HTTPException(status_code=403, detail="domain_not_verified") from None
     except Exception:
         raise HTTPException(status_code=503, detail="domain_authorization_unavailable") from None
+
+    try:
+        validate_fetch_configuration()
+    except ValueError:
+        raise HTTPException(status_code=503, detail="website_audit_egress_not_configured") from None
 
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
