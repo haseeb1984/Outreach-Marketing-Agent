@@ -20,7 +20,7 @@ const qa = [
 export default function FAQPage() {
   return <>
     <SiteHeader/>
-    <main className="wrap">
+    <main id="main" className="wrap">
       <section className="page-head">
         <p className="eyebrow">Help and clarity</p>
         <h1>Questions, answered clearly.</h1>
