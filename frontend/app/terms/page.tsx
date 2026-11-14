@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 
 export const metadata = {
   title: "Terms of Use",
@@ -21,10 +22,10 @@ const sections: [string, string][] = [
 
 export default function TermsPage() {
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Main navigation"><Link href="/product">Product</Link><Link href="/pricing">Pricing</Link><Link href="/faq">FAQ</Link></nav></header>
+    <SiteHeader/>
     <main className="wrap"><section className="page-head"><p className="eyebrow">Responsible use</p><h1>Terms of Use</h1><p className="lead">Rules for using research, outreach, integrations and analytics responsibly.</p><p className="notice" role="note">Pre-launch terms draft: operator identity, governing law, refund/cancellation rules and other jurisdiction-specific clauses require review before production billing.</p></section>
       <div className="cards">{sections.map(([heading, body]) => <article className="card" key={heading}><h2>{heading}</h2><p>{body}</p></article>)}</div>
     </main>
-    <footer className="wrap"><p><Link href="/">Home</Link> · <Link href="/privacy">Privacy</Link> · <Link href="/faq">FAQ</Link></p></footer>
+    <SiteFooter/>
   </>;
 }
