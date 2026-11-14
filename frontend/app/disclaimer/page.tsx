@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeader, SiteFooter } from "../components/site-chrome";
-export const metadata: Metadata = { title: "Disclaimer", description: "Important limitations of research, AI-generated recommendations and analytics." };
+export const metadata: Metadata = { title: "Disclaimer", description: "Important limitations of research, AI-generated recommendations and analytics." , robots: { index: false, follow: false }};
 const sections:[string,string][]=[
 ["Research and AI outputs","Public-source research, extracted information and AI-generated text may be incomplete, outdated or inaccurate. Check original sources and independently verify material facts before relying on a recommendation or contacting anyone."],
 ["No professional advice","The service does not provide legal, financial, tax, compliance or other regulated professional advice. Obtain qualified advice for your circumstances and jurisdictions."],
