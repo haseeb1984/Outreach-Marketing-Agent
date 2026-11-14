@@ -4,7 +4,7 @@ import { SiteHeader, SiteFooter } from "../components/site-chrome";
 export const metadata = {
   title: "Privacy Policy",
   description: "How Outreach Marketing Agent handles account, workspace, prospect and outreach data.",
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: true },
 };
 
 const sections: [string, string][] = [
