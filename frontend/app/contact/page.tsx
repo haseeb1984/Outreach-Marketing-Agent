@@ -10,7 +10,7 @@ export const metadata = {
 const resources = [
   { number: "01", title: "Account access", text: "Having trouble signing in or verifying your email? Start with the account recovery options.", href: "/forgot-password", link: "Recover account access" },
   { number: "02", title: "Product questions", text: "Find answers about prospect research, outreach approvals, connected providers and workspace controls.", href: "/faq", link: "Browse common questions" },
-  { number: "03", title: "Billing and privacy", text: "Review plan information, billing terms and the current privacy notice before raising a request.", href: "/pricing", link: "Review plans and policies" },
+  { number: "03", title: "Plans and billing", text: "Check configured plan availability and review the information relevant to subscription billing.", href: "/pricing", link: "Review plans and billing" },
 ];
 
 export default function ContactPage() {
