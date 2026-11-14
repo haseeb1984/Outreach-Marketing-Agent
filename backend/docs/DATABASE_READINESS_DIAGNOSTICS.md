@@ -12,7 +12,7 @@ python -m scripts.diagnose_database_readiness
 The command is **read-only**: it issues SELECT/catalog queries only and never applies a
 migration or writes to the database. It emits JSON with separate checks for local
 migration files, the database migration ledger, required tables, and required columns.
-The output never includes the connection string or raw database exception text.
+The output never includes the connection string or raw database exception text. It also verifies that tenant-alignment foreign keys and supporting unique indexes exist for both WhatsApp records and the core campaign, draft, delivery and workspace SMTP-account relationships.
 
 Exit codes:
 - `0`: all schema checks passed.
