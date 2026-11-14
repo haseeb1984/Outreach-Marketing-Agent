@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteHeader, SiteFooter } from "../components/site-chrome";
 
 export const metadata = {
   title: "Privacy Policy",
@@ -20,11 +21,11 @@ const sections: [string, string][] = [
 
 export default function PrivacyPage() {
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Main navigation"><Link href="/product">Product</Link><Link href="/pricing">Pricing</Link><Link href="/faq">FAQ</Link></nav></header>
+    <SiteHeader/>
     <main className="wrap"><section className="page-head"><p className="eyebrow">Privacy and data</p><h1>Privacy Policy</h1><p className="lead">A plain-language overview of the data this product is designed to handle and the safeguards that should govern it.</p><p className="notice" role="note">Pre-launch policy draft: verify the deployed data flows, providers, retention periods and applicable legal requirements before production use.</p></section>
       <div className="cards">{sections.map(([heading, body]) => <article className="card" key={heading}><h2>{heading}</h2><p>{body}</p></article>)}</div>
       <section className="section"><h2>Questions or data requests</h2><p>Use the support channel published by the service operator for privacy questions, data access requests, corrections or deletion requests. A verified support contact must be published before launch.</p><p className="fine">This page intentionally does not invent a support email address or claim that account export/deletion workflows are already available.</p></section>
     </main>
-    <footer className="wrap"><p><Link href="/">Home</Link> · <Link href="/terms">Terms</Link> · <Link href="/faq">FAQ</Link></p></footer>
+    <SiteFooter/>
   </>;
 }
