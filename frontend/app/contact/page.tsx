@@ -19,7 +19,7 @@ export default function ContactPage() {
 
   return <>
     <SiteHeader/>
-    <main className="wrap contact-page">
+    <main id="main" className="wrap contact-page">
       <section className="page-head contact-head">
         <p className="eyebrow">Support and enquiries</p>
         <h1>Let's get you to the right place.</h1>
