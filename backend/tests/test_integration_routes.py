@@ -31,15 +31,23 @@ class FakeLimiter:
 
 @contextmanager
 def _client(monkeypatch):
+    from app.api import delivery_routes
+
+    async def list_workspace_accounts(self, *, workspace_id):
+        return []
+
+    monkeypatch.setattr(delivery_routes.SMTPAccountStore, "list_accounts", list_workspace_accounts)
     monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
     with TestClient(app, base_url="https://app.example.test") as client:
         app.state.auth_store = FakeStore()
         app.state.auth_rate_limiter = FakeLimiter()
+        app.state.db_pool = object()
         client.cookies.set("__Host-oma_session", "session-token")
         yield client
 
 
-def test_provider_status_requires_auth_and_never_returns_secrets(monkeypatch):
+def test_provider_status_uses_workspace_accounts_not_platform_environment(monkeypatch):
+    from app.api import delivery_routes
     from app.core import config
 
     monkeypatch.setattr(config.settings, "smtp_host", "smtp.example.test")
@@ -48,14 +56,22 @@ def test_provider_status_requires_auth_and_never_returns_secrets(monkeypatch):
     monkeypatch.setattr(config.settings, "smtp_from_email", "noreply@example.test")
     monkeypatch.setattr(config.settings, "smtp_starttls", True)
 
+    async def active_workspace_account(self, *, workspace_id):
+        assert workspace_id == "workspace-1"
+        return [{"id": "account-1", "status": "active", "smtp_host": "private.smtp.test"}]
+
+    monkeypatch.setattr(delivery_routes.SMTPAccountStore, "list_accounts", active_workspace_account)
     with _client(monkeypatch) as client:
         response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
     assert response.status_code == 200
     payload = response.json()
     assert payload["email"]["configuration_complete"] is True
+    assert payload["email"]["connection_tested"] is True
+    assert payload["email"]["active_workspace_accounts"] == 1
     assert payload["whatsapp"]["live_send_enabled"] is False
     assert "never-return-this" not in response.text
     assert "smtp.example.test" not in response.text
+    assert "private.smtp.test" not in response.text
 
 
 def test_provider_status_hides_non_member_workspace(monkeypatch):
@@ -65,62 +81,25 @@ def test_provider_status_hides_non_member_workspace(monkeypatch):
     assert response.json()["detail"] == "workspace_not_found"
 
 
-def test_smtp_test_requires_csrf_and_never_sends_email(monkeypatch):
+def test_legacy_platform_smtp_test_endpoint_is_not_registered(monkeypatch):
     from app.api import delivery_routes
-
-    from app.core import config
-
-    monkeypatch.setattr(delivery_routes.settings, "environment", "production")
-    monkeypatch.setattr(config.settings, "smtp_host", "smtp.example.test")
-    monkeypatch.setattr(config.settings, "smtp_port", 587)
-    monkeypatch.setattr(config.settings, "smtp_username", "mailer")
-    monkeypatch.setattr(config.settings, "smtp_password", "test-only-not-a-real-secret")
-    monkeypatch.setattr(config.settings, "smtp_from_email", "noreply@example.test")
-    monkeypatch.setattr(config.settings, "smtp_starttls", True)
-    calls = []
-
-    async def fake_test_connection(self):
-        calls.append("tested")
-
-    monkeypatch.setattr(delivery_routes.SMTPEmailDelivery, "test_connection", fake_test_connection)
     with _client(monkeypatch) as client:
-        rejected = client.post(
-            "/api/v1/integrations/smtp/test?workspace_id=workspace-1",
-            headers={"Origin": "https://app.example.test"},
-        )
-        assert rejected.status_code == 403
-
-        accepted = client.post(
+        response = client.post(
             "/api/v1/integrations/smtp/test?workspace_id=workspace-1",
             headers={
                 "Origin": "https://app.example.test",
                 "X-CSRF-Token": "c" * 43,
             },
         )
-    assert accepted.status_code == 200, accepted.text
-    assert accepted.json()["status"] == "authenticated"
-    assert accepted.json()["email_sent"] is False
-    assert "no email was sent" in accepted.json()["message"].lower()
-    assert calls == ["tested"]
+    assert response.status_code == 404
+    assert not any(getattr(route, "path", "") == "/api/v1/integrations/smtp/test" for route in delivery_routes.router.routes)
 
 
-def test_provider_status_marks_nonstandard_smtp_port_incomplete(monkeypatch):
-    from app.api import delivery_routes
-
-    # /integrations/status is registered by delivery_routes first in app/main.py.
-    # Patch the settings object used by that active route, not the shadowed route.
-    monkeypatch.setattr(delivery_routes.settings, "smtp_host", "smtp.example.test")
-    monkeypatch.setattr(delivery_routes.settings, "smtp_username", "mailer")
-    monkeypatch.setattr(delivery_routes.settings, "smtp_password", "never-return-this")
-    monkeypatch.setattr(delivery_routes.settings, "smtp_from_email", "noreply@example.test")
-    monkeypatch.setattr(delivery_routes.settings, "smtp_starttls", True)
-    monkeypatch.setattr(delivery_routes.settings, "smtp_port", 2525)
-
+def test_provider_status_without_active_workspace_smtp_is_incomplete(monkeypatch):
     with _client(monkeypatch) as client:
         response = client.get("/api/v1/integrations/status?workspace_id=workspace-1")
-
     assert response.status_code == 200
     payload = response.json()
     assert payload["email"]["configuration_complete"] is False
-    assert payload["email"]["port_valid"] is False
-    assert "SMTP_PORT" in payload["email"]["missing_fields"]
+    assert payload["email"]["connection_tested"] is False
+    assert payload["email"]["missing_fields"] == ["ACTIVE_WORKSPACE_SMTP_ACCOUNT"]
