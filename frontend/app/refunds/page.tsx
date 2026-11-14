@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeader, SiteFooter } from "../components/site-chrome";
-export const metadata: Metadata = { title: "Refund Policy", description: "Draft refund and cancellation information for subscriptions." };
+export const metadata: Metadata = { title: "Refund Policy", description: "Draft refund and cancellation information for subscriptions." , robots: { index: false, follow: false }};
 const sections:[string,string][]=[
 ["Subscription cancellation","If subscription billing is enabled for your account, cancellation should be managed through the billing controls made available to you or the published support channel. The effective date and access period should be shown before you confirm."],
 ["Refund requests","Refund eligibility may depend on applicable law, the plan purchased, billing status, service availability and the payment provider's rules. A verified support contact must be published before paid subscriptions are offered. Once available, include the relevant invoice or transaction reference in a refund request—never send full card details."],
