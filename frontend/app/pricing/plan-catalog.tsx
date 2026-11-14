@@ -2,8 +2,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { useEffect, useState } from "react";
-
 type Plan = {
   id: string;
   name: string;
