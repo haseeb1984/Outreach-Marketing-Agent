@@ -45,7 +45,7 @@ def test_missing_repository_migration_is_separate_from_database_state():
     )
     local = next(check for check in result["checks"] if check["name"] == "migration_files")
     ledger = next(check for check in result["checks"] if check["name"] == "migration_ledger")
-    assert local["missing"] == ["056_billing_transaction_past_due.sql"]
+    assert local["missing"] == ["057_core_outreach_tenant_integrity.sql"]
     assert ledger["status"] == "pass"
 
 
