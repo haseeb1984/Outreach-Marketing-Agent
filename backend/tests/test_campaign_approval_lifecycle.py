@@ -97,7 +97,7 @@ def _patch_auth(monkeypatch, actor_id):
     monkeypatch.setattr(campaign_routes, "_check_csrf", lambda *_args: None)
 
 
-def test_draft_generation_happy_path_reserves_then_creates_then_consumes(monkeypatch):
+def test_template_fallback_draft_reserves_then_creates_then_releases_ai_quota(monkeypatch):
     actor_id = str(uuid4())
     reservation_id = str(uuid4())
     draft = {"id": str(uuid4()), "status": "pending_approval", "channel": "email"}
@@ -120,7 +120,7 @@ def test_draft_generation_happy_path_reserves_then_creates_then_consumes(monkeyp
     }]
     assert store.create_calls[0]["actor_id"] == actor_id
     assert subscriptions.finish_calls == [{
-        "workspace_id": "workspace-a", "reservation_id": reservation_id, "outcome": "consumed",
+        "workspace_id": "workspace-a", "reservation_id": reservation_id, "outcome": "released",
     }]
 
 
