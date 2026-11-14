@@ -52,7 +52,11 @@ class SMTPEmailDelivery:
         self._validate_configuration()
         if not isinstance(recipient, str) or len(recipient) > 320 or "@" not in recipient:
             raise ValueError("invalid_recipient")
-        link = verification_url(token, self._settings.public_base_url)
+        frontend_origin = (
+            getattr(self._settings, "frontend_public_url", None)
+            or next((item.strip() for item in (getattr(self._settings, "frontend_origins", "") or "").split(",") if item.strip()), "")
+        )
+        link = verification_url(token, frontend_origin)
         message = EmailMessage()
         message["Subject"] = "Verify your Outreach Marketing Agent account"
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
