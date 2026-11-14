@@ -1,5 +1,41 @@
 import Link from "next/link";
 import { SiteHeader, SiteFooter } from "../components/site-chrome";
-export const metadata={title:"FAQ",description:"Frequently asked questions about prospect research, outreach controls, analytics and billing."};
-const qa=[["Does the platform send messages automatically?","Drafts require human review by default. Any future trusted automation must be explicitly enabled and remain subject to eligibility, rate limits, audit logs, provider policies and suppression checks."],["Where does prospect information come from?","Research is limited to permitted public sources and should preserve source evidence and observation dates. The product must not scrape private accounts or bypass access controls."],["Is a sent message the same as delivered?","No. A recorded send attempt is not proof that a recipient inbox received a message. Delivery, clicks, conversions and revenue are shown only when supported by reliable provider or connected first-party data."],["How does billing work?","Paddle Billing is the selected provider. Paid access is intended to activate only after a signed, verified subscription event updates the server-side record. Real prices and production checkout are not yet available."],["Can I use WhatsApp outreach?","Only through the official WhatsApp Business Platform when account, recipient, consent and message eligibility meet applicable provider rules. It remains disabled until onboarding and authorization are verified."],["Can the platform guarantee better search rankings?","No. It can help diagnose and prioritize evidence-backed improvements, then measure results over time. Rankings depend on the site, query, market and other factors outside the platform's control."]];
-export default function FAQPage(){return <><SiteHeader/><main className="wrap"><section className="page-head"><p className="eyebrow">Help and clarity</p><h1>Frequently asked questions</h1><p className="lead">Straight answers about how the product works—and what is not yet live.</p></section><section className="cards">{qa.map(([q,a])=><article className="card" key={q}><h2>{q}</h2><p>{a}</p></article>)}</section></main><SiteFooter/></>}
+
+export const metadata = {
+  title: "Frequently asked questions",
+  description: "Answers about prospect research, outreach approvals, provider connections, analytics and billing.",
+};
+
+const qa = [
+  ["Does the platform send messages automatically?", "Outreach drafts require human review by default. Any enabled sending workflow remains subject to explicit approval, recipient eligibility, provider rules, rate limits and suppression checks."],
+  ["Where does prospect information come from?", "Research is based on permitted public sources. Source evidence, URLs and observation dates should remain visible so your team can check relevance before using a record."],
+  ["Is a sent message the same as delivered?", "No. A send attempt is not proof that a recipient inbox received a message. Delivery, clicks, conversions and revenue are shown as confirmed only when reliable provider or connected first-party data supports them."],
+  ["Can I connect my own email provider?", "Yes. Workspace owners can configure their own supported SMTP account in workspace settings. Platform operational email—such as account verification and password resets—uses a separate platform-owned configuration."],
+  ["Can I use WhatsApp outreach?", "Only through the official WhatsApp Business Platform when account, recipient, consent and message eligibility meet applicable provider rules. Availability depends on completed onboarding and authorization."],
+  ["How does billing work?", "Paddle is the selected billing provider. Workspace access must follow signed, verified server-side subscription events. The live plan catalog and checkout availability are determined by the current platform configuration."],
+  ["Can the platform guarantee better search rankings?", "No. The platform can help diagnose and prioritize evidence-backed improvements, then measure observable changes over time. Rankings depend on many factors outside the service's control."],
+  ["How do I contact support or request a refund?", "Use the support contact published by the service operator. Never send passwords, session cookies, full payment-card details or provider access tokens in a support request."],
+];
+
+export default function FAQPage() {
+  return <>
+    <SiteHeader/>
+    <main className="wrap">
+      <section className="page-head">
+        <p className="eyebrow">Help and clarity</p>
+        <h1>Questions, answered clearly.</h1>
+        <p className="lead">Straight answers about the research, outreach and account workflows—without promising features or outcomes that have not been verified.</p>
+      </section>
+      <section className="faq-list" aria-label="Frequently asked questions">
+        {qa.map(([question, answer], index) => <details className="faq-item" key={question}>
+          <summary><span className="faq-number">{String(index + 1).padStart(2, "0")}</span><span>{question}</span><i aria-hidden="true">+</i></summary>
+          <div className="faq-answer"><p>{answer}</p></div>
+        </details>)}
+      </section>
+      <section className="section">
+        <div className="callout"><div><h2>Still need a hand?</h2><p>Check the product guides or reach out through the published support channel.</p></div><Link className="button" href="/contact">Contact support</Link></div>
+      </section>
+    </main>
+    <SiteFooter/>
+  </>;
+}
