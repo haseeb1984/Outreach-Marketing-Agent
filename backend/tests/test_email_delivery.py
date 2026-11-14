@@ -36,6 +36,23 @@ def _config(**overrides):
     return SimpleNamespace(**values)
 
 
+def test_verification_email_uses_frontend_host_and_fragment(monkeypatch):
+    delivery = SMTPEmailDelivery(_config())
+    captured = {}
+
+    def capture(message):
+        captured["body"] = message.get_content()
+
+    monkeypatch.setattr(delivery, "_send_message", capture)
+    asyncio.run(delivery.send_verification_email(
+        recipient="person@example.com",
+        token="opaque-verification-token-123456789",
+        expires_at=datetime.now(timezone.utc),
+    ))
+    assert "https://app.example/verify-email#token=opaque-verification-token-123456789" in captured["body"]
+    assert "backend.example" not in captured["body"]
+
+
 def test_smtp_fails_closed_when_not_configured():
     with pytest.raises(EmailDeliveryNotConfigured):
         SMTPEmailDelivery(_config(smtp_host=None))._validate_configuration()
