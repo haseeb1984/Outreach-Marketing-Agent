@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
 
-const publicPaths = ["/", "/product", "/pricing", "/faq", "/privacy", "/terms"] as const;
+const publicPaths = [
+  "/", "/product", "/features", "/how-it-works", "/pricing", "/about",
+  "/faq", "/privacy", "/terms", "/cookies", "/refunds", "/disclaimer", "/security",
+] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
-  if (!configured) return [];
+  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || "https://outreach.juncsys.com";
   let base: URL;
   try {
     base = new URL(configured);
@@ -16,6 +18,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return publicPaths.map((path) => ({
     url: origin + path,
     changeFrequency: path === "/" ? "weekly" : "monthly",
-    priority: path === "/" ? 1 : path === "/product" || path === "/pricing" ? 0.8 : 0.5,
+    priority: path === "/" ? 1 : ["/product", "/features", "/pricing", "/how-it-works"].includes(path) ? 0.8 : 0.5,
   }));
 }
