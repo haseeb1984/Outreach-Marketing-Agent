@@ -356,9 +356,9 @@ async def regenerate_draft(draft_id: UUID, payload: DraftRegenerate, request: Re
             )
             raise HTTPException(status_code=404, detail="draft_not_found")
         generated_content = None
-        if settings.ai_api_key:
+        if settings.ai_api_key and settings.ai_api_key.strip():
             generated_content = await generate_ai_outreach(
-                api_key=settings.ai_api_key, base_url=settings.ai_base_url,
+                api_key=settings.ai_api_key.strip(), base_url=settings.ai_base_url,
                 model=settings.ai_model, channel=context["_channel"],
                 call_to_action=payload.call_to_action, context=context,
             )
