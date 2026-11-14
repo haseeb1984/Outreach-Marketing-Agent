@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeader, SiteFooter } from "../components/site-chrome";
-export const metadata: Metadata = { title: "Cookie Notice", description: "Information about cookies and browser storage used by the service." };
+export const metadata: Metadata = { title: "Cookie Notice", description: "Information about cookies and browser storage used by the service." , robots: { index: false, follow: false }};
 const sections:[string,string][]=[
 ["Essential session technologies","The application may use strictly necessary cookies or similar browser storage to maintain sign-in sessions, protect requests and support core account functionality. These technologies are required for the service features you request."],
 ["Preferences and diagnostics","Depending on the deployed configuration, the service may use limited preferences or diagnostic technologies to remember settings, understand reliability and protect the platform. Optional analytics or advertising cookies should not be enabled without the required notice and consent."],
