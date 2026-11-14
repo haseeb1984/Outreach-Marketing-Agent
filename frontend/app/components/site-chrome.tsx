@@ -30,6 +30,5 @@ export function SiteFooter() {
       <div><strong>Policies</strong><nav className="footer-links">{legal.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
     </div>
     <div className="footer-bottom"><span>© {new Date().getFullYear()} Outreach Marketing Agent</span><span>Powered by <a href="https://juncsys.com" target="_blank" rel="noopener noreferrer">Junction Systems</a></span></div>
-    <p className="fine">Features and integrations are subject to availability, eligibility and verification. No ranking, delivery or revenue outcome is guaranteed.</p>
   </footer>;
 }
