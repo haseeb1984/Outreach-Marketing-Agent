@@ -118,7 +118,7 @@ async def process_due_deliveries(request: Request, limit: int = Query(default=25
                 )
                 sender = SMTPEmailDelivery(configuration)
             else:
-                sender = SMTPEmailDelivery()
+                raise EmailDeliveryNotConfigured("workspace_smtp_account_required")
             await sender.send_outreach_email(
                 recipient=data["recipient"], subject=data["subject"], body=data["body"],
                 delivery_id=data["delivery_id"], workspace_id=data["workspace_id"],
@@ -338,11 +338,7 @@ async def send_delivery(delivery_id: UUID, payload: EnqueueDelivery, request: Re
                 prospect_id=data["prospect_id"],
             )
         else:
-            await SMTPEmailDelivery().send_outreach_email(
-                recipient=data["recipient"], subject=data["subject"], body=data["body"],
-                delivery_id=data["delivery_id"], workspace_id=data["workspace_id"],
-                prospect_id=data["prospect_id"],
-            )
+            raise EmailDeliveryNotConfigured("workspace_smtp_account_required")
     except LookupError:
         await _settle_delivery_attempt(
             store, subscriptions, workspace_id=payload.workspace_id, delivery_id=delivery_id,
