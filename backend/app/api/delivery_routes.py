@@ -62,7 +62,7 @@ class EnqueueDelivery(BaseModel):
  model_config=ConfigDict(extra="forbid")
  workspace_id: str=Field(min_length=1,max_length=200)
  idempotency_key: str=Field(min_length=8,max_length=200,pattern=r"^[A-Za-z0-9._:-]+$")
- email_account_id: UUID|None=None
+ email_account_id: UUID
  scheduled_at: datetime|None=None
 @router.post("/drafts/{draft_id}/enqueue",status_code=201)
 async def enqueue_delivery(draft_id: UUID,payload: EnqueueDelivery,request: Request):
