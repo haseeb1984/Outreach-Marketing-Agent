@@ -164,6 +164,7 @@ def test_draft_generation_replay_does_not_create_duplicate(monkeypatch, reason, 
     store = _CampaignStore(draft={"id": "must-not-exist"})
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -184,6 +185,7 @@ def test_invalid_draft_inputs_release_reserved_quota(monkeypatch):
     store = _CampaignStore(draft=ValueError("prospect_email_required"))
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -205,6 +207,7 @@ def test_ambiguous_draft_persistence_consumes_quota_to_prevent_retry_bypass(monk
     store = _CampaignStore(draft=RuntimeError("database details must not leak"))
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -227,6 +230,7 @@ def test_successful_draft_is_not_returned_if_quota_finalization_fails(monkeypatc
     store = _CampaignStore(draft={"id": str(uuid4()), "status": "pending_approval"})
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
