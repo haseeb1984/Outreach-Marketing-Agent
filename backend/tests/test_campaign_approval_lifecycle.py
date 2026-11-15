@@ -133,7 +133,6 @@ def test_template_fallback_is_available_when_ai_quota_is_exhausted(monkeypatch):
 
 
 @pytest.mark.parametrize("reason,status_code", [
-    ("quota_exhausted", 429),
     ("subscription_inactive", 403),
     ("feature_disabled", 403),
 ])
@@ -143,6 +142,7 @@ def test_draft_generation_denial_never_creates_draft(monkeypatch, reason, status
     store = _CampaignStore(draft={"id": "must-not-exist"})
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
