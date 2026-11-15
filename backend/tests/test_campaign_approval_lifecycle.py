@@ -48,6 +48,9 @@ class _CampaignStore:
         self.create_calls = []
         self.review_calls = []
 
+    async def get_draft_generation_context(self, **kwargs):
+        return {"business": "Example", "prospect": "Example prospect"}
+
     async def create_draft(self, **kwargs):
         self.create_calls.append(kwargs)
         if isinstance(self.draft, Exception):
@@ -89,6 +92,14 @@ def _payload():
     )
 
 
+def _enable_ai(monkeypatch):
+    async def generate(**_kwargs):
+        return {"subject": "Relevant introduction", "body": "A concise, evidence-led introduction."}
+
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    monkeypatch.setattr(campaign_routes, "generate_ai_outreach", generate)
+
+
 def _patch_auth(monkeypatch, actor_id):
     async def authenticated(_request):
         return None, None, {"user_id": actor_id}
@@ -121,7 +132,7 @@ def test_template_fallback_is_available_when_ai_quota_is_exhausted(monkeypatch):
     store = _CampaignStore(draft=draft)
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
-    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    _enable_ai(monkeypatch)
 
     result = asyncio.run(campaign_routes.create_draft(_payload(), request))
 
@@ -142,7 +153,7 @@ def test_draft_generation_denial_never_creates_draft(monkeypatch, reason, status
     store = _CampaignStore(draft={"id": "must-not-exist"})
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
-    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    _enable_ai(monkeypatch)
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -164,7 +175,7 @@ def test_draft_generation_replay_does_not_create_duplicate(monkeypatch, reason, 
     store = _CampaignStore(draft={"id": "must-not-exist"})
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
-    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    _enable_ai(monkeypatch)
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -185,7 +196,7 @@ def test_invalid_draft_inputs_release_reserved_quota(monkeypatch):
     store = _CampaignStore(draft=ValueError("prospect_email_required"))
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
-    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    _enable_ai(monkeypatch)
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -207,7 +218,7 @@ def test_ambiguous_draft_persistence_consumes_quota_to_prevent_retry_bypass(monk
     store = _CampaignStore(draft=RuntimeError("database details must not leak"))
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
-    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    _enable_ai(monkeypatch)
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
@@ -230,7 +241,7 @@ def test_successful_draft_is_not_returned_if_quota_finalization_fails(monkeypatc
     store = _CampaignStore(draft={"id": str(uuid4()), "status": "pending_approval"})
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
-    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+    _enable_ai(monkeypatch)
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(campaign_routes.create_draft(_payload(), request))
