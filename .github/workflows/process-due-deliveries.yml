@@ -74,10 +74,10 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error --max-time 45 \\
-            --request POST \\
-            --header "Authorization: Bearer $CRON_SECRET" \\
-            --header "Content-Type: application/json" \\
+          curl --fail-with-body --silent --show-error --max-time 45 \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json" \
             "$BACKEND_BASE_URL/api/v1/follow-up-sequences/process-due?limit=50"
 
       - name: Dispatch approved WhatsApp queue (only when explicitly enabled server-side)
