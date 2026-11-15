@@ -67,6 +67,7 @@ def test_restore_requires_explicit_confirmation_and_uses_dbname_flag(tmp_path, m
     restore_command, restore_env = calls[2]
     assert restore_command[0] == "pg_restore"
     assert "--dbname" in restore_command
+    assert "--single-transaction" in restore_command
     assert "secret" not in " ".join(restore_command)
     assert restore_env["PGPASSWORD"] == "secret"
 
