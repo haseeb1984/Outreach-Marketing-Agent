@@ -139,7 +139,7 @@ def restore(path: Path) -> None:
         raise ValueError("set_CONFIRM_RESTORE_YES_for_explicit_restore")
     environment = _connection_environment(target_url)
     # No --clean: restore is intended for a newly created empty recovery database.
-    _run(["pg_restore", "--exit-on-error", "--no-owner", "--no-privileges", "--dbname", environment["PGDATABASE"], str(path)], environment)
+    _run(["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges", "--dbname", environment["PGDATABASE"], str(path)], environment)
 
 
 def main() -> int:
