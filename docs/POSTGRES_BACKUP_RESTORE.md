@@ -28,7 +28,7 @@ Provision an empty staging/recovery database first. Set `SOURCE_DATABASE_URL`, `
 python scripts/database_backup.py restore /secure/backups/outreach-marketing-agent/outreach-db-YYYYMMDDTHHMMSSZ.dump
 ```
 
-The tool refuses the same source/target host, port and database name, requires explicit confirmation, and does not use `pg_restore --clean`. The target must be empty. Validate migration history, core tables, tenant isolation and representative application reads after the restore.
+The tool refuses the same source/target host, port and database name, requires explicit confirmation, and runs `pg_restore` with `--single-transaction` (so a failed restore is rolled back) without using `pg_restore --clean`. The target must be empty; the tool does not automatically clear an existing database. Validate migration history, core tables, tenant isolation and representative application reads after the restore.
 
 ## Release evidence
 
