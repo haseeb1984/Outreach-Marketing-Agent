@@ -3,6 +3,9 @@
 ALTER TABLE outreach_drafts
     ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 
+ALTER TABLE outreach_drafts
+    ADD COLUMN IF NOT EXISTS request_fingerprint TEXT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS outreach_drafts_workspace_idempotency_uidx
     ON outreach_drafts (workspace_id, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
