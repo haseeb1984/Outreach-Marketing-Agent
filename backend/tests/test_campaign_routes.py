@@ -54,9 +54,10 @@ def test_draft_route_reserves_quota_before_generation_and_consumes_success():
 
     source = inspect.getsource(create_draft)
     assert source.index('feature="ai_draft_generations"') < source.index("store.create_draft(")
-    assert 'outcome="consumed"' in source
-    assert 'outcome="released"' in source
+    assert 'finish_reservation("consumed")' in source
+    assert 'finish_reservation("released")' in source
     assert 'reason") == "idempotent_replay"' in source
+    assert 'idempotency_key=payload.idempotency_key' in source
 
 
 def test_draft_edit_schema_requires_bounded_body_and_rejects_extra_fields():
@@ -97,8 +98,8 @@ def test_template_fallback_does_not_consume_ai_generation_quota():
 
     create_source = inspect.getsource(create_draft)
     regenerate_source = inspect.getsource(regenerate_draft)
-    assert 'quota_outcome = "consumed" if generated_content is not None else "released"' in create_source
+    assert "Template drafts are not AI usage" in create_source
+    assert "if ai_enabled:" in create_source
     assert 'quota_outcome = "consumed" if generated_content is not None else "released"' in regenerate_source
-    assert 'outcome=quota_outcome' in create_source
     assert 'outcome=quota_outcome' in regenerate_source
     assert "settings.ai_api_key and settings.ai_api_key.strip()" in regenerate_source
