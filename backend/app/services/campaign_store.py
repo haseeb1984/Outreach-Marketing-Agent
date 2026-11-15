@@ -129,6 +129,7 @@ class CampaignStore:
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
                            generated_content: dict[str, Any] | None = None,
+                           idempotency_key: str | None = None,
                            ) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -216,12 +217,23 @@ class CampaignStore:
                 row = await conn.fetchrow(
                     """INSERT INTO outreach_drafts
                        (workspace_id,campaign_id,prospect_id,channel,subject,body,source_evidence_url,
-                        verified_facts_used,created_by)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+                        verified_facts_used,created_by,idempotency_key)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)
+                       ON CONFLICT (workspace_id,idempotency_key) WHERE idempotency_key IS NOT NULL
+                       DO NOTHING
                        RETURNING *""",
                     workspace_id, campaign_id, prospect_id, channel, draft["subject"], draft["body"],
-                    draft["source_evidence_url"], json.dumps(draft["verified_facts_used"]), UUID(str(actor_id)),
+                    draft["source_evidence_url"], json.dumps(draft["verified_facts_used"]),
+                    UUID(str(actor_id)), idempotency_key,
                 )
+                if row is None and idempotency_key is not None:
+                    row = await conn.fetchrow(
+                        """SELECT * FROM outreach_drafts
+                           WHERE workspace_id=$1 AND idempotency_key=$2""",
+                        workspace_id, idempotency_key,
+                    )
+                if row is None:
+                    raise RuntimeError("draft_idempotency_conflict_unresolved")
                 await conn.execute(
                     """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type)
                        VALUES ($1,$2,$3,'created')""",
