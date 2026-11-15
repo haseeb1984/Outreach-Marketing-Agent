@@ -97,31 +97,39 @@ def _patch_auth(monkeypatch, actor_id):
     monkeypatch.setattr(campaign_routes, "_check_csrf", lambda *_args: None)
 
 
-def test_template_fallback_draft_reserves_then_creates_then_releases_ai_quota(monkeypatch):
+def test_template_fallback_without_ai_provider_does_not_reserve_ai_quota(monkeypatch):
     actor_id = str(uuid4())
-    reservation_id = str(uuid4())
     draft = {"id": str(uuid4()), "status": "pending_approval", "channel": "email"}
-    subscriptions = _Subscriptions(
-        reservations=[{"allowed": True, "reason": "reserved", "status": "reserved",
-                       "reservation_id": reservation_id}],
-        finish_results=[True],
-    )
+    subscriptions = _Subscriptions()
     store = _CampaignStore(draft=draft)
     request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
     _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "")
 
     result = asyncio.run(campaign_routes.create_draft(_payload(), request))
 
     assert result == draft
-    assert subscriptions.reserve_calls == [{
-        "workspace_id": "workspace-a",
-        "feature": "ai_draft_generations",
-        "idempotency_key": "draft-generation:campaign-draft-001",
-    }]
-    assert store.create_calls[0]["actor_id"] == actor_id
-    assert subscriptions.finish_calls == [{
-        "workspace_id": "workspace-a", "reservation_id": reservation_id, "outcome": "released",
-    }]
+    assert subscriptions.reserve_calls == []
+    assert subscriptions.finish_calls == []
+    assert store.create_calls[0]["idempotency_key"] == "campaign-draft-001"
+
+
+def test_template_fallback_is_available_when_ai_quota_is_exhausted(monkeypatch):
+    actor_id = str(uuid4())
+    draft = {"id": str(uuid4()), "status": "pending_approval", "channel": "email"}
+    subscriptions = _Subscriptions(reservations=[{"allowed": False, "reason": "quota_exhausted"}])
+    store = _CampaignStore(draft=draft)
+    request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
+    _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "configured-ai-key")
+
+    result = asyncio.run(campaign_routes.create_draft(_payload(), request))
+
+    assert result == draft
+    assert len(subscriptions.reserve_calls) == 1
+    assert subscriptions.finish_calls == []
+    assert store.create_calls[0]["generated_content"] is None
+    assert store.create_calls[0]["idempotency_key"] == "campaign-draft-001"
 
 
 @pytest.mark.parametrize("reason,status_code", [
