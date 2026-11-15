@@ -169,26 +169,43 @@ async def create_draft(payload: DraftCreate, request: Request):
     if subscriptions is None:
         raise HTTPException(status_code=503, detail="billing_service_not_configured")
 
-    # Client-supplied request key is namespaced server-side; browser plan data is never trusted.
-    try:
-        reservation = await subscriptions.reserve_usage(
-            workspace_id=payload.workspace_id,
-            feature="ai_draft_generations",
-            idempotency_key=f"draft-generation:{payload.idempotency_key}",
-        )
-    except Exception:
-        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
-    if not reservation.get("allowed"):
-        reason = reservation.get("reason", "entitlement_denied")
-        status_code = 429 if reason == "quota_exhausted" else 403
-        raise HTTPException(status_code=status_code, detail=reason)
-    # Replayed or already consumed keys must not generate a second draft.
-    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
-        raise HTTPException(status_code=409, detail="draft_generation_key_already_used")
-
-    reservation_id = reservation["reservation_id"]
+    ai_enabled = bool(settings.ai_api_key and settings.ai_api_key.strip())
+    reservation_id = None
     generated_content = None
-    if settings.ai_api_key and settings.ai_api_key.strip():
+    # Template drafts are not AI usage. They remain available when AI is disabled
+    # or the AI allowance is exhausted; the database idempotency key prevents replay.
+    if ai_enabled:
+        try:
+            reservation = await subscriptions.reserve_usage(
+                workspace_id=payload.workspace_id,
+                feature="ai_draft_generations",
+                idempotency_key=f"draft-generation:{payload.idempotency_key}",
+            )
+        except Exception:
+            raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+        if not reservation.get("allowed"):
+            reason = reservation.get("reason", "entitlement_denied")
+            if reason != "quota_exhausted":
+                raise HTTPException(status_code=403, detail=reason)
+            ai_enabled = False
+        else:
+            if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+                raise HTTPException(status_code=409, detail="draft_generation_key_already_used")
+            reservation_id = reservation["reservation_id"]
+
+    async def finish_reservation(outcome: str) -> None:
+        if reservation_id is None:
+            return
+        try:
+            finished = await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome=outcome
+            )
+        except Exception:
+            raise HTTPException(status_code=503, detail="draft_quota_persistence_failed") from None
+        if not finished:
+            raise HTTPException(status_code=503, detail="draft_quota_persistence_failed")
+
+    if ai_enabled:
         try:
             context = await store.get_draft_generation_context(
                 workspace_id=payload.workspace_id,
@@ -197,9 +214,7 @@ async def create_draft(payload: DraftCreate, request: Request):
                 channel=payload.channel,
             )
             if context is None:
-                await subscriptions.finish_reservation(
-                    workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-                )
+                await finish_reservation("released")
                 raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
             generated_content = await generate_ai_outreach(
                 api_key=settings.ai_api_key.strip(),
@@ -210,66 +225,43 @@ async def create_draft(payload: DraftCreate, request: Request):
                 context=context,
             )
         except AIOutreachUnavailable as exc:
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-            )
+            await finish_reservation("released")
             raise HTTPException(status_code=503, detail=str(exc)) from None
         except ValueError as exc:
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-            )
+            await finish_reservation("released")
             raise HTTPException(status_code=422, detail=str(exc)) from None
         except HTTPException:
             raise
         except Exception:
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-            )
+            await finish_reservation("released")
             raise HTTPException(status_code=503, detail="ai_draft_generation_unavailable") from None
+
     try:
         draft = await store.create_draft(
             workspace_id=payload.workspace_id, campaign_id=payload.campaign_id,
             prospect_id=payload.prospect_id, actor_id=session["user_id"], channel=payload.channel,
             call_to_action=payload.call_to_action, generated_content=generated_content,
+            idempotency_key=payload.idempotency_key,
         )
     except ValueError as exc:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-        )
+        await finish_reservation("released")
         message = str(exc)
         if "WhatsApp" in message or "verified fact" in message or "channel" in message or "prospect_email_required" in message or "prospect_whatsapp_phone_required" in message or "contact_suppressed" in message or "contact_replied" in message:
             raise HTTPException(status_code=422, detail=message) from None
         raise HTTPException(status_code=422, detail="draft_inputs_invalid") from None
     except Exception as exc:
         if type(exc).__name__ == "UniqueViolationError":
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-            )
+            await finish_reservation("released")
             raise HTTPException(status_code=409, detail="pending_draft_already_exists") from None
-        # Persistence outcome may be ambiguous. Consume rather than permit quota bypass on retry.
         try:
-            await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
-            )
+            await finish_reservation("consumed")
         finally:
             raise HTTPException(status_code=503, detail="draft_create_unavailable") from None
     if draft is None:
-        await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released"
-        )
+        await finish_reservation("released")
         raise HTTPException(status_code=404, detail="campaign_or_prospect_not_found")
-    # Template fallback drafts are useful, but they did not consume an AI generation.
-    # Release the reservation after persistence so the request key remains one-use
-    # without charging the workspace's AI-generation allowance.
-    quota_outcome = "consumed" if generated_content is not None else "released"
-    try:
-        finished = await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome=quota_outcome
-        )
-    except Exception:
-        raise HTTPException(status_code=503, detail="draft_quota_persistence_failed") from None
-    if not finished:
-        raise HTTPException(status_code=503, detail="draft_quota_persistence_failed")
+    if reservation_id is not None:
+        await finish_reservation("consumed")
     return draft
 
 @router.get("/drafts")
