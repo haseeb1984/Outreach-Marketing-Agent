@@ -250,6 +250,22 @@ def test_successful_draft_is_not_returned_if_quota_finalization_fails(monkeypatc
     assert error.value.detail == "draft_quota_persistence_failed"
 
 
+def test_idempotency_key_reuse_with_changed_inputs_returns_conflict(monkeypatch):
+    actor_id = str(uuid4())
+    subscriptions = _Subscriptions()
+    store = _CampaignStore(draft=ValueError("idempotency_key_payload_mismatch"))
+    request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
+    _patch_auth(monkeypatch, actor_id)
+    monkeypatch.setattr(campaign_routes.settings, "ai_api_key", "")
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(campaign_routes.create_draft(_payload(), request))
+
+    assert error.value.status_code == 409
+    assert error.value.detail == "idempotency_key_payload_mismatch"
+    assert subscriptions.reserve_calls == []
+
+
 def test_review_requires_admin_and_only_passes_explicit_human_decision(monkeypatch):
     actor_id = str(uuid4())
     subscriptions = _Subscriptions()
