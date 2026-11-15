@@ -246,6 +246,8 @@ async def create_draft(payload: DraftCreate, request: Request):
     except ValueError as exc:
         await finish_reservation("released")
         message = str(exc)
+        if message == "idempotency_key_payload_mismatch":
+            raise HTTPException(status_code=409, detail=message) from None
         if "WhatsApp" in message or "verified fact" in message or "channel" in message or "prospect_email_required" in message or "prospect_whatsapp_phone_required" in message or "contact_suppressed" in message or "contact_replied" in message:
             raise HTTPException(status_code=422, detail=message) from None
         raise HTTPException(status_code=422, detail="draft_inputs_invalid") from None
