@@ -48,6 +48,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "056_billing_transaction_past_due.sql",
     "057_core_outreach_tenant_integrity.sql",
     "058_draft_request_idempotency.sql",
+    "059_workspace_display_name.sql",
 )
 
 
