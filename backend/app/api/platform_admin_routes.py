@@ -309,7 +309,7 @@ def _billing_reconciliation_sql():
         array_remove(ARRAY[
           CASE WHEN provider_subscription_id IS NULL OR btrim(provider_subscription_id)='' THEN 'missing_provider_subscription_id' END,
           CASE WHEN plan_name IS NULL THEN 'plan_not_mapped' END,
-          CASE WHEN latest_transaction_id IS NULL THEN 'missing_transaction_history' END,
+          CASE WHEN latest_transaction_id IS NULL AND subscription_status <> 'trialing' THEN 'missing_transaction_history' END,
           CASE WHEN latest_subscription_event_id IS NULL THEN 'missing_subscription_event_history' END,
           CASE WHEN subscription_status IN ('active','trialing')
              AND latest_transaction_status IN ('payment_failed','past_due') THEN 'payment_attention_but_subscription_active' END,
