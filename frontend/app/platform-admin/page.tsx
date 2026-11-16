@@ -12,6 +12,8 @@ type AdminEvent = { id: number; actor_email: string; event_type: string; target_
 type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number; usage_offset: number; usage_limit: number; usage_total: number; usage_truncated: boolean; audit_offset: number; audit_limit: number; audit_total: number; audit_truncated: boolean };
 type BillingReconciliationItem = { workspace_id: string; workspace_name: string; owner_email: string | null; provider: string; provider_customer_id: string | null; provider_subscription_id: string | null; plan_slug: string | null; subscription_status: string; billing_period_starts_at: string; billing_period_ends_at: string; provider_event_created_at: string | null; subscription_updated_at: string; plan_name: string | null; latest_transaction_id: string | null; latest_invoice_number: string | null; latest_transaction_status: string | null; latest_currency_code: string | null; latest_total_minor: string | null; latest_billed_at: string | null; latest_subscription_event_id: string | null; latest_subscription_event_outcome: string | null; latest_subscription_event_at: string | null; issues: string[] };
 type BillingReconciliation = { summary: Record<string, number>; items: BillingReconciliationItem[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean };
+type BillingEvent = { event_kind: string; provider: string; provider_event_id: string; workspace_id: string | null; workspace_name: string | null; related_id: string; event_created_at: string; received_at: string; outcome: string; transaction_status: string | null; invoice_number: string | null };
+type BillingEvents = { items: BillingEvent[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean; payloads_exposed: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "ai_draft_generations": { "enabled": true, "monthly_limit": 100 },\n  "email_sends": { "enabled": true, "monthly_limit": 1000 },\n  "website_audits": { "enabled": true, "monthly_limit": 25 },\n  "whatsapp_sends": { "enabled": false, "monthly_limit": 0 },\n  "prospect_research": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
@@ -44,7 +46,7 @@ export default function PlatformAdminPage() {
   const [billingSearch, setBillingSearch] = useState("");
   const [billingQuery, setBillingQuery] = useState("");
   const [billingOffset, setBillingOffset] = useState(0);
-  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);\n  const [billingEvents, setBillingEvents] = useState<BillingEvents | null>(null);\n  const [billingEventSearch, setBillingEventSearch] = useState("");\n  const [billingEventQuery, setBillingEventQuery] = useState("");\n  const [billingEventOffset, setBillingEventOffset] = useState(0);\n  const [billingEventsLoading, setBillingEventsLoading] = useState(false);
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
@@ -60,6 +62,16 @@ export default function PlatformAdminPage() {
       setBillingOffset(result.offset);
       setBillingQuery(search);
     } finally { setBillingLoading(false); }
+  }
+
+  async function loadBillingEvents(token: string, offset = 0, search = "") {
+    setBillingEventsLoading(true);
+    try {
+      const result = await api<BillingEvents>("/api/v1/platform-admin/billing/events?limit=50&offset=" + offset + "&search=" + encodeURIComponent(search), token);
+      setBillingEvents(result);
+      setBillingEventOffset(result.offset);
+      setBillingEventQuery(search);
+    } finally { setBillingEventsLoading(false); }
   }
 
   async function loadClientDetail(workspaceId: string) {
@@ -94,7 +106,7 @@ export default function PlatformAdminPage() {
       const [smtp] = await Promise.all([
         api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
         refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery),
-        loadBillingReconciliation(csrf, billingOffset, billingQuery),
+        loadBillingReconciliation(csrf, billingOffset, billingQuery),\n        loadBillingEvents(csrf, billingEventOffset, billingEventQuery),
       ]);
       setPlatformSmtp(smtp);
       setNotice("Platform overview and SMTP readiness refreshed.");
@@ -112,7 +124,7 @@ export default function PlatformAdminPage() {
         if (!active) return;
         setCsrf(session.csrf_token);
         await refresh(session.csrf_token);
-        await loadBillingReconciliation(session.csrf_token);
+        await loadBillingReconciliation(session.csrf_token);\n        await loadBillingEvents(session.csrf_token);
         const smtp = await api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", session.csrf_token);
         if (active) setPlatformSmtp(smtp);
       } catch (e) { if (active) setError(e instanceof Error ? e.message : "Admin access unavailable."); }
@@ -215,6 +227,29 @@ export default function PlatformAdminPage() {
             <td>{item.issues.length ? <ul className="billing-issue-list">{item.issues.map(issue=><li key={issue}>{issue.replaceAll("_"," ")}</li>)}</ul> : <span>Looks consistent</span>}</td>
           </tr>)}
         </tbody></table>{billingReconciliation && !billingReconciliation.items.length && <p>No subscription records match this search.</p>}</div>
+        <div className="section" aria-labelledby="billing-event-history-title">
+          <h3 id="billing-event-history-title">Verified billing event timeline</h3>
+          <p className="fine">Chronological, read-only history of subscription and transaction webhook events. Only normalized identifiers and statuses are shown; raw webhook payloads, signatures and secrets are never exposed.</p>
+          <form className="field" onSubmit={async event => { event.preventDefault(); try { await loadBillingEvents(csrf, 0, billingEventSearch.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Billing event history could not be loaded."); } }}>
+            <label htmlFor="billing-event-search">Search event history</label>
+            <div className="actions"><input id="billing-event-search" type="search" maxLength={200} value={billingEventSearch} onChange={e=>setBillingEventSearch(e.target.value)} placeholder="Event ID, workspace, provider, invoice or status"/><button className="button secondary" type="submit" disabled={billingEventsLoading || !csrf}>Search events</button><button className="button secondary" type="button" disabled={billingEventsLoading || !billingEventQuery} onClick={async()=>{setBillingEventSearch("");try{await loadBillingEvents(csrf,0,"");}catch(e){setError(e instanceof Error?e.message:"Billing event history could not be loaded.");}}}>Clear</button></div>
+            <p className="fine" aria-live="polite">{billingEvents ? "Showing " + billingEvents.items.length + " of " + billingEvents.total.toLocaleString() + " verified events" + (billingEventQuery ? " matching “" + billingEventQuery + "”" : "") + "." : "Loading event history…"}</p>
+          </form>
+          <div className="card table-wrap"><table><thead><tr><th>Event received</th><th>Workspace</th><th>Event type</th><th>Provider event ID</th><th>Outcome / transaction</th></tr></thead><tbody>
+            {billingEvents?.items.map((event,index)=><tr key={event.provider + ":" + event.provider_event_id + ":" + event.event_kind + ":" + index}>
+              <td>{new Date(event.event_created_at).toLocaleString()}<br/><span className="fine">Received {new Date(event.received_at).toLocaleString()}</span></td>
+              <td>{event.workspace_name || "Workspace not mapped"}<br/><span className="fine">{event.workspace_id || "Workspace ID unavailable"}</span></td>
+              <td>{event.event_kind} · {event.provider}</td>
+              <td>{event.provider_event_id}</td>
+              <td>{event.outcome}{event.transaction_status ? " · " + event.transaction_status : ""}<br/><span className="fine">{event.invoice_number || event.related_id}</span></td>
+            </tr>)}
+          </tbody></table>{billingEvents && !billingEvents.items.length && <p>No verified billing events match this search.</p>}</div>
+          <div className="actions" aria-label="Billing event history pagination">
+            <button className="button secondary" type="button" disabled={billingEventsLoading || billingEventOffset===0} onClick={async()=>{try{await loadBillingEvents(csrf,Math.max(0,billingEventOffset-50),billingEventQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load previous billing events.");}}}>Previous events</button>
+            <span className="fine">Events {billingEvents?.total ? billingEventOffset+1 : 0}–{Math.min(billingEventOffset+(billingEvents?.items.length||0),billingEvents?.total||0)} of {billingEvents?.total||0}</span>
+            <button className="button secondary" type="button" disabled={billingEventsLoading || !billingEvents?.truncated} onClick={async()=>{try{await loadBillingEvents(csrf,billingEventOffset+50,billingEventQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load next billing events.");}}}>Next events</button>
+          </div>
+        </div>
         <div className="actions" aria-label="Billing reconciliation pagination">
           <button className="button secondary" type="button" disabled={billingLoading || billingOffset===0} onClick={async()=>{try{await loadBillingReconciliation(csrf,Math.max(0,billingOffset-50),billingQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load previous billing records.");}}}>Previous</button>
           <span className="fine">Subscriptions {billingReconciliation?.total ? billingOffset+1 : 0}–{Math.min(billingOffset+(billingReconciliation?.items.length||0),billingReconciliation?.total||0)} of {billingReconciliation?.total||0}</span>
