@@ -279,7 +279,13 @@ def _billing_reconciliation_sql():
         ev.outcome AS latest_subscription_event_outcome,ev.event_created_at AS latest_subscription_event_at
       FROM workspace_subscriptions s
       JOIN workspaces w ON w.id=s.workspace_id
-      LEFT JOIN platform_billing_plans p ON p.slug=s.plan_slug
+      LEFT JOIN LATERAL (
+        SELECT catalog.name,catalog.slug FROM platform_billing_plans catalog
+        WHERE catalog.slug=s.plan_slug
+           OR (s.plan_slug IS NULL AND catalog.entitlements=s.entitlements)
+        ORDER BY (catalog.slug=s.plan_slug) DESC,catalog.active DESC,catalog.created_at DESC
+        LIMIT 1
+      ) p ON true
       LEFT JOIN LATERAL (
         SELECT u.email FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
         WHERE m.workspace_id=w.id AND m.role='owner' AND m.status='active'
@@ -302,7 +308,7 @@ def _billing_reconciliation_sql():
       SELECT *,
         array_remove(ARRAY[
           CASE WHEN provider_subscription_id IS NULL OR btrim(provider_subscription_id)='' THEN 'missing_provider_subscription_id' END,
-          CASE WHEN plan_slug IS NULL OR plan_name IS NULL THEN 'plan_not_mapped' END,
+          CASE WHEN plan_name IS NULL THEN 'plan_not_mapped' END,
           CASE WHEN latest_transaction_id IS NULL THEN 'missing_transaction_history' END,
           CASE WHEN latest_subscription_event_id IS NULL THEN 'missing_subscription_event_history' END,
           CASE WHEN subscription_status IN ('active','trialing')
