@@ -118,7 +118,7 @@ export default function PlatformAdminPage() {
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ imported: number; skipped: number; configured: number }>("/api/v1/platform-admin/plans/import-configured", csrf, { method: "POST", body: "{}" });
-      await refresh(csrf);
+      await refresh(csrf, 0, 0, 0, clientQuery);
       setNotice("Imported " + result.imported + " package(s); skipped " + result.skipped + " existing or invalid entry/entries from " + result.configured + " configured plan(s). Existing database packages were not overwritten.");
     } catch (e) { setError(e instanceof Error ? e.message : "Configured packages could not be imported."); }
     finally { setBusy(false); }
