@@ -165,6 +165,22 @@ async def create_draft(payload: DraftCreate, request: Request):
     _check_csrf(request, session)
     await _authorize(request, payload.workspace_id, "member", session)
     store = _store(request)
+    lookup_existing = getattr(store, "get_idempotent_draft", None)
+    if lookup_existing is not None:
+        try:
+            existing = await lookup_existing(
+                workspace_id=payload.workspace_id, campaign_id=payload.campaign_id,
+                prospect_id=payload.prospect_id, channel=payload.channel,
+                call_to_action=payload.call_to_action, idempotency_key=payload.idempotency_key,
+            )
+        except ValueError as exc:
+            if str(exc) == "idempotency_key_payload_mismatch":
+                raise HTTPException(status_code=409, detail=str(exc)) from None
+            raise HTTPException(status_code=422, detail="draft_inputs_invalid") from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="draft_create_unavailable") from None
+        if existing is not None:
+            return existing
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
         raise HTTPException(status_code=503, detail="billing_service_not_configured")
