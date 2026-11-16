@@ -115,3 +115,29 @@ main.wrap a:not(.button){text-underline-offset:3px}
 .platform-admin-shell table{min-width:760px}
 .platform-admin-shell th{background:#f3f7fd;color:#3e5575;font-size:.77rem;text-transform:uppercase;letter-spacing:.04em}
 @media(max-width:760px){.dashboard-header{position:relative;align-items:flex-start;flex-direction:column;gap:.5rem;padding:.75rem 1rem}.dashboard-header .nav{width:100%;overflow-x:auto;flex-wrap:nowrap;padding:.25rem 0 .4rem}.dashboard-header .nav a{flex:0 0 auto;white-space:nowrap;font-size:.8rem}.dashboard-shortcuts{top:0}.dashboard-main{padding-top:.6rem}.platform-admin-shell{padding:1rem .85rem 3rem}.platform-admin-header{padding:1.5rem}.platform-admin-header:after{opacity:.5;right:-3rem}.platform-admin-shell .form-grid{grid-template-columns:1fr}}
+
+/* Premium authentication experience */
+.auth-main{position:relative;isolation:isolate;display:grid;place-items:center;min-height:calc(100vh - 210px);padding-top:3.5rem;padding-bottom:4rem}
+.auth-main:before{content:"";position:absolute;z-index:-1;inset:1.5rem max(-4vw,-40px);border-radius:2rem;background:radial-gradient(ellipse at 18% 25%,#dceaff 0,transparent 35%),radial-gradient(ellipse at 85% 70%,#eee9ff 0,transparent 32%),linear-gradient(145deg,#f7faff,#fff 55%,#f8faff)}
+.auth-card{position:relative;width:min(100%,590px);max-width:590px;margin:0 auto;padding:clamp(1.7rem,4vw,3.1rem);border:1px solid #e0e9f7;border-radius:1.35rem;background:#ffffffed;box-shadow:0 24px 75px #153b7517,0 3px 12px #153b7508;backdrop-filter:blur(18px)}
+.auth-card:before{content:"";position:absolute;left:0;right:0;top:0;height:4px;border-radius:1.35rem 1.35rem 0 0;background:linear-gradient(90deg,#16b8e8,#1767ed 52%,#9274ff)}
+.auth-card .eyebrow{display:inline-flex;align-items:center;gap:.45rem;padding:.42rem .75rem;border:1px solid #dbe8ff;border-radius:999px;background:#f1f6ff;color:#1767ed;font-size:.7rem;letter-spacing:.09em}
+.auth-card h1{margin:.85rem 0 .7rem;font-size:clamp(2rem,4vw,2.65rem);line-height:1.1;letter-spacing:-.055em;color:#10264b}
+.auth-card>p:not(.eyebrow){max-width:490px;color:#657793;line-height:1.7}
+.auth-card form{display:grid;gap:1.1rem;margin-top:1.65rem}
+.auth-card .field{display:grid;gap:.48rem}
+.auth-card .field label{color:#263e62;font-size:.85rem;font-weight:750}
+.auth-card .field input,.auth-card .field select,.auth-card .field textarea{width:100%;min-height:49px;padding:.78rem .9rem;border:1px solid #dce6f3;border-radius:.75rem;background:#fbfdff;color:#13294d;outline:none;transition:border-color .18s,box-shadow .18s,background .18s}
+.auth-card .field input:focus,.auth-card .field select:focus,.auth-card .field textarea:focus{border-color:#6da3ff;background:#fff;box-shadow:0 0 0 4px #1767ed18}
+.auth-card form>.button,.auth-card form>button{width:100%;min-height:49px;margin-top:.2rem;border:0;border-radius:999px;background:linear-gradient(100deg,#1265ed,#0750d6);box-shadow:0 8px 20px #1265ed30;color:white;font-weight:800;transition:transform .18s,box-shadow .18s}
+.auth-card form>.button:hover,.auth-card form>button:hover{transform:translateY(-1px);box-shadow:0 11px 25px #1265ed3d}
+.auth-card form>.button:disabled,.auth-card form>button:disabled{opacity:.65;cursor:wait;transform:none}
+.auth-card .notice{margin-top:1.1rem;border-radius:.8rem}
+.auth-card .fine{margin-top:1.05rem;color:#71819a;font-size:.82rem;line-height:1.65}
+.auth-card a:not(.button){color:#1265e9;font-weight:750;text-decoration:none}
+.auth-card a:not(.button):hover{text-decoration:underline;text-underline-offset:3px}
+.auth-card>.button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:.7rem 1.4rem;border-radius:999px;background:linear-gradient(100deg,#1265ed,#0750d6);color:#fff;text-decoration:none;font-weight:800}
+.auth-card[aria-labelledby="verification-title"]{text-align:center}
+.auth-card[aria-labelledby="verification-title"] .notice{margin:1.5rem 0;text-align:left}
+.auth-card[aria-labelledby="verification-title"] .fine{margin-top:1.25rem}
+@media(max-width:600px){.auth-main{min-height:auto;padding-top:1.6rem;padding-bottom:2.5rem}.auth-main:before{inset:.5rem -1rem;border-radius:1rem}.auth-card{padding:1.45rem;border-radius:1.05rem}.auth-card:before{border-radius:1.05rem 1.05rem 0 0}.auth-card h1{font-size:2rem}}
