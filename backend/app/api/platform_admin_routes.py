@@ -201,6 +201,70 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
+@router.get("/clients/{workspace_id}")
+async def client_detail(workspace_id: str, request: Request):
+    """Read-only platform-admin view of one workspace's members, subscription and quota history."""
+    await require_platform_admin(request)
+    if not workspace_id or len(workspace_id) > 200:
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    try:
+        async with pool_for(request).acquire() as conn:
+            workspace = await conn.fetchrow(
+                """SELECT w.id::text AS workspace_id,w.name AS workspace_name,w.created_at,
+                          s.provider,s.status AS subscription_status,s.plan_slug,
+                          s.billing_period_starts_at,s.billing_period_ends_at,s.entitlements,
+                          COALESCE(p.name, (SELECT p2.name FROM platform_billing_plans p2
+                            WHERE p2.entitlements=s.entitlements ORDER BY p2.active DESC,p2.created_at DESC LIMIT 1)) AS package_name
+                   FROM workspaces w
+                   LEFT JOIN workspace_subscriptions s ON s.workspace_id=w.id
+                   LEFT JOIN platform_billing_plans p ON p.slug=s.plan_slug
+                   WHERE w.id=$1""",
+                workspace_id,
+            )
+            if workspace is None:
+                raise HTTPException(status_code=404, detail="workspace_not_found")
+            members = await conn.fetch(
+                """SELECT u.id::text AS user_id,u.email,m.role,m.status,m.created_at,m.updated_at,
+                          u.status AS account_status,u.email_verified_at,u.last_login_at
+                   FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+                   WHERE m.workspace_id=$1 ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,u.email""",
+                workspace_id,
+            )
+            usage = await conn.fetch(
+                """SELECT feature,count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
+                          count(*) FILTER(WHERE status='reserved')::bigint AS reserved,
+                          count(*) FILTER(WHERE status='released')::bigint AS released
+                   FROM feature_usage_reservations WHERE workspace_id=$1 GROUP BY feature ORDER BY feature""",
+                workspace_id,
+            )
+            recent = await conn.fetch(
+                """SELECT id::text AS reservation_id,feature,status,created_at,updated_at,
+                          billing_period_starts_at,billing_period_ends_at
+                   FROM feature_usage_reservations WHERE workspace_id=$1
+                   ORDER BY created_at DESC LIMIT 25""",
+                workspace_id,
+            )
+        def serialize(row):
+            return {key:(value.isoformat() if hasattr(value,"isoformat") else value) for key,value in dict(row).items()}
+        subscription = {key:(value.isoformat() if hasattr(value,"isoformat") else value) for key,value in dict(workspace).items()
+                        if key not in {"workspace_id","workspace_name","created_at"}}
+        entitlements = subscription.get("entitlements")
+        if isinstance(entitlements, str):
+            subscription["entitlements"] = json.loads(entitlements)
+        return {
+            "workspace": {"workspace_id":workspace["workspace_id"],"workspace_name":workspace["workspace_name"],
+                          "created_at":workspace["created_at"].isoformat() if workspace["created_at"] else None},
+            "subscription": subscription,
+            "members": [serialize(row) for row in members],
+            "usage_by_feature": [serialize(row) for row in usage],
+            "recent_usage": [serialize(row) for row in recent],
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="platform_admin_client_detail_unavailable") from None
+
+
 @router.post("/plans/import-configured")
 async def import_configured_plans(request: Request):
     """Import existing server-configured Paddle plans once, without overwriting admin edits."""
