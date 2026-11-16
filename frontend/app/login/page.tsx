@@ -46,7 +46,7 @@ export default function LoginPage() {
 
   return <>
     <SiteHeader/>
-    <main className="wrap"><section className="form-card" aria-labelledby="login-title"><p className="eyebrow">Welcome back</p><h1 id="login-title">Sign in to your workspace</h1><p className="fine">Your session is handled by the backend through a same-origin secure connection.</p>
+    <main className="wrap auth-main"><section className="form-card auth-card" aria-labelledby="login-title"><p className="eyebrow">Welcome back</p><h1 id="login-title">Sign in to your workspace</h1><p className="fine">Your session is handled by the backend through a same-origin secure connection.</p>
       <form onSubmit={submit}><div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div>
       <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="current-password" maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></div>
       <button className="button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button></form>
