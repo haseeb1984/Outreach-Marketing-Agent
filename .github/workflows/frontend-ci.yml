@@ -39,6 +39,8 @@ jobs:
         run: npm run lint
       - name: Build production frontend
         run: npm run build
+      - name: Run production-server smoke tests
+        run: npm run test:smoke
       - name: Package Hostinger source ZIP (exclude secrets and build outputs)
         run: |
           python - <<'PY'
