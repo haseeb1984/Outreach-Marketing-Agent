@@ -141,3 +141,55 @@ main.wrap a:not(.button){text-underline-offset:3px}
 .auth-card[aria-labelledby="verification-title"] .notice{margin:1.5rem 0;text-align:left}
 .auth-card[aria-labelledby="verification-title"] .fine{margin-top:1.25rem}
 @media(max-width:600px){.auth-main{min-height:auto;padding-top:1.6rem;padding-bottom:2.5rem}.auth-main:before{inset:.5rem -1rem;border-radius:1rem}.auth-card{padding:1.45rem;border-radius:1.05rem}.auth-card:before{border-radius:1.05rem 1.05rem 0 0}.auth-card h1{font-size:2rem}}
+
+
+/* Workflow workspace surfaces: prospecting, campaigns, approvals and operations */
+.dashboard-main>.section{position:relative;margin:2.1rem 0;padding:clamp(1rem,2.2vw,1.65rem);border:1px solid #e1eaf7;border-radius:1.25rem;background:linear-gradient(155deg,#fff 0%,#fbfdff 72%,#f7faff 100%);box-shadow:0 12px 34px #173b7009}
+.dashboard-main>.section>h2,.dashboard-main>.section>.section-head h2{display:flex;align-items:center;gap:.7rem;margin:0 0 1.1rem;color:#10264b;font-size:clamp(1.22rem,2.3vw,1.65rem);font-weight:850;letter-spacing:-.045em}
+.dashboard-main>.section>h2:before,.dashboard-main>.section>.section-head h2:before{content:"";display:block;width:5px;height:1.55rem;border-radius:8px;background:linear-gradient(180deg,#18b9e8,#1767ed 65%,#9274ff)}
+.dashboard-main>.section>.fine{max-width:900px;line-height:1.65}
+.dashboard-main>.section .cards{align-items:stretch;gap:1rem}
+.dashboard-main>.section .cards>.card,.dashboard-main>.section>article.card{height:100%;border:1px solid #e2eaf6;border-radius:1rem;background:#fff;box-shadow:0 7px 22px #153b7508;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.dashboard-main>.section .cards>.card:hover,.dashboard-main>.section>article.card:hover{transform:translateY(-2px);border-color:#c6d9fb;box-shadow:0 14px 30px #153b7510}
+.dashboard-main>.section .card h3{color:#18345d;font-size:1.02rem;letter-spacing:-.02em}
+.dashboard-main>.section .eyebrow{letter-spacing:.09em}
+.dashboard-main>.section .field{gap:.45rem}
+.dashboard-main>.section .field label{color:#30496d;font-size:.86rem;font-weight:750}
+.dashboard-main>.section .field input,.dashboard-main>.section .field select,.dashboard-main>.section .field textarea{min-height:45px;border:1px solid #dce6f3;border-radius:.72rem;background:#fbfdff;padding:.72rem .85rem}
+.dashboard-main>.section .field input:focus,.dashboard-main>.section .field select:focus,.dashboard-main>.section .field textarea:focus{border-color:#78a9ff;outline:0;box-shadow:0 0 0 4px #1767ed14;background:#fff}
+.dashboard-main>.section .actions{align-items:center;gap:.6rem}
+.dashboard-main>.section .actions .button{min-height:40px;padding:.62rem .95rem;font-size:.86rem}
+.dashboard-main>.section .button{box-shadow:0 4px 12px #1767ed12}
+.dashboard-main>.section .button.secondary{background:#fff;color:#27466f;border-color:#dce6f3;box-shadow:none}
+.dashboard-main>.section .button.secondary:hover{border-color:#9dbcf1;color:#125fe2;background:#f7faff}
+.dashboard-main>.section .dashboard-grid{gap:.75rem}
+.dashboard-main>.section .metric{border:1px solid #e1eaf7;border-radius:.95rem;background:linear-gradient(145deg,#fff,#f6faff);padding:1.05rem}
+.dashboard-main>.section .metric strong{font-size:clamp(1.55rem,3vw,2rem);color:#155fdb;font-weight:850}
+.dashboard-main>.section .metric span{color:#657994;font-weight:650}
+.dashboard-main>.section table{border-collapse:separate;border-spacing:0;width:100%;font-size:.9rem}
+.dashboard-main>.section th{padding:.85rem .9rem;background:#f1f6ff;color:#415a7c;border-bottom:1px solid #dce6f3}
+.dashboard-main>.section td{padding:.8rem .9rem;border-bottom:1px solid #edf1f7;vertical-align:top}
+.dashboard-main>.section tr:last-child td{border-bottom:0}
+.dashboard-main>.section details{border:1px solid #e5edf8;border-radius:.8rem;padding:.75rem .9rem;background:#fbfdff}
+.dashboard-main>.section details summary{color:#24518f;font-weight:750}
+.dashboard-main>.section#analytics .metric{min-height:112px;display:flex;flex-direction:column;justify-content:center;gap:.3rem}
+.dashboard-main>.section#campaigns .cards>.card{border-top:3px solid #3982ed}
+.dashboard-main>.section#crm>article.card{padding:clamp(1rem,2.5vw,1.5rem)}
+.dashboard-main>.section#drafts>article.card{border-top:3px solid #18a9d7}
+.dashboard-main>.section#approvals .cards>.card{border-top:3px solid #8b75ef}
+.dashboard-main>.section#approvals .cards>.card .actions{flex-wrap:wrap}
+.dashboard-main>.section#integrations .metric{min-height:150px}
+.dashboard-main>.section#inbox .cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
+.dashboard-main>.section#inbox .cards>.card{min-width:0}
+.dashboard-main>.section#inbox .cards>.card button{overflow-wrap:anywhere}
+.dashboard-main>.section#deliveries .cards>.card{border-left:3px solid #78a1e8}
+.dashboard-main>.section#deliveries .cards>.card:has(.eyebrow){border-left-color:#3982ed}
+.dashboard-main .notice{border:1px solid #dce8ff;border-radius:.8rem;background:linear-gradient(120deg,#f0f6ff,#fafcff);color:#284b82}
+@media(max-width:700px){
+ .dashboard-main>.section{margin:1.25rem 0;padding:1rem;border-radius:1rem}
+ .dashboard-main>.section .cards{grid-template-columns:1fr}
+ .dashboard-main>.section .actions{align-items:stretch}
+ .dashboard-main>.section .actions>.button{flex:1 1 auto}
+ .dashboard-main>.section#inbox .cards{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){.dashboard-main>.section .cards>.card,.dashboard-main>.section>article.card{transition:none}}
