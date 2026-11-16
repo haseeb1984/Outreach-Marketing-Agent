@@ -28,6 +28,9 @@ def test_billing_reconciliation_flags_payment_and_mapping_discrepancies():
     )
     for flag in expected_flags:
         assert flag in sql
+    assert "latest_transaction_id is null and subscription_status <> 'trialing'" in sql
+    assert "catalog.entitlements=s.entitlements" in sql
+    assert "catalog.active desc,catalog.created_at desc" in sql
 
 
 def test_billing_reconciliation_latest_invoice_is_scoped_to_same_workspace_and_provider():
