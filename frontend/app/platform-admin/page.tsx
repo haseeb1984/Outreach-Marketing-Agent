@@ -188,6 +188,39 @@ export default function PlatformAdminPage() {
       <section className="section" aria-labelledby="totals-title"><h2 id="totals-title">Platform totals</h2><div className="metric-grid">
         {Object.entries(overview.totals).map(([key,value]) => <article className="card" key={key}><p className="fine">{key.replaceAll("_"," ")}</p><p className="metric-value">{value.toLocaleString()}</p></article>)}
       </div></section>
+      <section className="section" aria-labelledby="billing-reconciliation-title">
+        <h2 id="billing-reconciliation-title">Billing reconciliation</h2>
+        <p className="fine">Read-only comparison of verified subscription snapshots, provider event history and sanitized invoice transactions. Flags are review indicators, not automatic billing decisions. No provider calls, payment changes or customer notifications are performed.</p>
+        {billingReconciliation && <div className="metric-grid">
+          <article className="card"><p className="fine">Subscriptions checked</p><p className="metric-value">{billingReconciliation.summary.subscriptions_total.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Needs review</p><p className="metric-value">{billingReconciliation.summary.needs_review.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Payment attention</p><p className="metric-value">{billingReconciliation.summary.payment_attention.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Plan not mapped</p><p className="metric-value">{billingReconciliation.summary.plan_not_mapped.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Missing invoice history</p><p className="metric-value">{billingReconciliation.summary.missing_transaction_history.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Missing subscription events</p><p className="metric-value">{billingReconciliation.summary.missing_subscription_event_history.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Expired active periods</p><p className="metric-value">{billingReconciliation.summary.expired_active_periods.toLocaleString()}</p></article>
+          <article className="card"><p className="fine">Payment-state conflicts</p><p className="metric-value">{billingReconciliation.summary.payment_status_conflicts.toLocaleString()}</p></article>
+        </div>}
+        <form className="field" onSubmit={async event => { event.preventDefault(); try { await loadBillingReconciliation(csrf, 0, billingSearch.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Billing reconciliation could not be loaded."); } }}>
+          <label htmlFor="billing-reconciliation-search">Search subscriptions and invoice records</label>
+          <div className="actions"><input id="billing-reconciliation-search" type="search" maxLength={200} value={billingSearch} onChange={e=>setBillingSearch(e.target.value)} placeholder="Workspace, owner, provider, plan, subscription or invoice ID"/><button className="button secondary" type="submit" disabled={billingLoading || !csrf}>Search</button><button className="button secondary" type="button" disabled={billingLoading || !billingQuery} onClick={async()=>{setBillingSearch("");try{await loadBillingReconciliation(csrf,0,"");}catch(e){setError(e instanceof Error?e.message:"Billing reconciliation could not be loaded.");}}}>Clear</button></div>
+          <p className="fine" aria-live="polite">{billingReconciliation ? "Showing " + billingReconciliation.items.length + " of " + billingReconciliation.total.toLocaleString() + " subscriptions" + (billingQuery ? " matching “" + billingQuery + "”" : "") + "." : "Loading reconciliation data…"}</p>
+        </form>
+        <div className="card table-wrap"><table><thead><tr><th>Workspace / owner</th><th>Subscription</th><th>Latest invoice transaction</th><th>Provider event</th><th>Review flags</th></tr></thead><tbody>
+          {billingReconciliation?.items.map(item=><tr key={item.workspace_id}>
+            <td><strong>{item.workspace_name}</strong><br/><span className="fine">{item.owner_email || "Owner not mapped"}</span><br/><span className="fine">{item.workspace_id}</span></td>
+            <td>{item.plan_name || item.plan_slug || "Plan unmapped"}<br/><span className="fine">{item.provider} · {item.subscription_status}</span><br/><span className="fine">{item.billing_period_starts_at ? new Date(item.billing_period_starts_at).toLocaleDateString() : "—"} – {item.billing_period_ends_at ? new Date(item.billing_period_ends_at).toLocaleDateString() : "—"}</span></td>
+            <td>{item.latest_transaction_id || "No transaction"}<br/><span className="fine">{item.latest_invoice_number || "Invoice number unavailable"} · {item.latest_transaction_status || "—"}</span><br/><span className="fine">{item.latest_billed_at ? new Date(item.latest_billed_at).toLocaleDateString() : "—"}{item.latest_total_minor !== null ? " · " + item.latest_total_minor + " " + (item.latest_currency_code || "minor units") : ""}</span></td>
+            <td>{item.latest_subscription_event_id || "No event"}<br/><span className="fine">{item.latest_subscription_event_outcome || "—"}</span><br/><span className="fine">{item.latest_subscription_event_at ? new Date(item.latest_subscription_event_at).toLocaleString() : "—"}</span></td>
+            <td>{item.issues.length ? <ul className="billing-issue-list">{item.issues.map(issue=><li key={issue}>{issue.replaceAll("_"," ")}</li>)}</ul> : <span>Looks consistent</span>}</td>
+          </tr>)}
+        </tbody></table>{billingReconciliation && !billingReconciliation.items.length && <p>No subscription records match this search.</p>}</div>
+        <div className="actions" aria-label="Billing reconciliation pagination">
+          <button className="button secondary" type="button" disabled={billingLoading || billingOffset===0} onClick={async()=>{try{await loadBillingReconciliation(csrf,Math.max(0,billingOffset-50),billingQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load previous billing records.");}}}>Previous</button>
+          <span className="fine">Subscriptions {billingReconciliation?.total ? billingOffset+1 : 0}–{Math.min(billingOffset+(billingReconciliation?.items.length||0),billingReconciliation?.total||0)} of {billingReconciliation?.total||0}</span>
+          <button className="button secondary" type="button" disabled={billingLoading || !billingReconciliation?.truncated} onClick={async()=>{try{await loadBillingReconciliation(csrf,billingOffset+50,billingQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load next billing records.");}}}>Next</button>
+        </div>
+      </section>
       <section className="section" aria-labelledby="plans-title"><h2 id="plans-title">Package management</h2><p className="fine">Price IDs are shown only to authorized platform admins. Deleting a package is a soft-deactivation so billing history is retained.</p><div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={importConfiguredPlans}>Import configured Paddle packages</button><span className="fine">Imports environment-configured packages only when the slug and price ID are not already present. Existing admin edits are preserved.</span></div>
         <form className="card form-grid" onSubmit={savePlan}>
           <h3>{editing ? "Edit package: " + editing : "Add package"}</h3>
