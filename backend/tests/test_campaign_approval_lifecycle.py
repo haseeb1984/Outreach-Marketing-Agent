@@ -41,12 +41,20 @@ class _Subscriptions:
 
 
 class _CampaignStore:
-    def __init__(self, *, draft=None, review=None, review_error=None):
+    def __init__(self, *, draft=None, existing_draft=None, review=None, review_error=None):
         self.draft = draft
+        self.existing_draft = existing_draft
+        self.idempotent_lookup_calls = []
         self.review = review
         self.review_error = review_error
         self.create_calls = []
         self.review_calls = []
+
+    async def get_idempotent_draft(self, **kwargs):
+        self.idempotent_lookup_calls.append(kwargs)
+        if isinstance(self.existing_draft, Exception):
+            raise self.existing_draft
+        return self.existing_draft
 
     async def get_draft_generation_context(self, **kwargs):
         return {"business": "Example", "prospect": "Example prospect"}
@@ -106,6 +114,24 @@ def _patch_auth(monkeypatch, actor_id):
 
     monkeypatch.setattr(campaign_routes, "_authenticated", authenticated)
     monkeypatch.setattr(campaign_routes, "_check_csrf", lambda *_args: None)
+
+
+def test_idempotent_retry_returns_existing_draft_without_ai_quota_or_regeneration(monkeypatch):
+    actor_id = str(uuid4())
+    existing = {"id": str(uuid4()), "status": "pending_approval", "channel": "email"}
+    subscriptions = _Subscriptions()
+    store = _CampaignStore(existing_draft=existing)
+    request, _ = _request(subscriptions=subscriptions, campaign_store=store, user_id=actor_id)
+    _patch_auth(monkeypatch, actor_id)
+    _enable_ai(monkeypatch)
+
+    result = asyncio.run(campaign_routes.create_draft(_payload(), request))
+
+    assert result == existing
+    assert len(store.idempotent_lookup_calls) == 1
+    assert store.create_calls == []
+    assert subscriptions.reserve_calls == []
+    assert subscriptions.finish_calls == []
 
 
 def test_template_fallback_without_ai_provider_does_not_reserve_ai_quota(monkeypatch):
