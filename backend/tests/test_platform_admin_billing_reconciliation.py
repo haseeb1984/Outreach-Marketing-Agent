@@ -38,3 +38,38 @@ def test_billing_reconciliation_latest_invoice_is_scoped_to_same_workspace_and_p
     assert "where t.workspace_id=w.id and t.provider=s.provider" in sql
     assert "where e.workspace_id=w.id and e.provider=s.provider" in sql
     assert "e.provider_subscription_id=s.provider_subscription_id" in sql
+
+
+def test_billing_event_history_is_a_sanitized_read_only_union():
+    sql = " ".join("""
+      WITH events AS (
+        SELECT 'subscription'::text AS event_kind,e.provider,e.provider_event_id,
+          e.workspace_id::text AS workspace_id,w.name AS workspace_name,
+          e.provider_subscription_id AS related_id,e.event_created_at,e.received_at,
+          e.outcome,NULL::text AS transaction_status,NULL::text AS invoice_number
+        FROM billing_provider_events e
+        LEFT JOIN workspaces w ON w.id=e.workspace_id
+        UNION ALL
+        SELECT 'transaction'::text AS event_kind,e.provider,e.provider_event_id,
+          t.workspace_id::text AS workspace_id,w.name AS workspace_name,
+          e.transaction_id AS related_id,e.event_created_at,e.received_at,
+          'recorded'::text AS outcome,t.status AS transaction_status,t.invoice_number
+        FROM billing_transaction_events e
+        LEFT JOIN billing_transactions t
+          ON t.provider=e.provider AND t.transaction_id=e.transaction_id
+        LEFT JOIN workspaces w ON w.id=t.workspace_id
+      ), filtered AS (
+        SELECT * FROM events
+        WHERE ($1='' OR position($1 in lower(concat_ws(' ',
+          event_kind,provider,provider_event_id,workspace_id,workspace_name,
+          related_id,outcome,transaction_status,invoice_number)))>0)
+      )
+    """.lower().split())
+    assert "from billing_provider_events e" in sql
+    assert "from billing_transaction_events e" in sql
+    assert "left join billing_transactions t" in sql
+    assert "e.provider_event_id" in sql
+    assert "e.received_at" in sql
+    assert "e.event_created_at" in sql
+    assert "union all" in sql
+    assert not any(token in sql for token in ("insert into ", "update ", "delete from ", "truncate ", "raw_payload", "webhook_secret"))
