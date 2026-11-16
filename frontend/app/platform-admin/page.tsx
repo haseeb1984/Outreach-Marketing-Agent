@@ -10,6 +10,8 @@ type ClientDetail = { workspace: { workspace_id: string; workspace_name: string;
 type UsageRecord = { reservation_id: string; workspace_id: string; workspace_name: string | null; feature: string; status: string; created_at: string; updated_at: string; billing_period_starts_at: string; billing_period_ends_at: string };
 type AdminEvent = { id: number; actor_email: string; event_type: string; target_type: string; target_id: string; created_at: string };
 type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number; usage_offset: number; usage_limit: number; usage_total: number; usage_truncated: boolean; audit_offset: number; audit_limit: number; audit_total: number; audit_truncated: boolean };
+type BillingReconciliationItem = { workspace_id: string; workspace_name: string; owner_email: string | null; provider: string; provider_customer_id: string | null; provider_subscription_id: string | null; plan_slug: string | null; subscription_status: string; billing_period_starts_at: string; billing_period_ends_at: string; provider_event_created_at: string | null; subscription_updated_at: string; plan_name: string | null; latest_transaction_id: string | null; latest_invoice_number: string | null; latest_transaction_status: string | null; latest_currency_code: string | null; latest_total_minor: string | null; latest_billed_at: string | null; latest_subscription_event_id: string | null; latest_subscription_event_outcome: string | null; latest_subscription_event_at: string | null; issues: string[] };
+type BillingReconciliation = { summary: Record<string, number>; items: BillingReconciliationItem[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "ai_draft_generations": { "enabled": true, "monthly_limit": 100 },\n  "email_sends": { "enabled": true, "monthly_limit": 1000 },\n  "website_audits": { "enabled": true, "monthly_limit": 25 },\n  "whatsapp_sends": { "enabled": false, "monthly_limit": 0 },\n  "prospect_research": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
@@ -38,12 +40,27 @@ export default function PlatformAdminPage() {
   const [clientQuery, setClientQuery] = useState("");
   const [clientDetail, setClientDetail] = useState<ClientDetail | null>(null);
   const [clientDetailLoading, setClientDetailLoading] = useState(false);
+  const [billingReconciliation, setBillingReconciliation] = useState<BillingReconciliation | null>(null);
+  const [billingSearch, setBillingSearch] = useState("");
+  const [billingQuery, setBillingQuery] = useState("");
+  const [billingOffset, setBillingOffset] = useState(0);
+  const [billingLoading, setBillingLoading] = useState(false);
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const filteredClients = overview?.clients ?? [];
+
+  async function loadBillingReconciliation(token: string, offset = 0, search = "") {
+    setBillingLoading(true);
+    try {
+      const result = await api<BillingReconciliation>("/api/v1/platform-admin/billing/reconciliation?limit=50&offset=" + offset + "&search=" + encodeURIComponent(search), token);
+      setBillingReconciliation(result);
+      setBillingOffset(result.offset);
+      setBillingQuery(search);
+    } finally { setBillingLoading(false); }
+  }
 
   async function loadClientDetail(workspaceId: string) {
     if (!csrf || clientDetailLoading) return;
@@ -77,6 +94,7 @@ export default function PlatformAdminPage() {
       const [smtp] = await Promise.all([
         api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
         refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery),
+        loadBillingReconciliation(csrf, billingOffset, billingQuery),
       ]);
       setPlatformSmtp(smtp);
       setNotice("Platform overview and SMTP readiness refreshed.");
@@ -94,6 +112,7 @@ export default function PlatformAdminPage() {
         if (!active) return;
         setCsrf(session.csrf_token);
         await refresh(session.csrf_token);
+        await loadBillingReconciliation(session.csrf_token);
         const smtp = await api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", session.csrf_token);
         if (active) setPlatformSmtp(smtp);
       } catch (e) { if (active) setError(e instanceof Error ? e.message : "Admin access unavailable."); }
