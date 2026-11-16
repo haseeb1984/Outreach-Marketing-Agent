@@ -261,3 +261,16 @@ main.wrap a:not(.button){text-underline-offset:3px}
 .platform-admin-header-actions .button:hover:not(:disabled){border-color:#9dbcf1;background:#f7faff;color:#125fe2}
 .platform-admin-header-actions .fine{color:#71819a;font-size:.78rem}
 @media(max-width:600px){.platform-admin-header-actions{align-items:flex-start;flex-direction:column}.platform-admin-header-actions .button{width:100%}}
+
+
+/* Read-only platform customer detail drilldown */
+.platform-admin-shell .client-detail-panel{margin-top:1rem;padding:clamp(1rem,2vw,1.5rem);border:1px solid #dce7f7;background:linear-gradient(150deg,#fff,#f8fbff)}
+.platform-admin-shell .client-detail-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}
+.platform-admin-shell .client-detail-heading h3{margin:0 0 .35rem;color:#14294f;font-size:1.15rem}
+.platform-admin-shell .client-detail-panel h4{margin:1.35rem 0 .65rem;color:#203b63;font-size:.92rem;font-weight:800}
+.platform-admin-shell .client-detail-metrics{grid-template-columns:repeat(auto-fit,minmax(135px,1fr));margin:.8rem 0 1.2rem}
+.platform-admin-shell .client-detail-stat{padding:.9rem;background:#fff}
+.platform-admin-shell .client-detail-stat span{display:block;color:#687b96;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.platform-admin-shell .client-detail-stat strong{display:block;margin-top:.3rem;color:#155fd5;font-size:1.05rem;overflow-wrap:anywhere}
+.platform-admin-shell .client-entitlements{max-height:280px;overflow:auto;margin:.5rem 0;padding:1rem;border:1px solid #e2eaf6;border-radius:.8rem;background:#f5f8fd;color:#314967;font-size:.78rem;white-space:pre-wrap}
+@media(max-width:640px){.platform-admin-shell .client-detail-heading{flex-direction:column}.platform-admin-shell .client-detail-panel .table-wrap{margin-inline:-.25rem}}
