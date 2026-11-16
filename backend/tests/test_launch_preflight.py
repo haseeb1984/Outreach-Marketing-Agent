@@ -63,6 +63,9 @@ def test_preflight_requires_latest_tenant_whatsapp_and_billing_migrations():
         "054_whatsapp_tenant_integrity.sql",
         "055_whatsapp_webhook_retry_tracking.sql",
         "056_billing_transaction_past_due.sql",
+        "057_core_outreach_tenant_integrity.sql",
+        "058_draft_request_idempotency.sql",
+        "059_workspace_display_name.sql",
     }.issubset(set(REQUIRED_RELEASE_MIGRATIONS))
 
 
