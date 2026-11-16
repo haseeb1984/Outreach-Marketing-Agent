@@ -44,7 +44,7 @@ export default function RegisterPage() {
 
   return <>
     <SiteHeader/>
-    <main className="wrap"><section className="form-card" aria-labelledby="register-title"><p className="eyebrow">Create an account</p><h1 id="register-title">Start with your workspace</h1><p className="fine">Use a unique password with at least 12 characters. You must verify your email before signing in.</p>
+    <main className="wrap auth-main"><section className="form-card auth-card" aria-labelledby="register-title"><p className="eyebrow">Create an account</p><h1 id="register-title">Start with your workspace</h1><p className="fine">Use a unique password with at least 12 characters. You must verify your email before signing in.</p>
       <form onSubmit={submit}><div className="field"><label htmlFor="email">Work email</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div>
       <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></div>
       <button className="button" type="submit" disabled={busy}>{busy ? "Submitting…" : "Create account"}</button></form>
