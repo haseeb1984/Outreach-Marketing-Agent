@@ -57,7 +57,7 @@ export default function PlatformAdminPage() {
 
   async function refreshAll() {
     if (!csrf || refreshing || busy) return;
-    setRefreshing(true); setError(""); setNotice("");
+    setRefreshing(true); setBusy(true); setError(""); setNotice("");
     try {
       const [smtp] = await Promise.all([
         api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
@@ -67,7 +67,7 @@ export default function PlatformAdminPage() {
       setNotice("Platform overview and SMTP readiness refreshed.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Platform data could not be refreshed.");
-    } finally { setRefreshing(false); }
+    } finally { setRefreshing(false); setBusy(false); }
   }
 
   useEffect(() => {
