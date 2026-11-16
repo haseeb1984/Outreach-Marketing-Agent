@@ -54,8 +54,10 @@ class AuthStore:
                 )
                 if user is None:
                     return None
+                workspace_name = normalized_email.split("@", 1)[0].strip()[:140] + "'s workspace"
                 await connection.execute(
-                    "INSERT INTO workspaces (id) VALUES ($1)", workspace_id
+                    "INSERT INTO workspaces (id, name) VALUES ($1, $2)",
+                    workspace_id, workspace_name,
                 )
                 await connection.execute(
                     """INSERT INTO workspace_memberships
