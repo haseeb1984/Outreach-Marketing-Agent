@@ -63,3 +63,55 @@ main.wrap{width:min(1240px,calc(100% - 4rem))}
 main.wrap a:not(.button){text-underline-offset:3px}
 @media(max-width:900px){.cards,#whatsapp-requirements .cards{grid-template-columns:repeat(2,minmax(0,1fr))}.page-head:after{right:-3%;opacity:.55}}
 @media(max-width:600px){main.wrap{width:calc(100% - 2rem)}.page-head{margin:1.4rem 0;padding:1.5rem;border-radius:1rem}.page-head:after{width:110px;height:110px;right:-2rem;top:8%}.page-head h1{font-size:2.15rem}.page-head .lead{font-size:.98rem}.cards,#whatsapp-requirements .cards{grid-template-columns:1fr}.card{padding:1.2rem}.callout{align-items:flex-start;flex-direction:column;padding:1.35rem}.callout .button{white-space:normal}.step-row{grid-template-columns:48px 1fr;gap:.8rem;padding:1rem}.step-number{width:45px;height:45px;border-radius:14px}.form-card{margin:1.5rem auto;padding:1.3rem}}
+
+/* Authenticated product workspace and platform operations */
+.dashboard-header{position:sticky;top:0;z-index:30;width:100%;max-width:none;padding:0 clamp(1rem,4vw,3.5rem);min-height:76px;background:#ffffffed;border-bottom:1px solid #e6edf7;backdrop-filter:blur(18px);box-shadow:0 5px 24px #122b4d08}
+.dashboard-header .brand{gap:.7rem;color:#10264b;font-weight:800;letter-spacing:-.035em}
+.dashboard-header .brand-symbol{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#e8f2ff,#f2efff);box-shadow:inset 0 0 0 1px #d9e7ff}
+.dashboard-header .brand-symbol svg{width:39px;height:39px}
+.dashboard-header .brand-name{display:flex;flex-direction:column;line-height:1.05;font-size:1.08rem}
+.dashboard-header .brand-name small{font-size:.68rem;font-weight:600;letter-spacing:.015em;color:#71819a;margin-top:.2rem}
+.dashboard-header .nav{gap:.45rem;align-items:center}
+.dashboard-header .nav a{padding:.65rem .85rem;border-radius:999px;color:#435875;font-size:.88rem;font-weight:650}
+.dashboard-header .nav a:hover{background:#eff5ff;color:#1265e9}
+.dashboard-header .nav .button{border-radius:999px}
+.dashboard-main{padding-top:1.3rem;padding-bottom:5rem}
+.dashboard-main>.page-head{margin-top:1.2rem;margin-bottom:1.4rem}
+.dashboard-main>.page-head h1{font-size:clamp(2rem,4vw,3rem)}
+.dashboard-shortcuts{position:sticky;top:76px;z-index:20;display:flex;gap:.45rem;overflow-x:auto;padding:.75rem .15rem;margin:0 0 1.2rem;background:#f8fbffed;border-bottom:1px solid #e5edf8;backdrop-filter:blur(14px);scrollbar-width:thin}
+.dashboard-shortcuts a{flex:0 0 auto;padding:.55rem .85rem;border:1px solid #e2eaf6;border-radius:999px;background:#fff;color:#405875;text-decoration:none;font-size:.82rem;font-weight:700;white-space:nowrap}
+.dashboard-shortcuts a:hover{border-color:#a9c8ff;background:#eff5ff;color:#145fe0}
+.dashboard-main>.card{border-radius:1.05rem;border-color:#e2eaf6;box-shadow:0 10px 28px #183b7008}
+.dashboard-main .section{scroll-margin-top:145px;margin-top:2.8rem}
+.dashboard-main .section>h2,.dashboard-main .section-head h2{font-size:1.45rem;letter-spacing:-.035em;color:#13284d}
+.dashboard-main .cards{gap:1rem}
+.dashboard-main .card{border-radius:1rem;border-color:#e3ebf7;box-shadow:0 8px 26px #183b7008}
+.dashboard-main .metric-grid{gap:.85rem}
+.dashboard-main .metric,.dashboard-main .metric-grid>.card{border-radius:1rem;border:1px solid #e2eaf6;background:linear-gradient(145deg,#fff,#f8fbff);box-shadow:0 8px 24px #183b7008}
+.dashboard-main .metric strong,.dashboard-main .metric-value{color:#125fe2;font-variant-numeric:tabular-nums}
+.dashboard-main .field input,.dashboard-main .field select,.dashboard-main .field textarea{border-radius:.72rem;border-color:#dce6f3;background:#fff}
+.dashboard-main .button{border-radius:999px}
+.dashboard-main details.card summary{cursor:pointer;font-weight:750;color:#17345f}
+.dashboard-main .table-wrap{overflow-x:auto;border-radius:1rem}
+.dashboard-main table{min-width:680px}
+.dashboard-main th{background:#f3f7fd;color:#3e5575;font-size:.78rem;text-transform:uppercase;letter-spacing:.045em}
+.dashboard-main td{color:#435875}
+.platform-admin-shell{max-width:1440px;margin:0 auto;padding:2rem clamp(1rem,4vw,3rem) 5rem}
+.platform-admin-header{position:relative;overflow:hidden;margin:0 0 2rem;padding:clamp(2rem,4vw,3.5rem);border:1px solid #dce8fa;border-radius:1.35rem;background:radial-gradient(circle at 88% 12%,#dceaff 0,transparent 34%),linear-gradient(120deg,#f0f6ff,#fbfdff);box-shadow:0 16px 44px #173a7009}
+.platform-admin-header:after{content:"";position:absolute;right:7%;top:12%;width:150px;height:150px;border:1px solid #c7dcff;border-radius:50%;box-shadow:0 0 0 24px #dceaff55,0 0 0 48px #e9f1ff66;pointer-events:none}
+.platform-admin-header>*{position:relative;z-index:1}
+.platform-admin-header h1{font-size:clamp(2.2rem,4vw,3.4rem);letter-spacing:-.05em;color:#10264b}
+.platform-admin-header p:not(.eyebrow){max-width:760px;color:#5c708e;line-height:1.7}
+.platform-admin-header a{display:inline-flex;margin-top:.6rem;color:#1265e9;font-weight:750}
+.platform-admin-shell>.section{margin-top:2.5rem}
+.platform-admin-shell .section>h2{font-size:1.4rem;letter-spacing:-.035em;color:#14294f}
+.platform-admin-shell .card{border-radius:1rem;border-color:#e2eaf6;box-shadow:0 9px 28px #183b7008}
+.platform-admin-shell .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.9rem}
+.platform-admin-shell .metric-grid .card{background:linear-gradient(145deg,#fff,#f7faff)}
+.platform-admin-shell .metric-value{font-size:2rem;font-weight:850;letter-spacing:-.05em;color:#1265e9;font-variant-numeric:tabular-nums}
+.platform-admin-shell .field input,.platform-admin-shell .field select,.platform-admin-shell .field textarea{border-radius:.72rem;border-color:#dce6f3}
+.platform-admin-shell .button{border-radius:999px}
+.platform-admin-shell .table-wrap{overflow-x:auto}
+.platform-admin-shell table{min-width:760px}
+.platform-admin-shell th{background:#f3f7fd;color:#3e5575;font-size:.77rem;text-transform:uppercase;letter-spacing:.04em}
+@media(max-width:760px){.dashboard-header{position:relative;align-items:flex-start;flex-direction:column;gap:.5rem;padding:.75rem 1rem}.dashboard-header .nav{width:100%;overflow-x:auto;flex-wrap:nowrap;padding:.25rem 0 .4rem}.dashboard-header .nav a{flex:0 0 auto;white-space:nowrap;font-size:.8rem}.dashboard-shortcuts{top:0}.dashboard-main{padding-top:.6rem}.platform-admin-shell{padding:1rem .85rem 3rem}.platform-admin-header{padding:1.5rem}.platform-admin-header:after{opacity:.5;right:-3rem}.platform-admin-shell .form-grid{grid-template-columns:1fr}}
