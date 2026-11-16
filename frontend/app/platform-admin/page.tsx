@@ -37,6 +37,8 @@ export default function PlatformAdminPage() {
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const filteredClients = (overview?.clients ?? []).filter((client) => {
     const query = clientSearch.trim().toLowerCase();
     if (!query) return true;
@@ -50,7 +52,23 @@ export default function PlatformAdminPage() {
     setClientOffset(data.clients_offset);
     setUsageOffset(data.usage_offset);
     setAuditOffset(data.audit_offset);
+    setLastRefreshed(new Date().toISOString());
   }, []);
+
+  async function refreshAll() {
+    if (!csrf || refreshing || busy) return;
+    setRefreshing(true); setError(""); setNotice("");
+    try {
+      const [smtp] = await Promise.all([
+        api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
+        refresh(csrf, clientOffset, usageOffset, auditOffset),
+      ]);
+      setPlatformSmtp(smtp);
+      setNotice("Platform overview and SMTP readiness refreshed.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Platform data could not be refreshed.");
+    } finally { setRefreshing(false); }
+  }
 
   useEffect(() => {
     let active = true;
@@ -118,7 +136,7 @@ export default function PlatformAdminPage() {
   }
 
   return <main className="page-shell platform-admin-shell">
-    <header className="page-header platform-admin-header"><p className="eyebrow">Platform operations</p><h1>SaaS administration</h1><p>Global client, subscription, package and usage visibility. Access is restricted by the server-side platform-admin email allowlist.</p><Link href="/dashboard">Return to workspace dashboard</Link></header>
+    <header className="page-header platform-admin-header"><p className="eyebrow">Platform operations</p><h1>SaaS administration</h1><p>Global client, subscription, package and usage visibility. Access is restricted by the server-side platform-admin email allowlist.</p><div className="platform-admin-header-actions"><Link href="/dashboard">Return to workspace dashboard</Link><button className="button secondary" type="button" disabled={!csrf || refreshing || busy} onClick={refreshAll}>{refreshing ? "Refreshing…" : "Refresh platform data"}</button>{lastRefreshed && <span className="fine">Last refreshed {new Date(lastRefreshed).toLocaleTimeString()}</span>}</div></header>
     {error && <p className="notice" role="alert">{error}</p>}{notice && <p className="notice" role="status">{notice}</p>}
     {!overview && !error && <section className="card"><p>Loading protected platform summary…</p></section>}
     {overview && <>
