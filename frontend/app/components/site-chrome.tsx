@@ -10,18 +10,32 @@ const legal = [
 ] as const;
 
 function BrandMark() {
-  return <span className="brand-symbol" aria-hidden="true"><svg viewBox="0 0 48 48"><defs><linearGradient id="mailmark" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#68b7ff"/><stop offset="1" stopColor="#1554df"/></linearGradient></defs><rect x="3" y="8" width="42" height="32" rx="8" fill="url(#mailmark)"/><path d="m6 13 18 14 18-14" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/><path d="m6 36 13-12m23 12L29 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round"/><path d="M31 5 43 2l-3 12" fill="none" stroke="#8a75ff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></span>;
+  return <span className="brand-symbol" aria-hidden="true"><svg viewBox="0 0 64 64" role="img">
+    <defs>
+      <linearGradient id="outreach-mark-gradient" x1="8" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse"><stop stopColor="#8B7BFF"/><stop offset=".46" stopColor="#168BFF"/><stop offset="1" stopColor="#0645C8"/></linearGradient>
+      <linearGradient id="outreach-mark-accent" x1="19" y1="45" x2="44" y2="20" gradientUnits="userSpaceOnUse"><stop stopColor="#18D5E8"/><stop offset="1" stopColor="#4D70FF"/></linearGradient>
+    </defs>
+    <path d="M46.8 12.2A25 25 0 1 0 53 37.8" fill="none" stroke="url(#outreach-mark-gradient)" strokeWidth="7" strokeLinecap="round"/>
+    <path d="M48.7 7.8 59 6l-2.1 10.4" fill="none" stroke="#8874FF" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M14 43.5 23 37l7.2 4.5 9.3-13.2 7.4 4.1" fill="none" stroke="url(#outreach-mark-accent)" strokeWidth="4.3" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M28.2 24.1 56 11.4 43.3 39.2l-5.7-9.4-9.4-5.7Z" fill="url(#outreach-mark-gradient)" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round"/>
+    <path d="m28.2 24.1 9.4 5.7 18.4-18.4" fill="none" stroke="#BDEBFF" strokeWidth="1.8" strokeLinejoin="round"/>
+    <circle cx="13.5" cy="15" r="2.2" fill="#A58CFF"/>
+  </svg></span>;
+}
+function BrandLockup({ footer = false }: { footer?: boolean }) {
+  return <Link className={`brand${footer ? " footer-brand" : ""}`} href="/" aria-label="Outreach Marketing Agent home"><BrandMark/><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link>;
 }
 export function SiteHeader() {
   return <header className="site-header"><div className="wrap topbar">
-    <Link className="brand" href="/" aria-label="Outreach Marketing Agent home"><BrandMark/><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link>
+    <BrandLockup/>
     <nav className="nav" aria-label="Main navigation">{primary.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}<Link className="security-nav" href="/security">♢ Security</Link><Link className="login-link" href="/login">Login</Link><Link className="button nav-cta" href="/register">Get started free <span aria-hidden="true">→</span></Link></nav>
   </div></header>;
 }
 export function SiteFooter() {
   return <footer className="site-footer"><div className="wrap">
     <div className="footer-columns">
-      <div className="footer-about"><Link className="brand footer-brand" href="/"><BrandMark/><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link><p>Smarter research. More thoughtful outreach. Better-informed growth.</p><div className="footer-social" aria-label="Social links"><span>in</span><span>𝕏</span><span>▶</span><span>⌘</span></div></div>
+      <div className="footer-about"><BrandLockup footer/><p>Smarter research. More thoughtful outreach. Better-informed growth.</p><div className="footer-social" aria-label="Social links"><span>in</span><span>𝕏</span><span>▶</span><span>⌘</span></div></div>
       <div><strong>Explore</strong><nav className="footer-links">{primary.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
       <div><strong>Legal & support</strong><nav className="footer-links">{legal.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
       <div><strong>Get started</strong><p>Bring your prospect research and outreach workflow together.</p><Link className="footer-start" href="/register">Create a workspace →</Link><Link href="https://juncsys.com" target="_blank" rel="noopener noreferrer">Junction Systems ↗</Link></div>
