@@ -254,3 +254,10 @@ main.wrap a:not(.button){text-underline-offset:3px}
  .platform-admin-shell>.section .actions .button{flex:1 1 auto}
 }
 @media(prefers-reduced-motion:reduce){.platform-admin-shell>.section .field input,.platform-admin-shell>.section .field select,.platform-admin-shell>.section .field textarea{transition:none}}
+
+.platform-admin-header-actions{position:relative;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-top:1rem}
+.platform-admin-header-actions>a{margin:0}
+.platform-admin-header-actions .button{min-height:42px;padding:.65rem 1rem;border:1px solid #d6e3f6;border-radius:999px;background:#fff;color:#23466f;font-weight:750;box-shadow:0 5px 15px #173b700c}
+.platform-admin-header-actions .button:hover:not(:disabled){border-color:#9dbcf1;background:#f7faff;color:#125fe2}
+.platform-admin-header-actions .fine{color:#71819a;font-size:.78rem}
+@media(max-width:600px){.platform-admin-header-actions{align-items:flex-start;flex-direction:column}.platform-admin-header-actions .button{width:100%}}
