@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SiteHeader, SiteFooter } from "../../components/site-chrome";
 
 export default function InvitationAcceptance() {
   const router = useRouter();
@@ -70,8 +71,8 @@ export default function InvitationAcceptance() {
   }
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link></header>
-    <main className="wrap"><section className="form-card" aria-labelledby="invite-title">
+    <SiteHeader/>
+    <main className="wrap auth-main"><section className="form-card auth-card" aria-labelledby="invite-title">
       <p className="eyebrow">Workspace invitation</p><h1 id="invite-title">Join a workspace</h1>
       {!token ? <p className="notice" role="alert">The invitation link is missing its token. Open the complete link from the invitation email.</p> : null}
       {message ? <p className="notice" role="status" aria-live="polite">{message}</p> : null}
@@ -80,5 +81,6 @@ export default function InvitationAcceptance() {
       {!sessionReady && <p><Link href="/login">Sign in</Link> · <Link href="/register">Create account</Link></p>}
       <p className="fine">The invitation can only be accepted by the account matching the invited email address.</p>
     </section></main>
+    <SiteFooter/>
   </>;
 }
