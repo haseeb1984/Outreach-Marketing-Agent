@@ -193,3 +193,64 @@ main.wrap a:not(.button){text-underline-offset:3px}
  .dashboard-main>.section#inbox .cards{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.dashboard-main>.section .cards>.card,.dashboard-main>.section>article.card{transition:none}}
+
+
+/* Platform-owner operations: distinct, scannable administration work areas */
+.platform-admin-shell>.section{position:relative;padding:clamp(1rem,2.2vw,1.65rem);border:1px solid #e1eaf7;border-radius:1.2rem;background:linear-gradient(155deg,#fff 0%,#fbfdff 76%,#f7faff 100%);box-shadow:0 12px 34px #173b7009}
+.platform-admin-shell>.section>h2{display:flex;align-items:center;gap:.7rem;margin:0 0 1rem;font-size:clamp(1.2rem,2vw,1.55rem);font-weight:850;letter-spacing:-.04em}
+.platform-admin-shell>.section>h2:before{content:"";display:block;width:5px;height:1.5rem;border-radius:8px;background:linear-gradient(180deg,#18b9e8,#1767ed 65%,#9274ff)}
+.platform-admin-shell>.section>.fine{max-width:980px;line-height:1.7}
+.platform-admin-shell>.section .card{border:1px solid #e1eaf6;border-radius:1rem;background:#fff;box-shadow:0 7px 22px #153b7508}
+.platform-admin-shell>.section .form-grid{gap:1.1rem;padding:clamp(1rem,2.4vw,1.6rem)}
+.platform-admin-shell>.section .form-grid h3{grid-column:1/-1;margin:0;color:#17345d;font-size:1.12rem;letter-spacing:-.025em}
+.platform-admin-shell>.section .field{display:grid;gap:.45rem;min-width:0}
+.platform-admin-shell>.section .field label{color:#30496d;font-size:.85rem;font-weight:750}
+.platform-admin-shell>.section .field input,.platform-admin-shell>.section .field select,.platform-admin-shell>.section .field textarea{width:100%;min-height:45px;padding:.72rem .85rem;border:1px solid #dce6f3;border-radius:.72rem;background:#fbfdff;color:#17345d;outline:none;transition:border-color .18s,box-shadow .18s,background .18s}
+.platform-admin-shell>.section .field textarea{resize:vertical;line-height:1.55}
+.platform-admin-shell>.section .field input:focus,.platform-admin-shell>.section .field select:focus,.platform-admin-shell>.section .field textarea:focus{border-color:#78a9ff;background:#fff;box-shadow:0 0 0 4px #1767ed14}
+.platform-admin-shell>.section .actions{display:flex;flex-wrap:wrap;align-items:center;gap:.65rem;margin:.9rem 0}
+.platform-admin-shell>.section .actions .fine{flex:1 1 320px;line-height:1.6}
+.platform-admin-shell>.section .button{min-height:40px;padding:.62rem 1rem;box-shadow:0 4px 12px #1767ed12}
+.platform-admin-shell>.section .button.secondary{border:1px solid #dce6f3;background:#fff;color:#27466f;box-shadow:none}
+.platform-admin-shell>.section .button.secondary:hover:not(:disabled){border-color:#9dbcf1;background:#f7faff;color:#125fe2}
+.platform-admin-shell>.section .table-wrap{margin-top:1rem;padding:0;overflow-x:auto}
+.platform-admin-shell>.section table{width:100%;border-collapse:separate;border-spacing:0;font-size:.88rem}
+.platform-admin-shell>.section th{position:sticky;top:0;padding:.85rem .9rem;border-bottom:1px solid #dce6f3;background:#f1f6ff;color:#415a7c;text-align:left;white-space:nowrap}
+.platform-admin-shell>.section td{padding:.82rem .9rem;border-bottom:1px solid #edf1f7;color:#435875;vertical-align:top;line-height:1.55}
+.platform-admin-shell>.section tbody tr:last-child td{border-bottom:0}
+.platform-admin-shell>.section tbody tr:hover td{background:#f9fbff}
+.platform-admin-shell>.section td strong{color:#17345d}
+.platform-admin-shell>.section td .fine{overflow-wrap:anywhere}
+.platform-admin-shell>.section .table-wrap>p{padding:1rem;color:#71819a}
+.platform-admin-shell>[aria-labelledby="platform-smtp-title"] .card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.55rem 1.2rem;padding:1.25rem}
+.platform-admin-shell>[aria-labelledby="platform-smtp-title"] .card p{margin:0}
+.platform-admin-shell>[aria-labelledby="platform-smtp-title"] .card .fine{grid-column:1/-1}
+.platform-admin-shell>[aria-labelledby="platform-smtp-title"] .card button{grid-column:2;grid-row:1/3}
+.platform-admin-shell>[aria-labelledby="totals-title"] .metric-grid .card{position:relative;overflow:hidden;min-height:112px;padding:1.1rem 1.2rem}
+.platform-admin-shell>[aria-labelledby="totals-title"] .metric-grid .card:after{content:"";position:absolute;right:-22px;bottom:-38px;width:100px;height:100px;border:1px solid #dce9ff;border-radius:50%;box-shadow:0 0 0 14px #f1f6ff}
+.platform-admin-shell>[aria-labelledby="totals-title"] .metric-grid .fine{position:relative;z-index:1;text-transform:capitalize;font-weight:700;color:#71819a}
+.platform-admin-shell>[aria-labelledby="totals-title"] .metric-value{position:relative;z-index:1;margin:.25rem 0 0}
+.platform-admin-shell>[aria-labelledby="plans-title"] .form-grid{margin:1.1rem 0}
+.platform-admin-shell>[aria-labelledby="plans-title"] .checkbox-field{display:flex;align-items:center;gap:.6rem;color:#30496d;font-weight:700}
+.platform-admin-shell>[aria-labelledby="plans-title"] .checkbox-field input{width:18px;height:18px;accent-color:#1767ed}
+.platform-admin-shell>[aria-labelledby="plans-title"] td:nth-child(4){min-width:220px}
+.platform-admin-shell>[aria-labelledby="plans-title"] td:nth-child(4)>div{padding:.18rem 0;border-bottom:1px solid #f0f3f8;font-size:.82rem}
+.platform-admin-shell>[aria-labelledby="plans-title"] td:nth-child(4)>div:last-child{border:0}
+.platform-admin-shell>[aria-labelledby="clients-title"]>.field{max-width:650px;margin:1rem 0}
+.platform-admin-shell>[aria-labelledby="clients-title"]>.field p{margin:.4rem 0 0}
+.platform-admin-shell>[aria-labelledby="clients-title"] td:first-child{min-width:190px}
+.platform-admin-shell>[aria-labelledby="clients-title"] td:last-child{min-width:145px;font-variant-numeric:tabular-nums}
+.platform-admin-shell>[aria-labelledby="feature-usage-title"] td,.platform-admin-shell>[aria-labelledby="usage-history-title"] td,.platform-admin-shell>[aria-labelledby="admin-audit-title"] td{font-variant-numeric:tabular-nums}
+.platform-admin-shell>[aria-labelledby="usage-history-title"] td:last-child,.platform-admin-shell>[aria-labelledby="admin-audit-title"] td:last-child{overflow-wrap:anywhere;min-width:160px}
+.platform-admin-shell>.section .actions[aria-label$="pagination"]{justify-content:flex-end;margin-top:1rem}
+.platform-admin-shell>.section .actions[aria-label$="pagination"] .fine{flex:0 1 auto;margin:0 .35rem;color:#71819a;font-size:.82rem;font-weight:650}
+.platform-admin-shell .notice{padding:.85rem 1rem;border:1px solid #dce8ff;border-radius:.85rem;background:linear-gradient(120deg,#f0f6ff,#fafcff);color:#284b82;line-height:1.6}
+@media(max-width:760px){
+ .platform-admin-shell>.section{margin-top:1.35rem;padding:1rem;border-radius:1rem}
+ .platform-admin-shell>[aria-labelledby="platform-smtp-title"] .card{grid-template-columns:1fr}
+ .platform-admin-shell>[aria-labelledby="platform-smtp-title"] .card button{grid-column:1;grid-row:auto;justify-self:start}
+ .platform-admin-shell>.section .actions[aria-label$="pagination"]{justify-content:flex-start}
+ .platform-admin-shell>.section .actions[aria-label$="pagination"] .fine{flex:1 1 100%;order:-1}
+ .platform-admin-shell>.section .actions .button{flex:1 1 auto}
+}
+@media(prefers-reduced-motion:reduce){.platform-admin-shell>.section .field input,.platform-admin-shell>.section .field select,.platform-admin-shell>.section .field textarea{transition:none}}
