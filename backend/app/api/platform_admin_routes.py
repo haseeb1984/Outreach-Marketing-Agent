@@ -380,6 +380,68 @@ async def billing_reconciliation(
         raise HTTPException(status_code=503, detail="billing_reconciliation_unavailable") from None
 
 
+@router.get("/billing/events")
+async def billing_event_history(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=1000000),
+    search: str = Query(default="", max_length=200),
+):
+    """Read-only sanitized timeline of verified subscription and transaction webhook events."""
+    await require_platform_admin(request)
+    search_term = search.strip().lower()
+    event_sql = """
+      WITH events AS (
+        SELECT 'subscription'::text AS event_kind,e.provider,e.provider_event_id,
+          e.workspace_id::text AS workspace_id,w.name AS workspace_name,
+          e.provider_subscription_id AS related_id,e.event_created_at,e.received_at,
+          e.outcome,NULL::text AS transaction_status,NULL::text AS invoice_number
+        FROM billing_provider_events e
+        LEFT JOIN workspaces w ON w.id=e.workspace_id
+        UNION ALL
+        SELECT 'transaction'::text AS event_kind,e.provider,e.provider_event_id,
+          t.workspace_id::text AS workspace_id,w.name AS workspace_name,
+          e.transaction_id AS related_id,e.event_created_at,e.received_at,
+          'recorded'::text AS outcome,t.status AS transaction_status,t.invoice_number
+        FROM billing_transaction_events e
+        LEFT JOIN billing_transactions t
+          ON t.provider=e.provider AND t.transaction_id=e.transaction_id
+        LEFT JOIN workspaces w ON w.id=t.workspace_id
+      ), filtered AS (
+        SELECT * FROM events
+        WHERE ($1='' OR position($1 in lower(concat_ws(' ',
+          event_kind,provider,provider_event_id,workspace_id,workspace_name,
+          related_id,outcome,transaction_status,invoice_number)))>0)
+      )
+    """
+    try:
+        async with pool_for(request).acquire() as conn:
+            total = int(await conn.fetchval(
+                event_sql + "SELECT count(*) FROM filtered", search_term
+            ) or 0)
+            rows = await conn.fetch(
+                event_sql + """SELECT * FROM filtered
+                  ORDER BY event_created_at DESC,received_at DESC,provider_event_id DESC
+                  LIMIT $2 OFFSET $3""",
+                search_term, limit, offset,
+            )
+        items = []
+        for row in rows:
+            item = {}
+            for key, value in dict(row).items():
+                item[key] = value.isoformat() if hasattr(value, "isoformat") else value
+            items.append(item)
+        return {
+            "items": items, "limit": limit, "offset": offset, "total": total,
+            "truncated": offset + len(items) < total, "search": search_term,
+            "read_only": True, "payloads_exposed": False,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_event_history_unavailable") from None
+
+
 @router.post("/plans/import-configured")
 async def import_configured_plans(request: Request):
     """Import existing server-configured Paddle plans once, without overwriting admin edits."""
