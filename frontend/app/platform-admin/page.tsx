@@ -106,7 +106,8 @@ export default function PlatformAdminPage() {
       const [smtp] = await Promise.all([
         api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
         refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery),
-        loadBillingReconciliation(csrf, billingOffset, billingQuery),\n        loadBillingEvents(csrf, billingEventOffset, billingEventQuery),
+        loadBillingReconciliation(csrf, billingOffset, billingQuery),
+        loadBillingEvents(csrf, billingEventOffset, billingEventQuery),
       ]);
       setPlatformSmtp(smtp);
       setNotice("Platform overview and SMTP readiness refreshed.");
@@ -124,7 +125,8 @@ export default function PlatformAdminPage() {
         if (!active) return;
         setCsrf(session.csrf_token);
         await refresh(session.csrf_token);
-        await loadBillingReconciliation(session.csrf_token);\n        await loadBillingEvents(session.csrf_token);
+        await loadBillingReconciliation(session.csrf_token);
+        await loadBillingEvents(session.csrf_token);
         const smtp = await api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", session.csrf_token);
         if (active) setPlatformSmtp(smtp);
       } catch (e) { if (active) setError(e instanceof Error ? e.message : "Admin access unavailable."); }
