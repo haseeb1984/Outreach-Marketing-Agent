@@ -14,7 +14,7 @@ server.stdout.on("data", (chunk) => { serverOutput += chunk.toString(); });
 server.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
 
 const routes = [
-  ["/", "Turn better research into better business conversations"],
+  ["/", "Your smart outreach partner"],
   ["/features", "Platform capabilities"],
   ["/faq", "Frequently asked questions"],
   ["/login", "Sign in to your workspace"],
