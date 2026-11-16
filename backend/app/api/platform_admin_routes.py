@@ -317,6 +317,63 @@ def _billing_reconciliation_sql():
     """
 
 
+@router.get("/billing/reconciliation")
+async def billing_reconciliation(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=1000000),
+    search: str = Query(default="", max_length=200),
+):
+    """Read-only cross-check of subscription snapshots, signed event history and invoice ledger."""
+    await require_platform_admin(request)
+    search_term = search.strip().lower()
+    search_filter = """($1 = '' OR position($1 in lower(concat_ws(' ',
+      workspace_name,workspace_id::text,owner_email,provider,provider_subscription_id,
+      subscription_status,plan_slug,plan_name,latest_transaction_id,latest_invoice_number,
+      latest_transaction_status))) > 0)"""
+    try:
+        async with pool_for(request).acquire() as conn:
+            cte = _billing_reconciliation_sql()
+            summary = await conn.fetchrow(
+                cte + """SELECT count(*)::bigint AS subscriptions_total,
+                  count(*) FILTER(WHERE cardinality(issues)>0)::bigint AS needs_review,
+                  count(*) FILTER(WHERE 'missing_provider_subscription_id'=ANY(issues))::bigint AS missing_provider_subscription_id,
+                  count(*) FILTER(WHERE 'plan_not_mapped'=ANY(issues))::bigint AS plan_not_mapped,
+                  count(*) FILTER(WHERE 'missing_transaction_history'=ANY(issues))::bigint AS missing_transaction_history,
+                  count(*) FILTER(WHERE 'missing_subscription_event_history'=ANY(issues))::bigint AS missing_subscription_event_history,
+                  count(*) FILTER(WHERE 'payment_attention_but_subscription_active'=ANY(issues))::bigint AS payment_attention,
+                  count(*) FILTER(WHERE 'subscription_past_due_but_latest_payment_completed'=ANY(issues))::bigint AS payment_status_conflicts,
+                  count(*) FILTER(WHERE 'active_subscription_period_expired'=ANY(issues))::bigint AS expired_active_periods
+                  FROM flagged WHERE """ + search_filter, search_term)
+            rows = await conn.fetch(
+                cte + """SELECT * FROM flagged WHERE """ + search_filter + """
+                  ORDER BY cardinality(issues) DESC,subscription_updated_at DESC,workspace_name
+                  LIMIT $2 OFFSET $3""", search_term, limit, offset)
+            total = int(summary["subscriptions_total"] or 0)
+        def serialize(row):
+            result = {}
+            for key, value in dict(row).items():
+                if hasattr(value, "isoformat"):
+                    result[key] = value.isoformat()
+                elif key == "latest_total_minor" and value is not None:
+                    result[key] = str(value)
+                else:
+                    result[key] = value
+            return result
+        return {
+            "summary": {key: int(value or 0) for key, value in dict(summary).items()},
+            "items": [serialize(row) for row in rows],
+            "limit": limit, "offset": offset, "total": total,
+            "truncated": offset + len(rows) < total,
+            "search": search_term,
+            "read_only": True,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_reconciliation_unavailable") from None
+
+
 @router.post("/plans/import-configured")
 async def import_configured_plans(request: Request):
     """Import existing server-configured Paddle plans once, without overwriting admin edits."""
