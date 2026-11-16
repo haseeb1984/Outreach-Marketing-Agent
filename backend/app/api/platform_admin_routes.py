@@ -131,7 +131,7 @@ def public_plan(row):
     return result
 
 @router.get("/overview")
-async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000), audit_limit: int = Query(default=100, ge=1, le=500), audit_offset: int = Query(default=0, ge=0, le=1000000)):
+async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), client_search: str = Query(default="", max_length=200), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000), audit_limit: int = Query(default=100, ge=1, le=500), audit_offset: int = Query(default=0, ge=0, le=1000000)):
     await require_platform_admin(request)
     try:
         async with pool_for(request).acquire() as conn:
@@ -142,6 +142,21 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               (SELECT count(*) FROM workspace_subscriptions WHERE status IN ('active','trialing')) AS subscriptions_active,
               (SELECT count(*) FROM feature_usage_reservations WHERE status='consumed') AS usage_consumed,
               (SELECT count(*) FROM feature_usage_reservations WHERE status='reserved') AS usage_reserved""")
+            search_term = client_search.strip().lower()
+            client_filter = """($1 = '' OR
+              position($1 in lower(coalesce(w.name,''))) > 0 OR
+              position($1 in lower(w.id::text)) > 0 OR
+              position($1 in lower(coalesce(u.email,''))) > 0 OR
+              position($1 in lower(coalesce(s.status,''))) > 0 OR
+              position($1 in lower(coalesce((SELECT p.name FROM platform_billing_plans p WHERE p.slug=s.plan_slug),
+                (SELECT p.name FROM platform_billing_plans p WHERE p.entitlements=s.entitlements
+                  ORDER BY p.active DESC,p.created_at DESC LIMIT 1),''))) > 0)"""
+            client_search_total = await conn.fetchval("""SELECT count(*)
+              FROM workspaces w
+              LEFT JOIN workspace_memberships m ON m.workspace_id=w.id AND m.role='owner' AND m.status='active'
+              LEFT JOIN app_users u ON u.id=m.user_id
+              LEFT JOIN workspace_subscriptions s ON s.workspace_id=w.id
+              WHERE """ + client_filter, search_term)
             clients = await conn.fetch("""SELECT w.id::text AS workspace_id,w.name AS workspace_name,
               u.email AS owner_email,s.status AS subscription_status,
               COALESCE((SELECT p.name FROM platform_billing_plans p WHERE p.slug=s.plan_slug),
@@ -157,7 +172,8 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               LEFT JOIN LATERAL (SELECT count(*) FILTER(WHERE status='consumed') consumed,
                 count(*) FILTER(WHERE status='reserved') reserved,count(*) FILTER(WHERE status='released') released
                 FROM feature_usage_reservations r WHERE r.workspace_id=w.id) v ON true
-              ORDER BY w.created_at DESC LIMIT $1 OFFSET $2""", client_limit, client_offset)
+              WHERE """ + client_filter + """ ORDER BY w.created_at DESC LIMIT $2 OFFSET $3""",
+              search_term, client_limit, client_offset)
             plans = await conn.fetch("SELECT slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at FROM platform_billing_plans ORDER BY created_at DESC")
             usage_by_feature = await conn.fetch("""SELECT workspace_id::text AS workspace_id,feature,
               count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
@@ -181,7 +197,7 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
           "usage_by_feature":[dict(row) for row in usage_by_feature],
           "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
           "admin_events":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in admin_events],
-          "clients_truncated":client_offset + len(clients) < int(totals["workspaces_total"] or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(totals["workspaces_total"] or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0), "audit_offset":audit_offset, "audit_limit":audit_limit, "audit_total":int(audit_total or 0), "audit_truncated":audit_offset + len(admin_events) < int(audit_total or 0)}
+          "clients_truncated":client_offset + len(clients) < int(client_search_total or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(client_search_total or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0), "audit_offset":audit_offset, "audit_limit":audit_limit, "audit_total":int(audit_total or 0), "audit_truncated":audit_offset + len(admin_events) < int(audit_total or 0)}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
