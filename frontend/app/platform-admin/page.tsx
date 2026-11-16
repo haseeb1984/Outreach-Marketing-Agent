@@ -117,8 +117,8 @@ export default function PlatformAdminPage() {
     finally { setBusy(false); }
   }
 
-  return <main className="page-shell">
-    <header className="page-header"><p className="eyebrow">Platform operations</p><h1>SaaS administration</h1><p>Global client, subscription, package and usage visibility. Access is restricted by the server-side platform-admin email allowlist.</p><Link href="/dashboard">Return to workspace dashboard</Link></header>
+  return <main className="page-shell platform-admin-shell">
+    <header className="page-header platform-admin-header"><p className="eyebrow">Platform operations</p><h1>SaaS administration</h1><p>Global client, subscription, package and usage visibility. Access is restricted by the server-side platform-admin email allowlist.</p><Link href="/dashboard">Return to workspace dashboard</Link></header>
     {error && <p className="notice" role="alert">{error}</p>}{notice && <p className="notice" role="status">{notice}</p>}
     {!overview && !error && <section className="card"><p>Loading protected platform summary…</p></section>}
     {overview && <>
