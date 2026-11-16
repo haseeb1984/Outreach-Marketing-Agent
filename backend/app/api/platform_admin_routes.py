@@ -268,7 +268,7 @@ async def client_detail(workspace_id: str, request: Request):
 def _billing_reconciliation_sql():
     """Shared, read-only subscription/invoice snapshot with deterministic review flags."""
     return """WITH billing_snapshot AS (
-      SELECT w.id AS workspace_id,w.name AS workspace_name,owner.email AS owner_email,
+      SELECT w.id AS workspace_id,w.name AS workspace_name,workspace_owner.email AS owner_email,
         s.provider,s.provider_customer_id,s.provider_subscription_id,s.plan_slug,
         s.status AS subscription_status,s.billing_period_starts_at,s.billing_period_ends_at,
         s.provider_event_created_at,s.updated_at AS subscription_updated_at,p.name AS plan_name,
@@ -290,7 +290,7 @@ def _billing_reconciliation_sql():
         SELECT u.email FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
         WHERE m.workspace_id=w.id AND m.role='owner' AND m.status='active'
         ORDER BY m.created_at ASC LIMIT 1
-      ) owner ON true
+      ) workspace_owner ON true
       LEFT JOIN LATERAL (
         SELECT t.transaction_id,t.invoice_number,t.status,t.currency_code,t.total_minor,t.billed_at
         FROM billing_transactions t
