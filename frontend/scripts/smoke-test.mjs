@@ -22,7 +22,7 @@ const routes = [
   ["/privacy", "Privacy Policy"],
   ["/terms", "Terms of Use"],
   ["/contact", "Contact support"],
-  ["/pricing", "Plans and pricing"],
+  ["/pricing", "Transparent plans. Server-verified access."],
   ["/how-it-works", "How it works"],
 ];
 
