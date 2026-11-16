@@ -127,6 +127,27 @@ class CampaignStore:
             data["verified_facts"] = self._json_list(data.get("verified_facts"))
             return data
 
+    async def get_idempotent_draft(self, *, workspace_id: str, campaign_id: UUID,
+                                  prospect_id: UUID, channel: str, call_to_action: str,
+                                  idempotency_key: str) -> dict[str, Any] | None:
+        """Return a prior result for a matching request key before charging AI quota."""
+        fingerprint = hashlib.sha256(json.dumps(
+            {"workspace_id": workspace_id, "campaign_id": str(campaign_id),
+             "prospect_id": str(prospect_id), "channel": channel,
+             "call_to_action": call_to_action},
+            sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM outreach_drafts WHERE workspace_id=$1 AND idempotency_key=$2",
+                workspace_id, idempotency_key,
+            )
+        if row is None:
+            return None
+        if row["request_fingerprint"] != fingerprint:
+            raise ValueError("idempotency_key_payload_mismatch")
+        return self._serialize(dict(row))
+
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
                            generated_content: dict[str, Any] | None = None,
