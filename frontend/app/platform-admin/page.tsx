@@ -34,22 +34,19 @@ export default function PlatformAdminPage() {
   const [platformSmtp, setPlatformSmtp] = useState<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean } | null>(null);
   const [smtpBusy, setSmtpBusy] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
+  const [clientQuery, setClientQuery] = useState("");
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
-  const filteredClients = (overview?.clients ?? []).filter((client) => {
-    const query = clientSearch.trim().toLowerCase();
-    if (!query) return true;
-    return [client.workspace_name, client.workspace_id, client.owner_email, client.package_name, client.subscription_status]
-      .some((value) => (value ?? "").toLowerCase().includes(query));
-  });
+  const filteredClients = overview?.clients ?? [];
 
-  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0, auditPageOffset = 0) => {
-    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset + "&usage_limit=100&usage_offset=" + usagePageOffset + "&audit_limit=100&audit_offset=" + auditPageOffset, token);
+  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0, auditPageOffset = 0, search = "") => {
+    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset + "&usage_limit=100&usage_offset=" + usagePageOffset + "&audit_limit=100&audit_offset=" + auditPageOffset + "&client_search=" + encodeURIComponent(search), token);
     setOverview(data);
     setClientOffset(data.clients_offset);
+    setClientQuery(search);
     setUsageOffset(data.usage_offset);
     setAuditOffset(data.audit_offset);
     setLastRefreshed(new Date().toISOString());
@@ -61,7 +58,7 @@ export default function PlatformAdminPage() {
     try {
       const [smtp] = await Promise.all([
         api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
-        refresh(csrf, clientOffset, usageOffset, auditOffset),
+        refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery),
       ]);
       setPlatformSmtp(smtp);
       setNotice("Platform overview and SMTP readiness refreshed.");
@@ -112,7 +109,7 @@ export default function PlatformAdminPage() {
       try { entitlements = JSON.parse(form.entitlements); } catch { throw new Error("Entitlements must be valid JSON."); }
       const payload = { slug: form.slug.trim(), name: form.name.trim(), description: form.description, price_id: form.price_id.trim(), display_price: form.display_price || null, currency: form.currency || null, billing_interval: form.billing_interval || null, entitlements, active: form.active };
       await api("/api/v1/platform-admin/plans" + (editing ? "/" + encodeURIComponent(editing) : ""), csrf, { method: editing ? "PATCH" : "POST", body: JSON.stringify(payload) });
-      setForm(emptyPlan); setEditing(""); await refresh(csrf); setNotice(editing ? "Package updated." : "Package created.");
+      setForm(emptyPlan); setEditing(""); await refresh(csrf, 0, 0, 0, clientQuery); setNotice(editing ? "Package updated." : "Package created.");
     } catch (e) { setError(e instanceof Error ? e.message : "Package could not be saved."); }
     finally { setBusy(false); }
   }
@@ -130,7 +127,7 @@ export default function PlatformAdminPage() {
   async function deactivate(plan: Plan) {
     if (!window.confirm("Deactivate package '" + plan.name + "'? Existing subscription history remains intact.")) return;
     setBusy(true); setError(""); setNotice("");
-    try { await api("/api/v1/platform-admin/plans/" + encodeURIComponent(plan.slug), csrf, { method: "DELETE" }); await refresh(csrf); setNotice("Package deactivated. Historic records were preserved."); }
+    try { await api("/api/v1/platform-admin/plans/" + encodeURIComponent(plan.slug), csrf, { method: "DELETE" }); await refresh(csrf, 0, 0, 0, clientQuery); setNotice("Package deactivated. Historic records were preserved."); }
     catch (e) { setError(e instanceof Error ? e.message : "Package could not be deactivated."); }
     finally { setBusy(false); }
   }
@@ -171,12 +168,12 @@ export default function PlatformAdminPage() {
         <div className="card table-wrap"><table><thead><tr><th>Package</th><th>Price</th><th>Status</th><th>Limits / features</th><th>Actions</th></tr></thead><tbody>{overview.plans.map(plan=><tr key={plan.slug}><td><strong>{plan.name}</strong><br/><span className="fine">{plan.slug}</span></td><td>{plan.display_price || "Not set"} {plan.currency || ""}<br/><span className="fine">{plan.billing_interval || "interval not set"}</span></td><td>{plan.active ? "Active" : "Inactive"}</td><td>{Object.entries(plan.entitlements || {}).map(([feature,rule])=><div key={feature}>{feature}: {rule.enabled ? "on" : "off"} · {rule.monthly_limit == null ? "unlimited" : rule.monthly_limit + "/period"}</div>)}</td><td><div className="actions"><button className="button secondary" type="button" disabled={busy} onClick={()=>startEdit(plan)}>Edit</button>{plan.active && <button className="button secondary" type="button" disabled={busy} onClick={()=>deactivate(plan)}>Deactivate</button>}</div></td></tr>)}</tbody></table>{!overview.plans.length && <p>No database-managed packages yet. Create the first package to activate database catalog management.</p>}</div>
       </section>
       <section className="section" aria-labelledby="clients-title"><h2 id="clients-title">Clients and usage</h2><p className="fine">Usage figures are persisted reservation counts, not inferred revenue. Clients are paginated from the full workspace count; search applies to the currently loaded page.</p>
-        <div className="field"><label htmlFor="client-search">Search clients</label><input id="client-search" type="search" maxLength={200} value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Workspace, owner email, package or subscription status"/><p className="fine" aria-live="polite">Showing {filteredClients.length} matching of {overview.clients.length} workspaces on this page; total workspaces: {overview.clients_total.toLocaleString()}.</p></div>
+        <form className="field" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { await refresh(csrf, 0, usageOffset, auditOffset, clientSearch.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Could not search all clients."); } finally { setBusy(false); } }}><label htmlFor="client-search">Search all clients</label><div className="actions"><input id="client-search" type="search" maxLength={200} value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Workspace, owner email, package, ID or subscription status"/><button className="button secondary" type="submit" disabled={busy || !csrf}>Search</button><button className="button secondary" type="button" disabled={busy || !clientQuery} onClick={async () => { setClientSearch(""); setBusy(true); setError(""); try { await refresh(csrf, 0, usageOffset, auditOffset, ""); } catch (e) { setError(e instanceof Error ? e.message : "Could not clear client search."); } finally { setBusy(false); } }}>Clear</button></div><p className="fine" aria-live="polite">Showing {filteredClients.length} of {overview.clients_total.toLocaleString()} matching workspaces across all client pages{clientQuery ? " for “" + clientQuery + "”" : ""}.</p></form>
         <div className="card table-wrap"><table><thead><tr><th>Workspace</th><th>Owner email</th><th>Package / subscription</th><th>Billing period</th><th>Usage counts</th></tr></thead><tbody>{filteredClients.map(client=><tr key={client.workspace_id}><td>{client.workspace_name}<br/><span className="fine">{client.workspace_id}</span></td><td>{client.owner_email || "Owner not mapped"}</td><td>{client.package_name || "Package not matched"}<br/><span className="fine">{client.subscription_status || "No subscription"}</span></td><td>{client.billing_period_starts_at ? new Date(client.billing_period_starts_at).toLocaleDateString() : "—"} – {client.billing_period_ends_at ? new Date(client.billing_period_ends_at).toLocaleDateString() : "—"}</td><td>Consumed: {client.usage_consumed}<br/>Reserved: {client.usage_reserved}<br/>Released: {client.usage_released}</td></tr>)}</tbody></table>{!filteredClients.length && <p>{overview.clients.length ? "No clients match this search." : "No workspaces were found."}</p>}</div>
         <div className="actions" aria-label="Client pagination">
-          <button className="button secondary" type="button" disabled={busy || clientOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, Math.max(0, clientOffset - overview.clients_limit), usageOffset, auditOffset); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous clients."); } finally { setBusy(false); } }}>Previous page</button>
+          <button className="button secondary" type="button" disabled={busy || clientOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, Math.max(0, clientOffset - overview.clients_limit), usageOffset, auditOffset, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous clients."); } finally { setBusy(false); } }}>Previous page</button>
           <span className="fine">Workspaces {overview.clients_total === 0 ? 0 : clientOffset + 1}–{Math.min(clientOffset + overview.clients.length, overview.clients_total)} of {overview.clients_total}</span>
-          <button className="button secondary" type="button" disabled={busy || !overview.clients_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset + overview.clients_limit, usageOffset, auditOffset); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next clients."); } finally { setBusy(false); } }}>Next page</button>
+          <button className="button secondary" type="button" disabled={busy || !overview.clients_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset + overview.clients_limit, usageOffset, auditOffset, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next clients."); } finally { setBusy(false); } }}>Next page</button>
         </div>
       </section>
       <section className="section" aria-labelledby="feature-usage-title"><h2 id="feature-usage-title">Usage by client and feature</h2>
@@ -185,17 +182,17 @@ export default function PlatformAdminPage() {
       <section className="section" aria-labelledby="usage-history-title"><h2 id="usage-history-title">Recent usage history</h2><p className="fine">Paginated persisted reservation history; no prompts, credentials, or message bodies are exposed.</p>
         <div className="card table-wrap"><table><thead><tr><th>Created</th><th>Client</th><th>Feature</th><th>Status</th><th>Billing period</th><th>Reservation ID</th></tr></thead><tbody>{overview.recent_usage.map(item=><tr key={item.reservation_id}><td>{new Date(item.created_at).toLocaleString()}</td><td>{item.workspace_name || item.workspace_id}</td><td>{item.feature}</td><td>{item.status}</td><td>{item.billing_period_starts_at ? new Date(item.billing_period_starts_at).toLocaleDateString() : "—"} – {item.billing_period_ends_at ? new Date(item.billing_period_ends_at).toLocaleDateString() : "—"}</td><td>{item.reservation_id}</td></tr>)}</tbody></table>{!overview.recent_usage.length && <p>No usage history yet.</p>}</div>
         <div className="actions" aria-label="Usage history pagination">
-          <button className="button secondary" type="button" disabled={busy || usageOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, Math.max(0, usageOffset - overview.usage_limit), auditOffset); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous usage records."); } finally { setBusy(false); } }}>Previous usage</button>
+          <button className="button secondary" type="button" disabled={busy || usageOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, Math.max(0, usageOffset - overview.usage_limit), auditOffset, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous usage records."); } finally { setBusy(false); } }}>Previous usage</button>
           <span className="fine">Records {overview.usage_total === 0 ? 0 : usageOffset + 1}–{Math.min(usageOffset + overview.recent_usage.length, overview.usage_total)} of {overview.usage_total.toLocaleString()}</span>
-          <button className="button secondary" type="button" disabled={busy || !overview.usage_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset + overview.usage_limit, auditOffset); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next usage records."); } finally { setBusy(false); } }}>Next usage</button>
+          <button className="button secondary" type="button" disabled={busy || !overview.usage_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset + overview.usage_limit, auditOffset, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next usage records."); } finally { setBusy(false); } }}>Next usage</button>
         </div>
       </section>
       <section className="section" aria-labelledby="admin-audit-title"><h2 id="admin-audit-title">Platform admin audit history</h2>
         <div className="card table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody>{overview.admin_events.map(event=><tr key={event.id}><td>{new Date(event.created_at).toLocaleString()}</td><td>{event.actor_email}</td><td>{event.event_type}</td><td>{event.target_type}: {event.target_id}</td></tr>)}</tbody></table>{!overview.admin_events.length && <p>No platform admin changes recorded yet.</p>}</div>
         <div className="actions" aria-label="Platform audit pagination">
-          <button className="button secondary" type="button" disabled={busy || auditOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, Math.max(0, auditOffset - overview.audit_limit)); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous audit events."); } finally { setBusy(false); } }}>Previous audit</button>
+          <button className="button secondary" type="button" disabled={busy || auditOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, Math.max(0, auditOffset - overview.audit_limit), clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous audit events."); } finally { setBusy(false); } }}>Previous audit</button>
           <span className="fine">Events {overview.audit_total === 0 ? 0 : auditOffset + 1}–{Math.min(auditOffset + overview.admin_events.length, overview.audit_total)} of {overview.audit_total.toLocaleString()}</span>
-          <button className="button secondary" type="button" disabled={busy || !overview.audit_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, auditOffset + overview.audit_limit); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next audit events."); } finally { setBusy(false); } }}>Next audit</button>
+          <button className="button secondary" type="button" disabled={busy || !overview.audit_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, auditOffset + overview.audit_limit, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next audit events."); } finally { setBusy(false); } }}>Next audit</button>
         </div>
       </section>
     </>}
