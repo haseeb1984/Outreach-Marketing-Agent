@@ -65,8 +65,8 @@ export default function VerifyEmailPage() {
 
   return <>
     <SiteHeader/>
-    <main className="wrap">
-      <section className="form-card" aria-labelledby="verification-title">
+    <main className="wrap auth-main">
+      <section className="form-card auth-card" aria-labelledby="verification-title">
         <p className="eyebrow">Email verification</p>
         <h1 id="verification-title">{state === "success" ? "Email verified" : state === "checking" ? "Verifying your email" : "Verification link issue"}</h1>
         <p className="notice" role="status" aria-live="polite">{message}</p>
