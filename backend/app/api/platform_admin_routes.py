@@ -265,6 +265,58 @@ async def client_detail(workspace_id: str, request: Request):
         raise HTTPException(status_code=503, detail="platform_admin_client_detail_unavailable") from None
 
 
+def _billing_reconciliation_sql():
+    """Shared, read-only subscription/invoice snapshot with deterministic review flags."""
+    return """WITH billing_snapshot AS (
+      SELECT w.id AS workspace_id,w.name AS workspace_name,owner.email AS owner_email,
+        s.provider,s.provider_customer_id,s.provider_subscription_id,s.plan_slug,
+        s.status AS subscription_status,s.billing_period_starts_at,s.billing_period_ends_at,
+        s.provider_event_created_at,s.updated_at AS subscription_updated_at,p.name AS plan_name,
+        tx.transaction_id AS latest_transaction_id,tx.invoice_number AS latest_invoice_number,
+        tx.status AS latest_transaction_status,tx.currency_code AS latest_currency_code,
+        tx.total_minor AS latest_total_minor,tx.billed_at AS latest_billed_at,
+        ev.provider_event_id AS latest_subscription_event_id,
+        ev.outcome AS latest_subscription_event_outcome,ev.event_created_at AS latest_subscription_event_at
+      FROM workspace_subscriptions s
+      JOIN workspaces w ON w.id=s.workspace_id
+      LEFT JOIN platform_billing_plans p ON p.slug=s.plan_slug
+      LEFT JOIN LATERAL (
+        SELECT u.email FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+        WHERE m.workspace_id=w.id AND m.role='owner' AND m.status='active'
+        ORDER BY m.created_at ASC LIMIT 1
+      ) owner ON true
+      LEFT JOIN LATERAL (
+        SELECT t.transaction_id,t.invoice_number,t.status,t.currency_code,t.total_minor,t.billed_at
+        FROM billing_transactions t
+        WHERE t.workspace_id=w.id AND t.provider=s.provider
+        ORDER BY t.billed_at DESC,t.transaction_id DESC LIMIT 1
+      ) tx ON true
+      LEFT JOIN LATERAL (
+        SELECT e.provider_event_id,e.outcome,e.event_created_at
+        FROM billing_provider_events e
+        WHERE e.workspace_id=w.id AND e.provider=s.provider
+          AND e.provider_subscription_id=s.provider_subscription_id
+        ORDER BY e.event_created_at DESC,e.received_at DESC LIMIT 1
+      ) ev ON true
+    ), flagged AS (
+      SELECT *,
+        array_remove(ARRAY[
+          CASE WHEN provider_subscription_id IS NULL OR btrim(provider_subscription_id)='' THEN 'missing_provider_subscription_id' END,
+          CASE WHEN plan_slug IS NULL OR plan_name IS NULL THEN 'plan_not_mapped' END,
+          CASE WHEN latest_transaction_id IS NULL THEN 'missing_transaction_history' END,
+          CASE WHEN latest_subscription_event_id IS NULL THEN 'missing_subscription_event_history' END,
+          CASE WHEN subscription_status IN ('active','trialing')
+             AND latest_transaction_status IN ('payment_failed','past_due') THEN 'payment_attention_but_subscription_active' END,
+          CASE WHEN subscription_status='past_due' AND latest_transaction_status='completed'
+             THEN 'subscription_past_due_but_latest_payment_completed' END,
+          CASE WHEN subscription_status IN ('active','trialing')
+             AND billing_period_ends_at < now() THEN 'active_subscription_period_expired' END
+        ]::text[],NULL) AS issues
+      FROM billing_snapshot
+    )
+    """
+
+
 @router.post("/plans/import-configured")
 async def import_configured_plans(request: Request):
     """Import existing server-configured Paddle plans once, without overwriting admin edits."""
