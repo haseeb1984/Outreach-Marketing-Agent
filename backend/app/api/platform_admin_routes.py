@@ -244,6 +244,8 @@ async def client_detail(workspace_id: str, request: Request):
                    ORDER BY created_at DESC LIMIT 25""",
                 workspace_id,
             )
+            billing_transactions = await conn.fetch(_client_billing_transaction_history_sql(), workspace_id)
+            billing_events = await conn.fetch(_client_subscription_event_history_sql(), workspace_id)
         def serialize(row):
             return {key:(value.isoformat() if hasattr(value,"isoformat") else value) for key,value in dict(row).items()}
         subscription = {key:(value.isoformat() if hasattr(value,"isoformat") else value) for key,value in dict(workspace).items()
@@ -258,11 +260,30 @@ async def client_detail(workspace_id: str, request: Request):
             "members": [serialize(row) for row in members],
             "usage_by_feature": [serialize(row) for row in usage],
             "recent_usage": [serialize(row) for row in recent],
+            "billing_transactions": [
+                {**serialize(row), "total_minor": str(row["total_minor"]) if row["total_minor"] is not None else None}
+                for row in billing_transactions
+            ],
+            "subscription_events": [serialize(row) for row in billing_events],
         }
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="platform_admin_client_detail_unavailable") from None
+
+
+def _client_billing_transaction_history_sql():
+    return """SELECT provider,transaction_id,invoice_number,status,currency_code,total_minor,
+                     billed_at,updated_at
+              FROM billing_transactions WHERE workspace_id=$1
+              ORDER BY billed_at DESC,transaction_id DESC LIMIT 10"""
+
+
+def _client_subscription_event_history_sql():
+    return """SELECT provider,provider_event_id,provider_subscription_id,event_created_at,
+                     received_at,outcome
+              FROM billing_provider_events WHERE workspace_id=$1
+              ORDER BY event_created_at DESC,received_at DESC LIMIT 10
 
 
 def _billing_reconciliation_sql():
