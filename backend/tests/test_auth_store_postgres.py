@@ -92,6 +92,18 @@ async def _exercise_password_reset() -> None:
     try:
         store = AuthStore(pool)
         session = await store.create_session(user_id=user_id, lifetime_hours=1)
+        async with pool.acquire() as conn:
+            last_login = await conn.fetchval(
+                "SELECT last_login_at FROM app_users WHERE id=$1", user_id
+            )
+            login_events = await conn.fetchval(
+                """SELECT count(*) FROM security_audit_events
+                   WHERE workspace_id=$1 AND actor_user_id=$2
+                     AND event_type='account.login' AND outcome='success'""",
+                workspace_id, user_id,
+            )
+        assert last_login is not None
+        assert login_events == 1
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
         token = reset["reset_token"]
