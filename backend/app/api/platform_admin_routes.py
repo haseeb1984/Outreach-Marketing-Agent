@@ -229,9 +229,32 @@ async def client_detail(workspace_id: str, request: Request):
                 raise HTTPException(status_code=404, detail="workspace_not_found")
             members = await conn.fetch(
                 """SELECT u.id::text AS user_id,u.email,m.role,m.status,m.created_at,m.updated_at,
-                          u.status AS account_status,u.email_verified_at,u.last_login_at
+                          u.status AS account_status,u.created_at AS account_created_at,
+                          u.email_verified_at,u.last_login_at
                    FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
                    WHERE m.workspace_id=$1 ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,u.email""",
+                workspace_id,
+            )
+            integrity_row = await conn.fetchrow(
+                """SELECT count(*)::bigint AS memberships_total,
+                          count(*) FILTER(WHERE m.status='active')::bigint AS active_memberships,
+                          count(*) FILTER(WHERE m.status='active' AND m.role='owner')::bigint AS active_owners,
+                          count(*) FILTER(WHERE m.status='active' AND u.status='active'
+                            AND u.email_verified_at IS NOT NULL)::bigint AS verified_active_members,
+                          count(*) FILTER(WHERE m.status='active' AND u.status<>'active')::bigint AS active_memberships_for_inactive_accounts,
+                          count(*) FILTER(WHERE m.status='active' AND u.email_verified_at IS NULL)::bigint AS active_memberships_for_unverified_accounts,
+                          count(*) FILTER(WHERE u.status='pending_verification')::bigint AS pending_accounts
+                   FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+                   WHERE m.workspace_id=$1""",
+                workspace_id,
+            )
+            account_events = await conn.fetch(
+                """SELECT e.id,e.actor_user_id::text AS actor_user_id,u.email AS actor_email,
+                          e.event_type,e.outcome,e.metadata,e.created_at
+                   FROM security_audit_events e
+                   LEFT JOIN app_users u ON u.id=e.actor_user_id
+                   WHERE e.workspace_id=$1
+                   ORDER BY e.created_at DESC,e.id DESC LIMIT 25""",
                 workspace_id,
             )
             usage = await conn.fetch(
@@ -262,6 +285,32 @@ async def client_detail(workspace_id: str, request: Request):
                           "created_at":workspace["created_at"].isoformat() if workspace["created_at"] else None},
             "subscription": subscription,
             "members": [serialize(row) for row in members],
+            "workspace_integrity": {
+                **serialize(integrity_row),
+                "issues": (
+                    (["workspace_without_active_owner"] if int(integrity_row["active_owners"] or 0) == 0 else [])
+                    + (["workspace_multiple_active_owners"] if int(integrity_row["active_owners"] or 0) > 1 else [])
+                    + (["active_membership_for_inactive_account"] if int(integrity_row["active_memberships_for_inactive_accounts"] or 0) > 0 else [])
+                    + (["active_membership_for_unverified_account"] if int(integrity_row["active_memberships_for_unverified_accounts"] or 0) > 0 else [])
+                ),
+            },
+            "account_lifecycle_events": [
+                {
+                    "id": row["id"], "actor_user_id": row["actor_user_id"],
+                    "actor_email": row["actor_email"], "event_type": row["event_type"],
+                    "outcome": row["outcome"], "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "metadata": {
+                        key: value for key, value in (
+                            dict(row["metadata"]).items() if isinstance(row["metadata"], dict)
+                            else (json.loads(row["metadata"]).items() if isinstance(row["metadata"], str) else [])
+                        )
+                        if key in {"name", "role", "member_user_id", "previous_owner_user_id",
+                                   "new_owner_user_id", "invitation_id", "status", "reason"}
+                        and isinstance(value, (str, int, float, bool, type(None)))
+                    },
+                }
+                for row in account_events
+            ],
             "usage_by_feature": [serialize(row) for row in usage],
             "recent_usage": [serialize(row) for row in recent],
             "billing_transactions": [
