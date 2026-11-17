@@ -40,6 +40,25 @@ def test_billing_reconciliation_latest_invoice_is_scoped_to_same_workspace_and_p
     assert "e.provider_subscription_id=s.provider_subscription_id" in sql
 
 
+def test_customer_detail_billing_history_is_workspace_scoped_and_read_only():
+    from app.api.platform_admin_routes import (
+        _client_billing_transaction_history_sql,
+        _client_subscription_event_history_sql,
+    )
+
+    transactions = " ".join(_client_billing_transaction_history_sql().lower().split())
+    events = " ".join(_client_subscription_event_history_sql().lower().split())
+    assert "from billing_transactions where workspace_id=$1" in transactions
+    assert "order by billed_at desc,transaction_id desc limit 10" in transactions
+    assert "from billing_provider_events where workspace_id=$1" in events
+    assert "order by event_created_at desc,received_at desc limit 10" in events
+    assert "total_minor" in transactions and "invoice_number" in transactions
+    assert "provider_event_id" in events and "outcome" in events
+    for sql in (transactions, events):
+        assert not any(token in sql for token in ("insert into ", "update ", "delete from ", "truncate "))
+        assert not any(token in sql for token in ("raw_payload", "webhook_secret", "signature"))
+
+
 def test_billing_event_history_is_a_sanitized_read_only_union():
     sql = " ".join("""
       WITH events AS (
