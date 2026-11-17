@@ -235,28 +235,8 @@ async def client_detail(workspace_id: str, request: Request):
                    WHERE m.workspace_id=$1 ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,u.email""",
                 workspace_id,
             )
-            integrity_row = await conn.fetchrow(
-                """SELECT count(*)::bigint AS memberships_total,
-                          count(*) FILTER(WHERE m.status='active')::bigint AS active_memberships,
-                          count(*) FILTER(WHERE m.status='active' AND m.role='owner')::bigint AS active_owners,
-                          count(*) FILTER(WHERE m.status='active' AND u.status='active'
-                            AND u.email_verified_at IS NOT NULL)::bigint AS verified_active_members,
-                          count(*) FILTER(WHERE m.status='active' AND u.status<>'active')::bigint AS active_memberships_for_inactive_accounts,
-                          count(*) FILTER(WHERE m.status='active' AND u.email_verified_at IS NULL)::bigint AS active_memberships_for_unverified_accounts,
-                          count(*) FILTER(WHERE u.status='pending_verification')::bigint AS pending_accounts
-                   FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
-                   WHERE m.workspace_id=$1""",
-                workspace_id,
-            )
-            account_events = await conn.fetch(
-                """SELECT e.id,e.actor_user_id::text AS actor_user_id,u.email AS actor_email,
-                          e.event_type,e.outcome,e.metadata,e.created_at
-                   FROM security_audit_events e
-                   LEFT JOIN app_users u ON u.id=e.actor_user_id
-                   WHERE e.workspace_id=$1
-                   ORDER BY e.created_at DESC,e.id DESC LIMIT 25""",
-                workspace_id,
-            )
+            integrity_row = await conn.fetchrow(_client_workspace_integrity_sql(), workspace_id)
+            account_events = await conn.fetch(_client_account_lifecycle_sql(), workspace_id)
             usage = await conn.fetch(
                 """SELECT feature,count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
                           count(*) FILTER(WHERE status='reserved')::bigint AS reserved,
@@ -299,15 +279,7 @@ async def client_detail(workspace_id: str, request: Request):
                     "id": row["id"], "actor_user_id": row["actor_user_id"],
                     "actor_email": row["actor_email"], "event_type": row["event_type"],
                     "outcome": row["outcome"], "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                    "metadata": {
-                        key: value for key, value in (
-                            dict(row["metadata"]).items() if isinstance(row["metadata"], dict)
-                            else (json.loads(row["metadata"]).items() if isinstance(row["metadata"], str) else [])
-                        )
-                        if key in {"name", "role", "member_user_id", "previous_owner_user_id",
-                                   "new_owner_user_id", "invitation_id", "status", "reason"}
-                        and isinstance(value, (str, int, float, bool, type(None)))
-                    },
+                    "metadata": _safe_account_audit_metadata(row["metadata"]),
                 }
                 for row in account_events
             ],
@@ -332,6 +304,44 @@ def _platform_audit_search_sql():
               OR position($1 in lower(e.target_type)) > 0
               OR position($1 in lower(e.target_id)) > 0
               OR position($1 in lower(e.metadata::text)) > 0)"""
+
+
+def _client_workspace_integrity_sql():
+    return """SELECT count(*)::bigint AS memberships_total,
+              count(*) FILTER(WHERE m.status='active')::bigint AS active_memberships,
+              count(*) FILTER(WHERE m.status='active' AND m.role='owner')::bigint AS active_owners,
+              count(*) FILTER(WHERE m.status='active' AND u.status='active'
+                AND u.email_verified_at IS NOT NULL)::bigint AS verified_active_members,
+              count(*) FILTER(WHERE m.status='active' AND u.status<>'active')::bigint AS active_memberships_for_inactive_accounts,
+              count(*) FILTER(WHERE m.status='active' AND u.email_verified_at IS NULL)::bigint AS active_memberships_for_unverified_accounts,
+              count(*) FILTER(WHERE u.status='pending_verification')::bigint AS pending_accounts
+       FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+       WHERE m.workspace_id=$1"""
+
+
+def _client_account_lifecycle_sql():
+    return """SELECT e.id,e.actor_user_id::text AS actor_user_id,u.email AS actor_email,
+              e.event_type,e.outcome,e.metadata,e.created_at
+       FROM security_audit_events e
+       LEFT JOIN app_users u ON u.id=e.actor_user_id
+       WHERE e.workspace_id=$1
+       ORDER BY e.created_at DESC,e.id DESC LIMIT 25"""
+
+
+def _safe_account_audit_metadata(metadata):
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(metadata, dict):
+        return {}
+    allowed = {"name", "role", "member_user_id", "previous_owner_user_id",
+               "new_owner_user_id", "invitation_id", "status", "reason"}
+    return {
+        key: value for key, value in metadata.items()
+        if key in allowed and isinstance(value, (str, int, float, bool, type(None)))
+    }
 
 
 def _client_billing_transaction_history_sql():
