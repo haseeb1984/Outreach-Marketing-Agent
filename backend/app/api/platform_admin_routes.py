@@ -131,7 +131,7 @@ def public_plan(row):
     return result
 
 @router.get("/overview")
-async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), client_search: str = Query(default="", max_length=200), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000), audit_limit: int = Query(default=100, ge=1, le=500), audit_offset: int = Query(default=0, ge=0, le=1000000)):
+async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), client_search: str = Query(default="", max_length=200), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000), audit_limit: int = Query(default=100, ge=1, le=500), audit_offset: int = Query(default=0, ge=0, le=1000000), audit_search: str = Query(default="", max_length=200)):
     await require_platform_admin(request)
     try:
         async with pool_for(request).acquire() as conn:
@@ -186,18 +186,26 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               FROM feature_usage_reservations r LEFT JOIN workspaces w ON w.id=r.workspace_id
               ORDER BY r.created_at DESC LIMIT $1 OFFSET $2""", usage_limit, usage_offset)
             usage_total = await conn.fetchval("SELECT count(*) FROM feature_usage_reservations")
+            audit_term = audit_search.strip().casefold()
+            audit_filter = """($1 = '' OR position($1 in lower(coalesce(u.email,''))) > 0
+              OR position($1 in lower(e.event_type)) > 0
+              OR position($1 in lower(e.target_type)) > 0
+              OR position($1 in lower(e.target_id)) > 0
+              OR position($1 in lower(e.metadata::text)) > 0)"""
             admin_events = await conn.fetch("""SELECT e.id,e.actor_user_id::text AS actor_user_id,
               u.email AS actor_email,e.event_type,e.target_type,e.target_id,e.metadata,e.created_at
               FROM platform_admin_audit_events e JOIN app_users u ON u.id=e.actor_user_id
-              ORDER BY e.created_at DESC LIMIT $1 OFFSET $2""", audit_limit, audit_offset)
-            audit_total = await conn.fetchval("SELECT count(*) FROM platform_admin_audit_events")
+              WHERE """ + audit_filter + " ORDER BY e.created_at DESC,e.id DESC LIMIT $2 OFFSET $3",
+              audit_term, audit_limit, audit_offset)
+            audit_total = await conn.fetchval("""SELECT count(*) FROM platform_admin_audit_events e
+              JOIN app_users u ON u.id=e.actor_user_id WHERE """ + audit_filter, audit_term)
         return {"totals": {k:int(v or 0) for k,v in dict(totals).items()},
           "clients":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in clients],
           "plans":[public_plan(row) for row in plans],
           "usage_by_feature":[dict(row) for row in usage_by_feature],
           "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
           "admin_events":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in admin_events],
-          "clients_truncated":client_offset + len(clients) < int(client_search_total or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(client_search_total or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0), "audit_offset":audit_offset, "audit_limit":audit_limit, "audit_total":int(audit_total or 0), "audit_truncated":audit_offset + len(admin_events) < int(audit_total or 0)}
+          "clients_truncated":client_offset + len(clients) < int(client_search_total or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(client_search_total or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0), "audit_offset":audit_offset, "audit_limit":audit_limit, "audit_search":audit_search, "audit_total":int(audit_total or 0), "audit_truncated":audit_offset + len(admin_events) < int(audit_total or 0)}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
 
