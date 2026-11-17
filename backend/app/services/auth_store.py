@@ -170,6 +170,14 @@ class AuthStore:
                        WHERE user_id=$1 AND consumed_at IS NULL AND id<>$3""",
                     row["user_id"], now, row["id"],
                 )
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       SELECT m.workspace_id,$1,'account.email_verified','success','{}'::jsonb,$2
+                       FROM workspace_memberships m
+                       WHERE m.user_id=$1 AND m.status='active'""",
+                    row["user_id"], now,
+                )
                 return True
 
     async def authenticate_password(self, *, email: str, password: str) -> dict[str, str] | None:
@@ -231,6 +239,18 @@ class AuthStore:
                        VALUES ($1, $2, $3, $4, $5, $4, $6)""",
                     UUID(str(user_id)), token_digest(token), csrf_token_digest(csrf_token),
                     now, expires_at, safe_user_agent,
+                )
+                await connection.execute(
+                    "UPDATE app_users SET last_login_at=$2,updated_at=$2 WHERE id=$1",
+                    UUID(str(user_id)), now,
+                )
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       SELECT m.workspace_id,$1,'account.login','success','{}'::jsonb,$2
+                       FROM workspace_memberships m
+                       WHERE m.user_id=$1 AND m.status='active'""",
+                    UUID(str(user_id)), now,
                 )
         # The raw token is returned once. The database stores only its digest.
         return {"token": token, "csrf_token": csrf_token, "expires_at": expires_at}
