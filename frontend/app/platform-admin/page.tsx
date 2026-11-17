@@ -47,7 +47,11 @@ export default function PlatformAdminPage() {
   const [billingQuery, setBillingQuery] = useState("");
   const [billingOffset, setBillingOffset] = useState(0);
   const [billingLoading, setBillingLoading] = useState(false);
-  const [billingEvents, setBillingEvents] = useState<BillingEvents | null>(null);\n  const [billingEventSearch, setBillingEventSearch] = useState("");\n  const [billingEventQuery, setBillingEventQuery] = useState("");\n  const [billingEventOffset, setBillingEventOffset] = useState(0);\n  const [billingEventsLoading, setBillingEventsLoading] = useState(false);
+  const [billingEvents, setBillingEvents] = useState<BillingEvents | null>(null);
+  const [billingEventSearch, setBillingEventSearch] = useState("");
+  const [billingEventQuery, setBillingEventQuery] = useState("");
+  const [billingEventOffset, setBillingEventOffset] = useState(0);
+  const [billingEventsLoading, setBillingEventsLoading] = useState(false);
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
