@@ -120,3 +120,47 @@ def test_platform_admin_audit_pagination_has_stable_tie_break_order():
     assert "order by e.created_at desc,e.id desc" in " ".join(source.split())
     assert "audit_search" in source
     assert _platform_audit_search_sql()
+
+
+def test_workspace_integrity_query_is_scoped_and_checks_owner_and_account_state():
+    from app.api.platform_admin_routes import _client_workspace_integrity_sql
+
+    sql = " ".join(_client_workspace_integrity_sql().lower().split())
+    assert "where m.workspace_id=$1" in sql
+    assert "m.role='owner'" in sql
+    assert "m.status='active'" in sql
+    assert "u.status='active'" in sql
+    assert "u.email_verified_at is not null" in sql
+    assert "active_memberships_for_inactive_accounts" in sql
+    assert "active_memberships_for_unverified_accounts" in sql
+    assert not any(token in sql for token in ("insert into ", "update ", "delete from ", "truncate "))
+
+
+def test_workspace_account_lifecycle_history_is_scoped_bounded_and_stable():
+    from app.api.platform_admin_routes import _client_account_lifecycle_sql
+
+    sql = " ".join(_client_account_lifecycle_sql().lower().split())
+    assert "where e.workspace_id=$1" in sql
+    assert "order by e.created_at desc,e.id desc limit 25" in sql
+    assert "e.metadata" in sql
+    assert not any(token in sql for token in ("insert into ", "update ", "delete from ", "truncate "))
+
+
+def test_account_audit_metadata_exposes_only_safe_allowlisted_scalar_fields():
+    from app.api.platform_admin_routes import _safe_account_audit_metadata
+
+    raw = {
+        "role": "admin",
+        "status": "active",
+        "reason": "owner approved",
+        "password": "never-return-this",
+        "token": "never-return-this",
+        "webhook_payload": {"secret": "never-return-this"},
+        "message_body": "private customer content",
+        "arbitrary_field": "not allowlisted",
+    }
+    assert _safe_account_audit_metadata(raw) == {
+        "role": "admin", "status": "active", "reason": "owner approved"
+    }
+    assert _safe_account_audit_metadata('{"role":"owner","password":"secret"}') == {"role": "owner"}
+    assert _safe_account_audit_metadata("not-json") == {}
