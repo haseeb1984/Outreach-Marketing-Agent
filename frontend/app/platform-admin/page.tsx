@@ -102,7 +102,7 @@ export default function PlatformAdminPage() {
     }
   }
 
-  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0, auditPageOffset = 0, search = "", auditSearchValue = auditQuery) => {
+  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0, auditPageOffset = 0, search = "", auditSearchValue = "") => {
     const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset + "&usage_limit=100&usage_offset=" + usagePageOffset + "&audit_limit=100&audit_offset=" + auditPageOffset + "&audit_search=" + encodeURIComponent(auditSearchValue) + "&client_search=" + encodeURIComponent(search), token);
     setOverview(data);
     setClientDetail(null);
@@ -110,9 +110,8 @@ export default function PlatformAdminPage() {
     setClientQuery(search);
     setUsageOffset(data.usage_offset);
     setAuditOffset(data.audit_offset);
-    setAuditQuery(auditSearchValue);
     setLastRefreshed(new Date().toISOString());
-  }, [auditQuery]);
+  }, []);
 
   async function refreshAll() {
     if (!csrf || refreshing || busy) return;
@@ -120,7 +119,7 @@ export default function PlatformAdminPage() {
     try {
       const [smtp] = await Promise.all([
         api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", csrf),
-        refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery),
+        refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery, auditQuery),
         loadBillingReconciliation(csrf, billingOffset, billingQuery),
         loadBillingEvents(csrf, billingEventOffset, billingEventQuery),
       ]);
@@ -310,7 +309,7 @@ export default function PlatformAdminPage() {
           <button className="button secondary" type="button" disabled={busy || !overview.usage_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset + overview.usage_limit, auditOffset, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next usage records."); } finally { setBusy(false); } }}>Next usage</button>
         </div>
       </section>
-      <section className="section" aria-labelledby="admin-audit-title"><h2 id="admin-audit-title">Platform admin audit history</h2><p className="fine">Search across actor email, action, target and recorded metadata. Results are filtered on the server before pagination.</p><form className="field" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, 0, clientQuery, auditSearch.trim()); setAuditSearch(auditSearch.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Could not search audit history."); } finally { setBusy(false); } }}><label htmlFor="admin-audit-search">Search audit events</label><div className="actions"><input id="admin-audit-search" type="search" maxLength={200} value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Actor email, action, target ID or metadata"/><button className="button secondary" type="submit" disabled={busy || !csrf}>Search audit</button><button className="button secondary" type="button" disabled={busy || !auditQuery} onClick={async()=>{setAuditSearch("");setBusy(true);setError("");try{await refresh(csrf,clientOffset,usageOffset,0,clientQuery,"");}catch(e){setError(e instanceof Error?e.message:"Could not clear audit search.");}finally{setBusy(false);}}}>Clear</button></div></form>
+      <section className="section" aria-labelledby="admin-audit-title"><h2 id="admin-audit-title">Platform admin audit history</h2><p className="fine">Search across actor email, action, target and recorded metadata. Results are filtered on the server before pagination.</p><form className="field" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { setAuditQuery(auditSearch.trim()); await refresh(csrf, clientOffset, usageOffset, 0, clientQuery, auditSearch.trim()); setAuditSearch(auditSearch.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Could not search audit history."); } finally { setBusy(false); } }}><label htmlFor="admin-audit-search">Search audit events</label><div className="actions"><input id="admin-audit-search" type="search" maxLength={200} value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Actor email, action, target ID or metadata"/><button className="button secondary" type="submit" disabled={busy || !csrf}>Search audit</button><button className="button secondary" type="button" disabled={busy || !auditQuery} onClick={async()=>{setAuditSearch("");setBusy(true);setError("");try{setAuditQuery("");await refresh(csrf,clientOffset,usageOffset,0,clientQuery,"");}catch(e){setError(e instanceof Error?e.message:"Could not clear audit search.");}finally{setBusy(false);}}}>Clear</button></div></form>
         <div className="card table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody>{overview.admin_events.map(event=><tr key={event.id}><td>{new Date(event.created_at).toLocaleString()}</td><td>{event.actor_email}</td><td>{event.event_type}</td><td>{event.target_type}: {event.target_id}</td></tr>)}</tbody></table>{!overview.admin_events.length && <p>No platform admin changes recorded yet.</p>}</div>
         <div className="actions" aria-label="Platform audit pagination">
           <button className="button secondary" type="button" disabled={busy || auditOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, Math.max(0, auditOffset - overview.audit_limit), clientQuery, auditQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous audit events."); } finally { setBusy(false); } }}>Previous audit</button>
