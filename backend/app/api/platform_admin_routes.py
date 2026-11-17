@@ -187,11 +187,7 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               ORDER BY r.created_at DESC LIMIT $1 OFFSET $2""", usage_limit, usage_offset)
             usage_total = await conn.fetchval("SELECT count(*) FROM feature_usage_reservations")
             audit_term = audit_search.strip().casefold()
-            audit_filter = """($1 = '' OR position($1 in lower(coalesce(u.email,''))) > 0
-              OR position($1 in lower(e.event_type)) > 0
-              OR position($1 in lower(e.target_type)) > 0
-              OR position($1 in lower(e.target_id)) > 0
-              OR position($1 in lower(e.metadata::text)) > 0)"""
+            audit_filter = _platform_audit_search_sql()
             admin_events = await conn.fetch("""SELECT e.id,e.actor_user_id::text AS actor_user_id,
               u.email AS actor_email,e.event_type,e.target_type,e.target_id,e.metadata,e.created_at
               FROM platform_admin_audit_events e JOIN app_users u ON u.id=e.actor_user_id
@@ -278,6 +274,15 @@ async def client_detail(workspace_id: str, request: Request):
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="platform_admin_client_detail_unavailable") from None
+
+
+def _platform_audit_search_sql():
+    """Parameterized server-side filter for platform-admin audit history."""
+    return """($1 = '' OR position($1 in lower(coalesce(u.email,''))) > 0
+              OR position($1 in lower(e.event_type)) > 0
+              OR position($1 in lower(e.target_type)) > 0
+              OR position($1 in lower(e.target_id)) > 0
+              OR position($1 in lower(e.metadata::text)) > 0)"""
 
 
 def _client_billing_transaction_history_sql():
