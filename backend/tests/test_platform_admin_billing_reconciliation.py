@@ -92,3 +92,31 @@ def test_billing_event_history_is_a_sanitized_read_only_union():
     assert "e.event_created_at" in sql
     assert "union all" in sql
     assert not any(token in sql for token in ("insert into ", "update ", "delete from ", "truncate ", "raw_payload", "webhook_secret"))
+
+
+def test_platform_admin_audit_search_is_parameterized_and_covers_actor_action_target_and_metadata():
+    from app.api.platform_admin_routes import _platform_audit_search_sql
+
+    sql = " ".join(_platform_audit_search_sql().lower().split())
+    assert "$1 = ''" in sql
+    assert "u.email" in sql
+    assert "e.event_type" in sql
+    assert "e.target_type" in sql
+    assert "e.target_id" in sql
+    assert "e.metadata::text" in sql
+    assert "position($1 in lower(" in sql
+    assert not any(token in sql for token in ("insert into ", "update ", "delete from ", "truncate "))
+
+
+def test_platform_admin_audit_pagination_has_stable_tie_break_order():
+    from app.api.platform_admin_routes import _platform_audit_search_sql
+
+    # The endpoint must use a deterministic secondary key when multiple audit rows
+    # share the same timestamp, so adjacent pages cannot reorder tied events.
+    import inspect
+    from app.api import platform_admin_routes
+
+    source = inspect.getsource(platform_admin_routes.overview).lower()
+    assert "order by e.created_at desc,e.id desc" in " ".join(source.split())
+    assert "audit_search" in source
+    assert _platform_audit_search_sql()
