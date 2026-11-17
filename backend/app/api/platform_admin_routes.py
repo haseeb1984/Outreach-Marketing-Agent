@@ -283,7 +283,7 @@ def _client_subscription_event_history_sql():
     return """SELECT provider,provider_event_id,provider_subscription_id,event_created_at,
                      received_at,outcome
               FROM billing_provider_events WHERE workspace_id=$1
-              ORDER BY event_created_at DESC,received_at DESC LIMIT 10
+              ORDER BY event_created_at DESC,received_at DESC LIMIT 10"""
 
 
 def _billing_reconciliation_sql():
