@@ -9,7 +9,7 @@ type UsageFeature = { workspace_id: string; feature: string; consumed: number; r
 type ClientDetail = { workspace: { workspace_id: string; workspace_name: string; created_at: string | null }; subscription: { provider?: string; subscription_status?: string | null; plan_slug?: string | null; package_name?: string | null; billing_period_starts_at?: string | null; billing_period_ends_at?: string | null; entitlements?: Record<string, { enabled: boolean; monthly_limit?: number | null }> | null }; members: { user_id: string; email: string; role: string; status: string; account_status: string; email_verified_at: string | null; last_login_at: string | null; created_at: string }[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; billing_transactions: { provider: string; transaction_id: string; invoice_number: string | null; status: string; currency_code: string | null; total_minor: string | null; billed_at: string; updated_at: string }[]; subscription_events: { provider: string; provider_event_id: string; provider_subscription_id: string; event_created_at: string; received_at: string; outcome: string }[] };
 type UsageRecord = { reservation_id: string; workspace_id: string; workspace_name: string | null; feature: string; status: string; created_at: string; updated_at: string; billing_period_starts_at: string; billing_period_ends_at: string };
 type AdminEvent = { id: number; actor_email: string; event_type: string; target_type: string; target_id: string; created_at: string };
-type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number; usage_offset: number; usage_limit: number; usage_total: number; usage_truncated: boolean; audit_offset: number; audit_limit: number; audit_total: number; audit_truncated: boolean };
+type Overview = { totals: Record<string, number>; clients: Client[]; plans: Plan[]; usage_by_feature: UsageFeature[]; recent_usage: UsageRecord[]; admin_events: AdminEvent[]; clients_truncated: boolean; clients_offset: number; clients_limit: number; clients_total: number; usage_offset: number; usage_limit: number; usage_total: number; usage_truncated: boolean; audit_offset: number; audit_limit: number; audit_total: number; audit_truncated: boolean; audit_search: string };
 type BillingReconciliationItem = { workspace_id: string; workspace_name: string; owner_email: string | null; provider: string; provider_customer_id: string | null; provider_subscription_id: string | null; plan_slug: string | null; subscription_status: string; billing_period_starts_at: string; billing_period_ends_at: string; provider_event_created_at: string | null; subscription_updated_at: string; plan_name: string | null; latest_transaction_id: string | null; latest_invoice_number: string | null; latest_transaction_status: string | null; latest_currency_code: string | null; latest_total_minor: string | null; latest_billed_at: string | null; latest_subscription_event_id: string | null; latest_subscription_event_outcome: string | null; latest_subscription_event_at: string | null; issues: string[] };
 type BillingReconciliation = { summary: Record<string, number>; items: BillingReconciliationItem[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean };
 type BillingEvent = { event_kind: string; provider: string; provider_event_id: string; workspace_id: string | null; workspace_name: string | null; related_id: string; event_created_at: string; received_at: string; outcome: string; transaction_status: string | null; invoice_number: string | null };
@@ -62,6 +62,8 @@ export default function PlatformAdminPage() {
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditQuery, setAuditQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const filteredClients = overview?.clients ?? [];
@@ -100,16 +102,17 @@ export default function PlatformAdminPage() {
     }
   }
 
-  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0, auditPageOffset = 0, search = "") => {
-    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset + "&usage_limit=100&usage_offset=" + usagePageOffset + "&audit_limit=100&audit_offset=" + auditPageOffset + "&client_search=" + encodeURIComponent(search), token);
+  const refresh = useCallback(async (token: string, offset = 0, usagePageOffset = 0, auditPageOffset = 0, search = "", auditSearchValue = auditQuery) => {
+    const data = await api<Overview>("/api/v1/platform-admin/overview?client_limit=100&client_offset=" + offset + "&usage_limit=100&usage_offset=" + usagePageOffset + "&audit_limit=100&audit_offset=" + auditPageOffset + "&audit_search=" + encodeURIComponent(auditSearchValue) + "&client_search=" + encodeURIComponent(search), token);
     setOverview(data);
     setClientDetail(null);
     setClientOffset(data.clients_offset);
     setClientQuery(search);
     setUsageOffset(data.usage_offset);
     setAuditOffset(data.audit_offset);
+    setAuditQuery(auditSearchValue);
     setLastRefreshed(new Date().toISOString());
-  }, []);
+  }, [auditQuery]);
 
   async function refreshAll() {
     if (!csrf || refreshing || busy) return;
@@ -307,12 +310,12 @@ export default function PlatformAdminPage() {
           <button className="button secondary" type="button" disabled={busy || !overview.usage_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset + overview.usage_limit, auditOffset, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next usage records."); } finally { setBusy(false); } }}>Next usage</button>
         </div>
       </section>
-      <section className="section" aria-labelledby="admin-audit-title"><h2 id="admin-audit-title">Platform admin audit history</h2>
+      <section className="section" aria-labelledby="admin-audit-title"><h2 id="admin-audit-title">Platform admin audit history</h2><p className="fine">Search across actor email, action, target and recorded metadata. Results are filtered on the server before pagination.</p><form className="field" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, 0, clientQuery, auditSearch.trim()); setAuditSearch(auditSearch.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Could not search audit history."); } finally { setBusy(false); } }}><label htmlFor="admin-audit-search">Search audit events</label><div className="actions"><input id="admin-audit-search" type="search" maxLength={200} value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Actor email, action, target ID or metadata"/><button className="button secondary" type="submit" disabled={busy || !csrf}>Search audit</button><button className="button secondary" type="button" disabled={busy || !auditQuery} onClick={async()=>{setAuditSearch("");setBusy(true);setError("");try{await refresh(csrf,clientOffset,usageOffset,0,clientQuery,"");}catch(e){setError(e instanceof Error?e.message:"Could not clear audit search.");}finally{setBusy(false);}}}>Clear</button></div></form>
         <div className="card table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody>{overview.admin_events.map(event=><tr key={event.id}><td>{new Date(event.created_at).toLocaleString()}</td><td>{event.actor_email}</td><td>{event.event_type}</td><td>{event.target_type}: {event.target_id}</td></tr>)}</tbody></table>{!overview.admin_events.length && <p>No platform admin changes recorded yet.</p>}</div>
         <div className="actions" aria-label="Platform audit pagination">
-          <button className="button secondary" type="button" disabled={busy || auditOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, Math.max(0, auditOffset - overview.audit_limit), clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous audit events."); } finally { setBusy(false); } }}>Previous audit</button>
+          <button className="button secondary" type="button" disabled={busy || auditOffset === 0} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, Math.max(0, auditOffset - overview.audit_limit), clientQuery, auditQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load previous audit events."); } finally { setBusy(false); } }}>Previous audit</button>
           <span className="fine">Events {overview.audit_total === 0 ? 0 : auditOffset + 1}–{Math.min(auditOffset + overview.admin_events.length, overview.audit_total)} of {overview.audit_total.toLocaleString()}</span>
-          <button className="button secondary" type="button" disabled={busy || !overview.audit_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, auditOffset + overview.audit_limit, clientQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next audit events."); } finally { setBusy(false); } }}>Next audit</button>
+          <button className="button secondary" type="button" disabled={busy || !overview.audit_truncated} onClick={async () => { setBusy(true); setError(""); try { await refresh(csrf, clientOffset, usageOffset, auditOffset + overview.audit_limit, clientQuery, auditQuery); } catch (e) { setError(e instanceof Error ? e.message : "Could not load next audit events."); } finally { setBusy(false); } }}>Next audit</button>
         </div>
       </section>
     </>}
