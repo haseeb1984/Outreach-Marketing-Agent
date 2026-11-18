@@ -101,6 +101,12 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                workspace = await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    payload.workspace_id,
+                )
+                if workspace is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 actor_id = UUID(str(session["user_id"]))
                 actor_role = await conn.fetchval(
                     """SELECT role FROM workspace_memberships
@@ -111,9 +117,16 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
                     raise HTTPException(status_code=404, detail="workspace_not_found")
                 if payload.role == "admin" and actor_role != "owner":
                     raise HTTPException(status_code=403, detail="only_owner_can_invite_admin")
-                workspace_name = await conn.fetchval("SELECT name FROM workspaces WHERE id=$1", payload.workspace_id)
-                if workspace_name is None:
-                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                workspace_name = workspace["name"] if "name" in workspace else await conn.fetchval(
+                    "SELECT name FROM workspaces WHERE id=$1", payload.workspace_id
+                )
+                existing_member = await conn.fetchval(
+                    """SELECT m.status FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+                       WHERE m.workspace_id=$1 AND u.email=$2 FOR UPDATE OF m""",
+                    payload.workspace_id, email,
+                )
+                if existing_member == "active":
+                    raise HTTPException(status_code=409, detail="already_workspace_member")
                 replaced = await conn.fetch(
                     """UPDATE workspace_invitations SET status='revoked',revoked_at=$3
                        WHERE workspace_id=$1 AND invited_email=$2 AND status='pending'
@@ -216,11 +229,13 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
                         raise HTTPException(status_code=403, detail="invitation_email_mismatch")
                     # Serialize invitation acceptance for this account with workspace creation.
                     account = await conn.fetchrow(
-                        "SELECT id FROM app_users WHERE id=$1 FOR UPDATE",
+                        "SELECT id,status,email_verified_at FROM app_users WHERE id=$1 FOR UPDATE",
                         UUID(str(session["user_id"])),
                     )
-                    if account is None:
+                    if account is None or account["status"] != "active":
                         raise HTTPException(status_code=401, detail="account_unavailable")
+                    if account["email_verified_at"] is None:
+                        raise HTTPException(status_code=403, detail="email_verification_required")
                     active_memberships = await conn.fetchval(
                         """SELECT count(*) FROM workspace_memberships
                            WHERE user_id=$1 AND status='active'""",
