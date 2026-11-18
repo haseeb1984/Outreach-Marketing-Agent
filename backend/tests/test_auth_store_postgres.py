@@ -96,15 +96,18 @@ async def _exercise_password_reset() -> None:
             await store.create_session(user_id=user_id, lifetime_hours=1)
             for _ in range(2)
         ]
+        current_authenticated = await store.authenticate_session(session["token"])
+        assert current_authenticated is not None
         revoked_count = await store.revoke_other_sessions(
-            user_id=user_id, current_session_id=session["session_id"],
+            user_id=user_id, current_session_id=current_authenticated["session_id"],
         )
         assert revoked_count == 2
         assert await store.authenticate_session(session["token"]) is not None
-        assert all(
-            await store.authenticate_session(other["token"]) is None
+        other_session_states = [
+            await store.authenticate_session(other["token"])
             for other in other_sessions
-        )
+        ]
+        assert all(state is None for state in other_session_states)
         async with pool.acquire() as conn:
             session_revoke_events = await conn.fetchval(
                 """SELECT count(*) FROM security_audit_events
