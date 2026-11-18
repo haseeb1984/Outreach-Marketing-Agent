@@ -161,7 +161,7 @@ async def remove_workspace_member(
                        WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
                     workspace_id, user_id,
                 )
-                if target is None or target["status"] != "active":
+                if target is None or target["status"] not in {"active", "suspended"}:
                     raise HTTPException(status_code=404, detail="workspace_member_not_found")
                 if target["role"] == "owner":
                     raise HTTPException(status_code=409, detail="workspace_owner_cannot_be_removed")
@@ -177,7 +177,7 @@ async def remove_workspace_member(
                        (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
                        VALUES ($1,$2,'workspace.member.removed','success',$3::jsonb,now())""",
                     workspace_id, actor_id,
-                    json.dumps({"target_user_id": str(user_id), "previous_role": target["role"]}),
+                    json.dumps({"target_user_id": str(user_id), "previous_role": target["role"], "previous_status": target["status"]}),
                 )
         return {"workspace_id": workspace_id, "user_id": str(user_id), "removed": True}
     except HTTPException:
