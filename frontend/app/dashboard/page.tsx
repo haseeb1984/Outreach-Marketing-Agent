@@ -19,7 +19,7 @@ type GrowthSchedule = { id: string; interval_hours: number; status: "active" | "
 type GrowthJob = { id: string; job_type: string; status: string; error_code?: string | null; attempt_count: number; max_attempts: number; created_at: string; finished_at?: string | null };
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
-type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
+type WorkspaceMember = { user_id: string; email: string; account_status?: string; email_verified_at?: string | null; last_login_at?: string | null; role: string; status: string; created_at: string; updated_at?: string };
 type AuthSession = { id: string; created_at: string; last_seen_at: string; expires_at: string; user_agent?: string | null; is_current: boolean };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
@@ -2431,7 +2431,7 @@ export default function DashboardPage() {
             </form>
           </article>
           <h3>Current members</h3>
-          <div className="cards">{members.length ? members.map(member=><article className="card" key={member.user_id}><h3>{member.email}</h3><p className="fine">{member.status} · {member.role}</p>
+          <div className="cards">{members.length ? members.map(member=><article className="card" key={member.user_id}><h3>{member.email}</h3><p className="fine">Membership: {member.status} · Role: {member.role}</p><p className="fine">Account: {member.account_status || "unknown"} · Email: {member.email_verified_at ? "verified" : "unverified"} · Last login: {member.last_login_at ? new Date(member.last_login_at).toLocaleString() : "Never"}</p>
             {member.role !== "owner" && <div className="field"><label htmlFor={"role-" + member.user_id}>Role</label><select id={"role-" + member.user_id} value={member.role} disabled={busy || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onChange={e=>changeMemberRole(member,e.target.value)}><option value="viewer">Viewer</option><option value="member">Member</option><option value="admin" disabled={workspaces.find(w=>w.id===workspaceId)?.role !== "owner"}>Admin</option></select></div>}
             {member.role !== "owner" && workspaces.find(w=>w.id===workspaceId)?.role === "owner" && <button className="button secondary" type="button" disabled={busy} onClick={()=>transferOwnership(member)}>Transfer ownership</button>}
             {member.role !== "owner" && <button className="button secondary" type="button" disabled={busy || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onClick={()=>removeMember(member)}>Remove member</button>}
