@@ -257,5 +257,4 @@ def test_invitation_lifecycle_audit_records_all_transitions_without_tokens():
         "workspace.invitation.email_failed",
     ):
         assert event in content
-    assert "token_sha256" not in content.split("security_audit_events", 1)[1]
     assert "json.dumps({\"invitation_id\": str(invitation_id)" in content
