@@ -621,6 +621,18 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function revokeOtherAuthSessions() {
+    if (!csrf || !window.confirm("Sign out all other devices? This device will stay signed in.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ revoked_count: number; current_session_preserved: boolean }>("/api/v1/auth/sessions/revoke-others", csrf, { method: "POST" });
+      setAuthSessions(current => current.filter(item => item.is_current));
+      setNotice(`Signed out ${result.revoked_count} other session${result.revoked_count === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Other sessions could not be revoked.");
+    } finally { setBusy(false); }
+  }
+
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!csrf || !newWorkspaceName.trim()) return;
@@ -2861,7 +2873,7 @@ export default function DashboardPage() {
           <h2 id="sessions-title">Signed-in devices and sessions</h2>
           <article className="card">
             <p>Review active sign-ins for this account. You can remotely sign out a device you no longer use; the current session is protected and must be ended with Sign out.</p>
-            <div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={loadAuthSessions}>Refresh sessions</button></div>
+            <div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={loadAuthSessions}>Refresh sessions</button><button className="button secondary" type="button" disabled={busy || !csrf || authSessions.filter(session=>!session.is_current).length===0} onClick={revokeOtherAuthSessions}>Sign out all other devices</button></div>
             <div className="cards">{authSessions.length ? authSessions.map(session=><article className="card" key={session.id}>
               <h3>{session.is_current ? "This device (current session)" : "Other signed-in device"}</h3>
               <p className="fine">Last active: {new Date(session.last_seen_at).toLocaleString()} · Expires: {new Date(session.expires_at).toLocaleString()}</p>
