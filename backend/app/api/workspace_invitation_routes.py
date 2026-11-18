@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -113,11 +114,21 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
                 workspace_name = await conn.fetchval("SELECT name FROM workspaces WHERE id=$1", payload.workspace_id)
                 if workspace_name is None:
                     raise HTTPException(status_code=404, detail="workspace_not_found")
-                await conn.execute(
+                replaced = await conn.fetch(
                     """UPDATE workspace_invitations SET status='revoked',revoked_at=$3
-                       WHERE workspace_id=$1 AND invited_email=$2 AND status='pending'""",
+                       WHERE workspace_id=$1 AND invited_email=$2 AND status='pending'
+                       RETURNING id""",
                     payload.workspace_id, email, now,
                 )
+                for old_invitation in replaced:
+                    await conn.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                           VALUES ($1,$2,'workspace.invitation.revoked','success',$3::jsonb,$4)""",
+                        payload.workspace_id, actor_id,
+                        json.dumps({"invitation_id": str(old_invitation["id"]), "reason": "replaced"}),
+                        now,
+                    )
                 row = await conn.fetchrow(
                     """INSERT INTO workspace_invitations
                        (workspace_id,invited_email,role,token_sha256,status,invited_by,created_at,expires_at)
@@ -127,18 +138,34 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
                     UUID(str(session["user_id"])), now, expires_at,
                 )
                 invitation_id = row["id"]
+                await conn.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       VALUES ($1,$2,'workspace.invitation.created','success',$3::jsonb,$4)""",
+                    payload.workspace_id, actor_id,
+                    json.dumps({"invitation_id": str(invitation_id), "email": email, "role": payload.role, "expires_at": expires_at.isoformat()}),
+                    now,
+                )
         try:
             await SMTPEmailDelivery().send_workspace_invitation_email(
                 recipient=email, token=token, workspace_name=workspace_name or "Workspace",
                 role=payload.role, expires_at=expires_at,
             )
-        except (EmailDeliveryFailed, EmailDeliveryNotConfigured, ValueError):
+        except Exception:
             async with pool.acquire() as conn:
-                await conn.execute(
-                    """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
-                       WHERE id=$1 AND status='pending'""",
-                    invitation_id,
-                )
+                async with conn.transaction():
+                    await conn.execute(
+                        """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
+                           WHERE id=$1 AND status='pending'""",
+                        invitation_id,
+                    )
+                    await conn.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                           VALUES ($1,$2,'workspace.invitation.email_failed','failure',$3::jsonb,now())""",
+                        payload.workspace_id, UUID(str(session["user_id"])),
+                        json.dumps({"invitation_id": str(invitation_id)}),
+                    )
             raise HTTPException(status_code=503, detail="invitation_email_delivery_failed") from None
         return {"message": "Invitation email sent.", "email": email, "role": payload.role, "expires_at": expires_at.isoformat()}
     except HTTPException:
@@ -171,8 +198,15 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
                     # Do not raise inside the transaction: that would roll back the
                     # status change and leave the expired bearer token pending forever.
                     await conn.execute(
-                        "UPDATE workspace_invitations SET status='expired' WHERE id=$1",
-                        invitation["id"],
+                        "UPDATE workspace_invitations SET status='expired',revoked_at=$2 WHERE id=$1",
+                        invitation["id"], now,
+                    )
+                    await conn.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                           VALUES ($1,$2,'workspace.invitation.expired','failure',$3::jsonb,$4)""",
+                        invitation["workspace_id"], None,
+                        json.dumps({"invitation_id": str(invitation["id"])}), now,
                     )
                     expired_invitation = True
                 else:
@@ -257,6 +291,13 @@ async def revoke_invitation(
                 )
                 if not result.endswith(" 1"):
                     raise HTTPException(status_code=404, detail="pending_invitation_not_found")
+                await conn.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       VALUES ($1,$2,'workspace.invitation.revoked','success',$3::jsonb,now())""",
+                    workspace_id, actor_id,
+                    json.dumps({"invitation_id": str(invitation_id)}),
+                )
     except HTTPException:
         raise
     except Exception:
