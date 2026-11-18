@@ -291,3 +291,12 @@ def test_invitation_creation_blocks_active_members_and_acceptance_requires_verif
     assert "email_verification_required" in content
     assert "SELECT id,status,email_verified_at FROM app_users WHERE id=$1 FOR UPDATE" in content
     assert "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE" in content
+
+
+def test_suspended_members_can_be_revoked_but_not_role_changed():
+    from pathlib import Path
+
+    source = Path(workspace_routes.__file__).parent / "workspace_member_routes.py"
+    content = source.read_text(encoding="utf-8")
+    assert 'target["status"] not in {"active", "suspended"}' in content
+    assert 'target["status"] != "active"' in content
