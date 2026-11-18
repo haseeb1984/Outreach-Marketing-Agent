@@ -297,6 +297,20 @@ async def list_account_sessions(request: Request):
     return {"items": items}
 
 
+@router.post("/sessions/revoke-others")
+async def revoke_other_account_sessions(request: Request):
+    """Revoke every other active session without invalidating the current session."""
+    store, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    try:
+        revoked_count = await store.revoke_other_sessions(
+            user_id=session["user_id"], current_session_id=session["session_id"],
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="session_revoke_unavailable") from None
+    return {"revoked_count": revoked_count, "current_session_preserved": True}
+
+
 @router.delete("/sessions/{session_id}")
 async def revoke_account_session(session_id: str, request: Request):
     store, _, session = await _authenticated(request)
