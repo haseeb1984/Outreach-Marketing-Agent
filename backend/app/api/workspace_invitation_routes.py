@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
 from app.services.auth_security import new_opaque_token, normalize_email, token_digest
-from app.services.email_delivery import EmailDeliveryFailed, EmailDeliveryNotConfigured, SMTPEmailDelivery
+from app.services.email_delivery import SMTPEmailDelivery
 
 router = APIRouter(prefix="/api/v1/workspaces/invitations", tags=["workspace invitations"])
 
