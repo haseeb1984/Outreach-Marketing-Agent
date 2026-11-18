@@ -200,6 +200,18 @@ async def accept_invitation(payload: InvitationAccept, request: Request) -> dict
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                invitation_workspace_id = await conn.fetchval(
+                    "SELECT workspace_id FROM workspace_invitations WHERE token_sha256=$1",
+                    digest,
+                )
+                if invitation_workspace_id is None:
+                    raise HTTPException(status_code=400, detail="invitation_invalid_or_expired")
+                workspace = await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    invitation_workspace_id,
+                )
+                if workspace is None:
+                    raise HTTPException(status_code=400, detail="invitation_invalid_or_expired")
                 invitation = await conn.fetchrow(
                     """SELECT id,workspace_id,invited_email,role,status,expires_at
                        FROM workspace_invitations WHERE token_sha256=$1 FOR UPDATE""",
