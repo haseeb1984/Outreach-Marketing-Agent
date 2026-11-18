@@ -474,13 +474,54 @@ class AuthStore:
     async def revoke_session_by_id(self, *, user_id: UUID | str, session_id: UUID | str) -> bool:
         """Revoke one session only when it belongs to the authenticated account."""
         now = datetime.now(timezone.utc)
+        user_uuid, session_uuid = UUID(str(user_id)), UUID(str(session_id))
         async with self._pool.acquire() as connection:
-            result = await connection.execute(
-                """UPDATE auth_sessions SET revoked_at=$3
-                   WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>$3""",
-                UUID(str(session_id)), UUID(str(user_id)), now,
-            )
-        return result.endswith(" 1")
+            async with connection.transaction():
+                revoked = await connection.fetchrow(
+                    """UPDATE auth_sessions SET revoked_at=$3
+                       WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>$3
+                       RETURNING id""",
+                    session_uuid, user_uuid, now,
+                )
+                if revoked is None:
+                    return False
+                await connection.execute(
+                    """INSERT INTO security_audit_events
+                       (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                       SELECT m.workspace_id,$1,'account.session.revoked','success',
+                              jsonb_build_object('session_id',$2::text,'scope','single'),$3
+                       FROM workspace_memberships m
+                       WHERE m.user_id=$1 AND m.status='active'""",
+                    user_uuid, session_uuid, now,
+                )
+                return True
+
+    async def revoke_other_sessions(
+        self, *, user_id: UUID | str, current_session_id: UUID | str,
+    ) -> int:
+        """Revoke every other live session while preserving the current session."""
+        now = datetime.now(timezone.utc)
+        user_uuid, current_uuid = UUID(str(user_id)), UUID(str(current_session_id))
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                rows = await connection.fetch(
+                    """UPDATE auth_sessions SET revoked_at=$3
+                       WHERE user_id=$1 AND id<>$2 AND revoked_at IS NULL
+                         AND expires_at>$3 RETURNING id""",
+                    user_uuid, current_uuid, now,
+                )
+                count = len(rows)
+                if count:
+                    await connection.execute(
+                        """INSERT INTO security_audit_events
+                           (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
+                           SELECT m.workspace_id,$1,'account.sessions.revoked_others','success',
+                                  jsonb_build_object('count',$2::integer,'current_session_id',$3::text),$4
+                           FROM workspace_memberships m
+                           WHERE m.user_id=$1 AND m.status='active'""",
+                        user_uuid, count, current_uuid, now,
+                    )
+                return count
 
     async def authorize_workspace(
         self, *, user_id: UUID | str, workspace_id: str,
