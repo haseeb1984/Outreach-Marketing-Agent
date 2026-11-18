@@ -258,3 +258,36 @@ def test_invitation_lifecycle_audit_records_all_transitions_without_tokens():
     ):
         assert event in content
     assert "json.dumps({\"invitation_id\": str(invitation_id)" in content
+
+
+def test_workspace_member_writes_serialize_with_ownership_transfer_and_audit_roles():
+    from pathlib import Path
+
+    source = Path(workspace_routes.__file__).parent / "workspace_member_routes.py"
+    content = source.read_text(encoding="utf-8")
+    assert content.count("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE") >= 2
+    assert "admin_requires_active_verified_account" in content
+    assert "previous_role" in content
+    assert "FOR UPDATE OF m,u" in content
+    assert "workspace.member.role_changed" in content
+    assert "workspace.member.removed" in content
+
+
+def test_workspace_member_listing_includes_account_lifecycle_fields():
+    from pathlib import Path
+
+    source = Path(workspace_routes.__file__).parent / "workspace_member_routes.py"
+    content = source.read_text(encoding="utf-8")
+    for field in ("account_status", "email_verified_at", "last_login_at"):
+        assert field in content
+
+
+def test_invitation_creation_blocks_active_members_and_acceptance_requires_verified_active_account():
+    from pathlib import Path
+    from app.api import workspace_invitation_routes
+
+    content = Path(workspace_invitation_routes.__file__).read_text(encoding="utf-8")
+    assert "already_workspace_member" in content
+    assert "email_verification_required" in content
+    assert "SELECT id,status,email_verified_at FROM app_users WHERE id=$1 FOR UPDATE" in content
+    assert "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE" in content
