@@ -492,7 +492,7 @@ class AuthStore:
                               jsonb_build_object('session_id',$2::text,'scope','single'),$3
                        FROM workspace_memberships m
                        WHERE m.user_id=$1 AND m.status='active'""",
-                    user_uuid, session_uuid, now,
+                    user_uuid, str(session_uuid), now,
                 )
                 return True
 
@@ -519,7 +519,7 @@ class AuthStore:
                                   jsonb_build_object('count',$2::integer,'current_session_id',$3::text),$4
                            FROM workspace_memberships m
                            WHERE m.user_id=$1 AND m.status='active'""",
-                        user_uuid, count, current_uuid, now,
+                        user_uuid, count, str(current_uuid), now,
                     )
                 return count
 
