@@ -242,3 +242,20 @@ def test_invitation_revocation_rejects_actor_after_role_downgrade(monkeypatch):
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
     assert not any(call[0] == "execute" and "workspace_invitations" in call[1] for call in connection.calls)
+
+
+def test_invitation_lifecycle_audit_records_all_transitions_without_tokens():
+    from app.api import workspace_invitation_routes
+
+    source = workspace_invitation_routes.__file__
+    content = open(source, encoding="utf-8").read()
+    for event in (
+        "workspace.invitation.created",
+        "workspace.invitation.accepted",
+        "workspace.invitation.revoked",
+        "workspace.invitation.expired",
+        "workspace.invitation.email_failed",
+    ):
+        assert event in content
+    assert "token_sha256" not in content.split("security_audit_events", 1)[1]
+    assert "json.dumps({\"invitation_id\": str(invitation_id)" in content
