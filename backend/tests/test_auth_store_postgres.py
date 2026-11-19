@@ -48,6 +48,7 @@ async def _exercise_password_reset() -> None:
                  AND conname = ANY($1::text[])""",
             [
                 "outreach_deliveries_draft_id_fkey",
+                "outreach_deliveries_draft_workspace_fk",
                 "whatsapp_outbound_deliveries_account_id_fkey",
                 "whatsapp_outbound_deliveries_draft_id_fkey",
                 "whatsapp_outbound_deliveries_prospect_id_fkey",
@@ -56,6 +57,7 @@ async def _exercise_password_reset() -> None:
         )
         assert {row["conname"] for row in cascade_constraints} == {
             "outreach_deliveries_draft_id_fkey",
+            "outreach_deliveries_draft_workspace_fk",
             "whatsapp_outbound_deliveries_account_id_fkey",
             "whatsapp_outbound_deliveries_draft_id_fkey",
             "whatsapp_outbound_deliveries_prospect_id_fkey",
