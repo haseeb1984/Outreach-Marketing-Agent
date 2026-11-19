@@ -315,7 +315,7 @@ async def delete_account(request: Request) -> JSONResponse:
         async with pool.acquire() as conn:
             async with conn.transaction():
                 user = await conn.fetchrow(
-                    "SELECT id,status FROM app_users WHERE id=$1 FOR UPDATE",
+                    "SELECT id,status,email FROM app_users WHERE id=$1 FOR UPDATE",
                     user_id,
                 )
                 if user is None or user["status"] == "deleted":
