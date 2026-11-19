@@ -49,6 +49,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "057_core_outreach_tenant_integrity.sql",
     "058_draft_request_idempotency.sql",
     "059_workspace_display_name.sql",
+    "060_account_deletion_lifecycle.sql",
 )
 
 
