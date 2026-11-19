@@ -289,8 +289,9 @@ async def delete_account(request: Request) -> JSONResponse:
     """Deactivate and pseudonymize the authenticated account safely.
 
     Sole-member workspaces owned by the account are deleted with their workspace data.
-    Deletion is refused when another active member depends on a workspace owned by this
-    user; ownership must be transferred first. Shared workspace data is not silently erased.
+    Deletion is refused when any non-revoked member (active or suspended) depends on a
+    workspace owned by this user; ownership must be transferred first. Shared workspace
+    data is not silently erased. Invitations issued by or addressed to the account are revoked.
     """
     import secrets
     from app.services.auth_security import hash_password
@@ -320,14 +321,24 @@ async def delete_account(request: Request) -> JSONResponse:
                 if user is None or user["status"] == "deleted":
                     raise HTTPException(status_code=404, detail="account_not_found")
 
+                # Serialize deletion against workspace membership/ownership changes.
+                # Lock every workspace currently linked to this account in deterministic order.
+                await conn.fetch(
+                    """SELECT w.id FROM workspaces w
+                       JOIN workspace_memberships m ON m.workspace_id=w.id
+                       WHERE m.user_id=$1
+                       ORDER BY w.id FOR UPDATE OF w""",
+                    user_id,
+                )
+
                 blocked = await conn.fetchval(
                     """SELECT EXISTS(
                          SELECT 1 FROM workspace_memberships own
-                         WHERE own.user_id=$1 AND own.role='owner' AND own.status='active'
+                         WHERE own.user_id=$1 AND own.role='owner' AND own.status<>'revoked'
                            AND EXISTS(
                              SELECT 1 FROM workspace_memberships other
                              WHERE other.workspace_id=own.workspace_id
-                               AND other.user_id<>$1 AND other.status='active'
+                               AND other.user_id<>$1 AND other.status<>'revoked'
                            )
                        )""",
                     user_id,
@@ -344,17 +355,17 @@ async def delete_account(request: Request) -> JSONResponse:
                     """DELETE FROM workspaces w
                        USING workspace_memberships own
                        WHERE w.id=own.workspace_id AND own.user_id=$1
-                         AND own.role='owner' AND own.status='active'
+                         AND own.role='owner' AND own.status<>'revoked'
                          AND NOT EXISTS(
                            SELECT 1 FROM workspace_memberships other
                            WHERE other.workspace_id=w.id AND other.user_id<>$1
-                             AND other.status='active'
+                             AND other.status<>'revoked'
                          )""",
                     user_id,
                 )
                 await conn.execute(
                     """UPDATE workspace_memberships SET status='revoked',updated_at=now()
-                       WHERE user_id=$1 AND status='active'""",
+                       WHERE user_id=$1 AND status<>'revoked'""",
                     user_id,
                 )
                 await conn.execute(
@@ -374,13 +385,13 @@ async def delete_account(request: Request) -> JSONResponse:
                 )
                 await conn.execute(
                     """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
-                       WHERE invited_by=$1 AND status='pending'""",
-                    user_id,
+                       WHERE status='pending' AND (invited_by=$1 OR invited_email=$2)""",
+                    user_id, user["email"],
                 )
                 await conn.execute(
                     """UPDATE app_users
                        SET email=$2,password_hash=$3,status='deleted',
-                           email_verified_at=NULL,updated_at=now()
+                           email_verified_at=NULL,deleted_at=now(),updated_at=now()
                        WHERE id=$1""",
                     user_id, tombstone_email, tombstone_password,
                 )
