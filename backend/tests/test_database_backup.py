@@ -80,3 +80,72 @@ def test_verify_rejects_empty_checksum_sidecar(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="checksum_invalid"):
         database_backup.verify(backup)
+
+
+
+def test_prune_is_dry_run_by_default_and_preserves_minimum(tmp_path):
+    import os
+    import time
+
+    now = time.time()
+    backups = []
+    for index in range(4):
+        path = tmp_path / f"outreach-db-2026010{index + 1}T000000Z.dump"
+        path.write_bytes(b"archive")
+        path.with_suffix(".dump.sha256").write_text("checksum")
+        os.utime(path, (now - (10 - index) * 86400, now - (10 - index) * 86400))
+        backups.append(path)
+    unrelated = tmp_path / "customer-export.dump"
+    unrelated.write_bytes(b"keep")
+
+    candidates = database_backup.prune(tmp_path, older_than_days=5, keep_at_least=2)
+    assert len(candidates) == 2
+    assert all(path.exists() for path in backups)
+    assert unrelated.exists()
+
+
+def test_prune_apply_removes_only_expired_archives_and_sidecars(tmp_path):
+    import os
+    import time
+
+    now = time.time()
+    backups = []
+    for index in range(4):
+        path = tmp_path / f"outreach-db-2026010{index + 1}T000000Z.dump"
+        path.write_bytes(b"archive")
+        path.with_suffix(".dump.sha256").write_text("checksum")
+        os.utime(path, (now - (10 - index) * 86400, now - (10 - index) * 86400))
+        backups.append(path)
+    unrelated = tmp_path / "outreach-db-not-a-backup.txt"
+    unrelated.write_text("keep")
+
+    removed = database_backup.prune(tmp_path, older_than_days=5, keep_at_least=2, apply=True)
+    assert len(removed) == 2
+    assert not backups[0].exists() and not backups[1].exists()
+    assert not backups[0].with_suffix(".dump.sha256").exists()
+    assert backups[2].exists() and backups[3].exists()
+    assert unrelated.exists()
+
+
+@pytest.mark.parametrize("days,keep", [(0, 2), (30, 0), (-1, 1)])
+def test_prune_rejects_unsafe_retention_values(tmp_path, days, keep):
+    with pytest.raises(ValueError):
+        database_backup.prune(tmp_path, older_than_days=days, keep_at_least=keep, apply=True)
+
+
+def test_prune_ignores_symlinked_backup_files(tmp_path):
+    import os
+    import time
+
+    source = tmp_path / "outside.dump"
+    source.write_bytes(b"do not delete")
+    link = tmp_path / "outreach-db-20260101T000000Z.dump"
+    try:
+        link.symlink_to(source)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available")
+    old = time.time() - 10 * 86400
+    os.utime(link, (old, old), follow_symlinks=False)
+    database_backup.prune(tmp_path, older_than_days=5, keep_at_least=1, apply=True)
+    assert source.exists()
+    assert link.is_symlink()
