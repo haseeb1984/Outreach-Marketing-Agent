@@ -2886,7 +2886,7 @@ export default function DashboardPage() {
           <h2 id="account-danger-title">Account privacy and deletion</h2>
           <article className="card">
             <h3>Export or delete your account</h3>
-            <p>Your account export is available from the footer. Deletion revokes sessions and pending invitations, consumes outstanding verification/reset tokens, and pseudonymizes your login identity. Sole-member workspaces are removed; shared workspaces are retained for other non-revoked members. Security, billing, provider and backup records may be retained where required.</p>
+            <p>Your account export is available from the footer. Deletion revokes sessions and pending invitations, consumes outstanding verification/reset tokens, and pseudonymizes your login identity. Sole-member workspaces are removed; shared workspaces are retained for other non-revoked members. Security audit history remains with a pseudonymized identity; local billing rows for a deleted sole-member workspace are removed with that workspace. External provider records and backups follow separate retention controls.</p>
             <button className="button secondary" type="button" disabled={busy || !csrf} onClick={deleteAccount}>Delete my account</button>
             <p className="fine">This action is irreversible and requires two explicit confirmations. It does not claim to erase records retained by external providers or legally required operational records.</p>
           </article>
