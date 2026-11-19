@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import asyncpg
 import pytest
-from fastapi.testclient import TestClient
+import httpx
 
 from app.api import account_routes
 from app.db.migrations import apply_migrations
@@ -84,9 +84,10 @@ async def _exercise_account_export(monkeypatch) -> None:
                 ("a" * 64),
             )
 
-        with TestClient(app) as client:
-            app.state.db_pool = pool
-            response = client.get("/api/v1/account/export")
+        app.state.db_pool = pool
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.get("/api/v1/account/export")
 
         assert response.status_code == 200, response.text
         assert response.headers["content-disposition"].startswith("attachment;")
