@@ -42,6 +42,7 @@ def _release_root(root: Path) -> None:
     (root / "docs").mkdir()
     (root / "docs/GROWTH_WORKER_HOST_RUNBOOK.md").write_text("# test")
     (root / "docs/PRODUCTION_OPERATIONS_AND_LAUNCH.md").write_text("# test")
+    (root / "docs/ACCOUNT_DATA_RETENTION.md").write_text("# test")
 
 
 def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: Path):
