@@ -47,6 +47,24 @@ async def _exercise_deleted_at_constraint() -> None:
             user_id,
         )
         assert deleted_at is not None
+
+        workspace_id = "deleted-account-trigger-" + user_id.hex
+        await connection.execute("INSERT INTO workspaces (id) VALUES ($1)", workspace_id)
+        with pytest.raises(asyncpg.CheckViolationError):
+            await connection.execute(
+                """INSERT INTO workspace_memberships
+                   (workspace_id,user_id,role,status)
+                   VALUES ($1,$2,'member','active')""",
+                workspace_id, user_id,
+            )
+        with pytest.raises(asyncpg.CheckViolationError):
+            await connection.execute(
+                """INSERT INTO workspace_invitations
+                   (workspace_id,invited_email,role,token_sha256,invited_by,expires_at)
+                   VALUES ($1,'invitee@example.test','member',$2,$3,now()+interval '1 day')""",
+                workspace_id, "a" * 64, user_id,
+            )
     finally:
+        await connection.execute("DELETE FROM workspaces WHERE id=$1", "deleted-account-trigger-" + user_id.hex)
         await connection.execute("DELETE FROM app_users WHERE id=$1", user_id)
         await connection.close()
