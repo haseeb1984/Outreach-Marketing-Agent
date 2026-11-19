@@ -277,6 +277,11 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     add("growth_worker_runbook", worker_runbook.is_file(), "growth worker host runbook exists" if worker_runbook.is_file()
         else "docs/GROWTH_WORKER_HOST_RUNBOOK.md is missing")
 
+    account_retention_policy = root / "docs" / "ACCOUNT_DATA_RETENTION.md"
+    add("account_data_retention_policy", account_retention_policy.is_file(),
+        "account deletion and retention policy exists" if account_retention_policy.is_file()
+        else "docs/ACCOUNT_DATA_RETENTION.md is missing")
+
     production_runbook = root / "docs" / "PRODUCTION_OPERATIONS_AND_LAUNCH.md"
     add("production_operations_runbook", production_runbook.is_file(),
         "production release, recovery, monitoring and incident runbook exists" if production_runbook.is_file()
