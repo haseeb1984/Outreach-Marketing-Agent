@@ -128,7 +128,7 @@ async def _exercise_password_reset() -> None:
                 workspace_id, user_id,
             )
         assert last_login is not None
-        assert login_events == 1
+        assert login_events == 3  # one audit event for each of the three created sessions
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
         token = reset["reset_token"]
