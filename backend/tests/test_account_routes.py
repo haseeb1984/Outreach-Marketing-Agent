@@ -15,6 +15,7 @@ class FakeConnection:
         self.blocked = blocked
         self.executed: list[tuple[str, tuple]] = []
         self.fetch_queries: list[tuple[str, tuple]] = []
+        self.fetchval_queries: list[str] = []
 
     @asynccontextmanager
     async def transaction(self, **kwargs):
@@ -30,6 +31,7 @@ class FakeConnection:
         return []
 
     async def fetchval(self, query, *args):
+        self.fetchval_queries.append(query)
         assert "transfer_workspace_ownership" not in query
         return self.blocked
 
@@ -77,7 +79,7 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     assert "Cache-Control" in response.headers
 
 
-def test_delete_account_refuses_to_orphan_shared_workspace_owner(monkeypatch):
+def test_delete_account_refuses_to_orphan_workspace_with_any_non_revoked_member(monkeypatch):
     conn = FakeConnection(blocked=True)
     monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
@@ -87,6 +89,9 @@ def test_delete_account_refuses_to_orphan_shared_workspace_owner(monkeypatch):
     assert response.status_code == 409
     assert response.json()["detail"] == "transfer_workspace_ownership_before_account_deletion"
     assert conn.executed == []
+    ownership_guard = conn.fetchval_queries[0]
+    assert "own.status<>'revoked'" in ownership_guard
+    assert "other.status<>'revoked'" in ownership_guard
 
 
 def test_delete_account_requires_csrf_before_database_access(monkeypatch):
