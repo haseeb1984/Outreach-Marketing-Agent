@@ -45,6 +45,6 @@ The schedule must identify the purpose, system of record, retention period, dele
 
 ## Release and verification notes
 
-Migration `060_account_deletion_lifecycle.sql` adds `app_users.deleted_at`, backfills already deleted accounts from their last update timestamp, enforces status/timestamp consistency and indexes deleted accounts for future retention operations.
+Migration `060_account_deletion_lifecycle.sql` adds `app_users.deleted_at`, backfills already deleted accounts from their last update timestamp, enforces status/timestamp consistency and indexes deleted accounts for future retention operations. Migration `061_workspace_delivery_cascade_consistency.sql` corrects the composite delivery-to-draft foreign key so it no longer blocks the workspace-level cascade already provided by the original single-column foreign key.
 
-This migration is included in the release preflight. It must be applied through the approved migration process before deploying code that writes `deleted_at`. Production migration, backup expiry, provider deletion and legal retention review are separate operational approvals; none is implied by CI success.
+Both migrations are included in the release preflight. It must be applied through the approved migration process before deploying code that writes `deleted_at`. Production migration, backup expiry, provider deletion and legal retention review are separate operational approvals; none is implied by CI success.
