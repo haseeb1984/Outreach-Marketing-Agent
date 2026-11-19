@@ -314,22 +314,37 @@ async def delete_account(request: Request) -> JSONResponse:
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # Read identity without locking first, then take workspace locks before
+                # the account lock. Membership/invitation writers use the same workspace ->
+                # account order, avoiding a deletion-vs-invitation deadlock.
+                initial_user = await conn.fetchrow(
+                    "SELECT id,status,email FROM app_users WHERE id=$1",
+                    user_id,
+                )
+                if initial_user is None or initial_user["status"] == "deleted":
+                    raise HTTPException(status_code=404, detail="account_not_found")
+
+                await conn.fetch(
+                    """SELECT w.id FROM workspaces w
+                       WHERE EXISTS (
+                           SELECT 1 FROM workspace_memberships m
+                           WHERE m.workspace_id=w.id AND m.user_id=$1
+                       ) OR EXISTS (
+                           SELECT 1 FROM workspace_invitations i
+                           WHERE i.workspace_id=w.id AND i.status='pending'
+                             AND (i.invited_by=$1 OR i.invited_email=$2)
+                       )
+                       ORDER BY w.id FOR UPDATE OF w""",
+                    user_id, initial_user["email"],
+                )
                 user = await conn.fetchrow(
                     "SELECT id,status,email FROM app_users WHERE id=$1 FOR UPDATE",
                     user_id,
                 )
                 if user is None or user["status"] == "deleted":
                     raise HTTPException(status_code=404, detail="account_not_found")
-
-                # Serialize deletion against workspace membership/ownership changes.
-                # Lock every workspace currently linked to this account in deterministic order.
-                await conn.fetch(
-                    """SELECT w.id FROM workspaces w
-                       JOIN workspace_memberships m ON m.workspace_id=w.id
-                       WHERE m.user_id=$1
-                       ORDER BY w.id FOR UPDATE OF w""",
-                    user_id,
-                )
+                if user["email"] != initial_user["email"]:
+                    raise HTTPException(status_code=409, detail="account_changed_retry_deletion")
 
                 blocked = await conn.fetchval(
                     """SELECT EXISTS(
