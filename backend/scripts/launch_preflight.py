@@ -50,6 +50,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "058_draft_request_idempotency.sql",
     "059_workspace_display_name.sql",
     "060_account_deletion_lifecycle.sql",
+    "061_workspace_delivery_cascade_consistency.sql",
 )
 
 
