@@ -27,8 +27,9 @@ The operation does not silently delete a shared workspace or its shared business
 | Sole-member owned workspace | Workspace and tenant-owned dependent records deleted through database cascades |
 | Shared workspace | Retained for other non-revoked members; ownership transfer required if the deleting account is owner |
 | Security audit history | Retained for security/accountability; identity reference remains pseudonymized |
-| Billing and provider records | Not represented as fully erased by account deletion; retained as required for reconciliation, disputes, contracts or provider obligations |
-| Backups and external providers | Outside the immediate transaction; governed by backup expiry and each provider's retention/deletion controls |
+| Local billing and provider-event ledgers | Workspace-scoped transaction and event rows cascade with a deleted sole-member workspace. If local financial evidence must be retained, a separately governed archive is required before enabling deletion in that jurisdiction |
+| Connected-provider data | Data held by Paddle, Meta, email, AI/search and other external providers is outside the immediate database transaction and follows each provider's retention/deletion controls |
+| Backups | Outside the immediate transaction; governed by approved backup expiry and disaster-recovery retention |
 
 ## Retention policy still requiring operator/legal approval
 
@@ -45,6 +46,6 @@ The schedule must identify the purpose, system of record, retention period, dele
 
 ## Release and verification notes
 
-Migration `060_account_deletion_lifecycle.sql` adds `app_users.deleted_at`, backfills already deleted accounts from their last update timestamp, enforces status/timestamp consistency, indexes deleted accounts for future retention operations and adds database triggers that reject new non-revoked memberships or pending invitations for deleted accounts. The deletion route locks affected workspaces before the account row and includes pending-invitation workspaces in that lock set, matching the membership/invitation write order. Migration `061_workspace_delivery_cascade_consistency.sql` corrects the composite delivery-to-draft foreign key so it no longer blocks the workspace-level cascade already provided by the original single-column foreign key.
+Migration `060_account_deletion_lifecycle.sql` adds `app_users.deleted_at`, backfills already deleted accounts from their last update timestamp, enforces status/timestamp consistency, indexes deleted accounts for future retention operations and adds database triggers that reject new non-revoked memberships or pending invitations for deleted accounts. The deletion route locks affected workspaces before the account row and includes pending-invitation workspaces in that lock set, matching the membership/invitation write order. Migration `061_workspace_delivery_cascade_consistency.sql` corrects the composite delivery-to-draft foreign key and both prospect-to-draft foreign keys so they no longer block workspace-level cascade cleanup. Migration `062_followup_resolution_tenant_cleanup.sql` attaches immutable follow-up resolution records to their workspace and parent rows with cascade behavior; direct application updates/deletes remain blocked, while referential-action deletes during tenant cleanup are allowed.
 
-Both migrations are included in the release preflight. It must be applied through the approved migration process before deploying code that writes `deleted_at`. Production migration, backup expiry, provider deletion and legal retention review are separate operational approvals; none is implied by CI success.
+All three migrations are included in the release preflight. It must be applied through the approved migration process before deploying code that writes `deleted_at`. Production migration, backup expiry, provider deletion and legal retention review are separate operational approvals; none is implied by CI success.
