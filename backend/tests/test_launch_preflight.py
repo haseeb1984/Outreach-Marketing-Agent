@@ -66,6 +66,7 @@ def test_preflight_requires_latest_tenant_whatsapp_and_billing_migrations():
         "057_core_outreach_tenant_integrity.sql",
         "058_draft_request_idempotency.sql",
         "059_workspace_display_name.sql",
+        "060_account_deletion_lifecycle.sql",
     }.issubset(set(REQUIRED_RELEASE_MIGRATIONS))
 
 
