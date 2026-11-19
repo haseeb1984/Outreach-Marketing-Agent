@@ -21,6 +21,12 @@ Scope: launch and production-operational acceptance for Outreach Marketing Agent
 | LG-12 | Frontend reproducibility and browser acceptance | Frontend CI type-check/build/HTTP smoke tests pass. A Playwright Chromium suite now covers 10 public routes, browser runtime errors and mobile homepage horizontal overflow; CI installs Chromium and runs it after the production build. A committed npm lockfile is still absent, so dependency resolution is not yet reproducible and this gap remains open. | Engineering / CI |
 | LG-13 | Jurisdictional retention and financial evidence | Retention periods and legal-hold rules are not approved; sole-member workspace deletion cascades local billing evidence. Decide and implement any required governed financial archive and provider-side deletion/retention schedule before enabling deletion in affected jurisdictions. | Operator/legal decision and implementation |
 
+| LG-14 | SMTP inbox delivery and provider feedback acceptance | Workspace SMTP account lifecycle, test-send and delivery queue exist in code, but no controlled staging outreach delivery, inbox placement, bounce/complaint/unsubscribe webhook or reply-ingestion acceptance is evidenced. Validate with an operator-owned test mailbox and provider relay; do not use a real prospect list. | Provider configuration / staging acceptance |
+| LG-15 | Authenticated browser and tenant-isolation acceptance | Current Playwright coverage is public-route only. Complete browser journeys for signup, email verification, login/recovery, workspace selection, CSRF-protected actions, role enforcement, platform-owner access and cross-workspace denial using disposable test tenants. | Engineering / staging acceptance |
+| LG-16 | Account export end-to-end verification | Export code and bounded collection tests exist, but a production-like PostgreSQL export and downloaded artifact review have not demonstrated schema compatibility, tenant scoping, truncation disclosure and exclusion of secrets/payment data across current migrations. | Database / privacy acceptance |
+| LG-17 | Discovery and campaign measurement completeness | The project scorecard still records deeper competitor intelligence, dedicated influencer discovery/scoring and verified campaign/revenue attribution as incomplete. Confirm the accepted product scope, implement any required workflows, and do not display unverified attribution/ROI. | Product scope / engineering |
+| LG-18 | Security, accessibility, performance and incident exercises | No current evidence of an independent penetration/security assessment, load/performance acceptance, accessibility/screen-reader review or incident-response exercise. Run scoped assessments, fix release-blocking findings and record measured results before launch. | Security / QA / operations |
+
 ## Recently implemented and CI-verified (not counted as open)
 
 - Account deletion lifecycle, deleted-account membership/invitation guards, and tenant cleanup cascades in migrations 060–062.
@@ -35,7 +41,7 @@ The prune operation does not create a backup, encrypt or replicate it, schedule 
 
 ## Counting rule
 
-At this review, **13 distinct open launch workstreams are documented (LG-01 through LG-13)**. Some contain multiple acceptance tasks and may split into smaller tracked items after detailed implementation planning. This is the current known count, not a guarantee that a complete code/security/product audit will discover no additional gaps. A gap is closed only when its stated acceptance evidence exists; code merged or CI passing alone does not close production-operations gaps.
+At this review, **18 distinct open launch workstreams are documented (LG-01 through LG-18)**. Some contain multiple acceptance tasks and may split into smaller tracked items after detailed implementation planning. This is the current known count, not a guarantee that a complete code/security/product audit will discover no additional gaps. A gap is closed only when its stated acceptance evidence exists; code merged or CI passing alone does not close production-operations gaps.
 
 
 ## Frontend browser acceptance progress (2026-11-19)
@@ -45,3 +51,20 @@ At this review, **13 distinct open launch workstreams are documented (LG-01 thro
 - Frontend CI installs Chromium and runs the browser suite against the built production server after the existing HTTP smoke suite.
 - A committed `frontend/package-lock.json` is still not present. Local registry DNS is unavailable, and no lockfile was fabricated. LG-12 remains open until a genuine lockfile is generated and CI/Hostinger installation is switched to `npm ci`.
 - No production deployment was performed.
+
+
+## Original production-audit reconciliation (2026-11-19)
+
+The 2026-10-23 production smoke audit was reconciled against the current source/CI evidence and the 2026-11-01 project progress scorecard. Findings are tracked as follows:
+
+- Production schema/migration acceptance -> LG-01; Hostinger release -> LG-02; platform-owner allowlist -> LG-03.
+- Crawler egress -> LG-04; AI/search provider readiness -> LG-05; Meta/WhatsApp acceptance -> LG-06; Paddle lifecycle -> LG-07; persisted entitlement data -> LG-08.
+- Persistent workers and delivery scheduler -> LG-09/LG-10; backup/restore -> LG-11.
+- Frontend lockfile and browser acceptance -> LG-12; retention/legal/financial archive -> LG-13.
+- SMTP delivery/inbox and provider-feedback acceptance -> LG-14.
+- Authenticated signup/recovery, browser journey, roles and cross-tenant denial -> LG-15.
+- Privacy export schema/tenant/output acceptance -> LG-16.
+- Incomplete discovery (competitor intelligence, influencer scoring) and verified attribution -> LG-17.
+- Security assessment, load/performance, accessibility and incident exercise -> LG-18.
+
+The old audit's basic Vercel HTTP smoke checks and earlier backend CI are historical evidence only; they do not certify the current Hostinger frontend, current production schema or provider operations. The public-route Playwright suite added in LG-12 does not satisfy LG-15's authenticated browser journeys. This reconciliation is based on repository documents and CI evidence; it is not a fresh penetration test, production database inspection or external provider test.
