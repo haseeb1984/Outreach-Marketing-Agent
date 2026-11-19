@@ -14,15 +14,20 @@ class FakeConnection:
     def __init__(self, *, blocked: bool = False):
         self.blocked = blocked
         self.executed: list[tuple[str, tuple]] = []
+        self.fetch_queries: list[tuple[str, tuple]] = []
 
     @asynccontextmanager
     async def transaction(self, **kwargs):
         yield
 
     async def fetchrow(self, query, *args):
-        if "SELECT id,status FROM app_users" in query:
-            return {"id": args[0], "status": "active"}
+        if "SELECT id,status,email FROM app_users" in query:
+            return {"id": args[0], "status": "active", "email": "user@example.test"}
         raise AssertionError("unexpected fetchrow query")
+
+    async def fetch(self, query, *args):
+        self.fetch_queries.append((query, args))
+        return []
 
     async def fetchval(self, query, *args):
         assert "transfer_workspace_ownership" not in query
@@ -57,7 +62,11 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     assert response.json()["status"] == "deleted"
     assert "deleted+00000000000000000000000000000001@accounts.invalid" in str(conn.executed)
     assert any("UPDATE auth_sessions SET revoked_at=now()" in sql for sql, _ in conn.executed)
-    assert any("UPDATE workspace_memberships SET status='revoked'" in sql for sql, _ in conn.executed)
+    assert any("UPDATE workspace_memberships SET status='revoked'" in sql and "status<>'revoked'" in sql for sql, _ in conn.executed)
+    assert any("deleted_at=now()" in sql for sql, _ in conn.executed)
+    invitation_update = next(sql for sql, _ in conn.executed if "UPDATE workspace_invitations" in sql)
+    assert "invited_by=$1 OR invited_email=$2" in invitation_update
+    assert any("ORDER BY w.id FOR UPDATE OF w" in sql for sql, _ in conn.fetch_queries)
     assert any("UPDATE app_users" in sql and "status='deleted'" in sql for sql, _ in conn.executed)
     password_update = next(args for sql, args in conn.executed if "UPDATE app_users" in sql)
     assert password_update[2].startswith("scrypt$")
