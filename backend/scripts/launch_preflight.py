@@ -51,6 +51,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "059_workspace_display_name.sql",
     "060_account_deletion_lifecycle.sql",
     "061_workspace_delivery_cascade_consistency.sql",
+    "062_followup_resolution_tenant_cleanup.sql",
 )
 
 
