@@ -2359,7 +2359,7 @@ export default function DashboardPage() {
   async function deleteAccount() {
     if (!csrf || busy) return;
     const requestedWorkspaceId = workspaceId;
-    if (!window.confirm("Permanently delete this account? Your sign-in will stop and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
+    if (!window.confirm("Delete this account? Sign-in will stop, sessions and pending invitations will be revoked, and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
     const confirmation = window.prompt("Type DELETE MY ACCOUNT to confirm this irreversible action.");
     if (confirmation !== "DELETE MY ACCOUNT") {
       if (requestedWorkspaceId !== workspaceId) return;
@@ -2885,8 +2885,8 @@ export default function DashboardPage() {
         <section className="section" aria-labelledby="account-danger-title">
           <h2 id="account-danger-title">Account privacy and deletion</h2>
           <article className="card">
-            <h3>Export or permanently delete your account</h3>
-            <p>Your account export is available from the footer. Account deletion revokes sessions, pseudonymizes your login identity, and removes sole-member workspaces. If another active member depends on a workspace you own, transfer ownership before retrying.</p>
+            <h3>Export or delete your account</h3>
+            <p>Your account export is available from the footer. Deletion revokes sessions and pending invitations, consumes outstanding verification/reset tokens, and pseudonymizes your login identity. Sole-member workspaces are removed; shared workspaces are retained for other non-revoked members. Security, billing, provider and backup records may be retained where required.</p>
             <button className="button secondary" type="button" disabled={busy || !csrf} onClick={deleteAccount}>Delete my account</button>
             <p className="fine">This action is irreversible and requires two explicit confirmations. It does not claim to erase records retained by external providers or legally required operational records.</p>
           </article>
