@@ -422,3 +422,90 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
     assert body["persisted_to_crm"] is False
     assert len(finished) == 1
     assert finished[0]["outcome"] == "consumed"
+
+
+def test_influencer_profile_normalization_rejects_nested_content_paths():
+    from app.api.research_routes import _public_influencer_profile
+
+    assert _public_influencer_profile("https://www.linkedin.com/in/creator/posts/123") is None
+    assert _public_influencer_profile("https://www.youtube.com/channel/UC123/videos") is None
+    assert _public_influencer_profile("https://www.youtube.com/c/creator/community") is None
+    assert _public_influencer_profile("https://www.linkedin.com/in/creator-profile") == (
+        "https://linkedin.com/in/creator-profile", "linkedin"
+    )
+    assert _public_influencer_profile("https://www.youtube.com/channel/UC123") == (
+        "https://youtube.com/channel/UC123", "youtube"
+    )
+
+
+def test_influencer_search_quota_denial_does_not_call_provider(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class DeniedSubscriptions:
+        async def reserve_usage(self, **kwargs):
+            return {"allowed": False, "reason": "quota_exhausted"}
+
+    class NeverHttpClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("provider must not be called when quota is denied")
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(research_routes, "settings", type("Settings", (), {"brave_search_api_key": "test-search-key"})())
+    monkeypatch.setattr(research_routes.httpx, "AsyncClient", NeverHttpClient)
+
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.subscription_store = DeniedSubscriptions()
+        response = client.post("/api/v1/research/influencers/search", json={
+            "workspace_id": "workspace-a",
+            "query": "Karachi food creators",
+            "platforms": ["instagram"],
+            "idempotency_key": "quota-key-123",
+        })
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "quota_exhausted"
+
+
+def test_influencer_search_fails_closed_when_search_provider_is_not_configured(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class NeverSubscriptions:
+        async def reserve_usage(self, **kwargs):
+            raise AssertionError("quota must not be reserved without a configured provider")
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(research_routes, "settings", type("Settings", (), {"brave_search_api_key": " "})())
+
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.subscription_store = NeverSubscriptions()
+        response = client.post("/api/v1/research/influencers/search", json={
+            "workspace_id": "workspace-a",
+            "query": "Karachi food creators",
+            "platforms": ["instagram"],
+            "idempotency_key": "no-provider-123",
+        })
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "search_provider_not_configured"

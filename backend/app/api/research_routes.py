@@ -325,9 +325,9 @@ def _public_influencer_profile(value: object) -> tuple[str, str] | None:
         return None
     if platform == "linkedin" and first != "in":
         return None
-    if platform == "linkedin" and len(segments) < 2:
+    if platform == "linkedin" and (first != "in" or len(segments) != 2):
         return None
-    if platform == "youtube" and first in {"channel", "c", "user"} and len(segments) < 2:
+    if platform == "youtube" and first in {"channel", "c", "user"} and len(segments) != 2:
         return None
     if platform in {"instagram", "x"} and len(segments) != 1:
         return None
