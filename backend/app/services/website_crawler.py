@@ -49,6 +49,7 @@ async def crawl_website(
 
     start = _normalize_crawl_url(start_url)
     allowed_host = _host(start)
+    allowed_scheme = urlsplit(start).scheme.lower()
     queue = deque([(start, 0)])
     queued = {start}
     for seed_url in seed_urls or []:
@@ -56,7 +57,7 @@ async def crawl_website(
             seed = _normalize_crawl_url(seed_url)
         except ValueError:
             continue
-        if _host(seed) == allowed_host and seed not in queued:
+        if _host(seed) == allowed_host and urlsplit(seed).scheme.lower() == allowed_scheme and seed not in queued:
             queued.add(seed)
             queue.append((seed, 0))
             if len(queued) >= max_pages:
@@ -147,7 +148,14 @@ async def crawl_website(
                 candidate = _normalize_crawl_url(link["url"])
             except ValueError:
                 continue
-            if _host(candidate) != allowed_host or candidate in queued or candidate in visited:
+            # Do not downgrade an HTTPS audit to plaintext HTTP through an
+            # internal link. Keep the crawl on the starting origin's scheme.
+            if (
+                _host(candidate) != allowed_host
+                or urlsplit(candidate).scheme.lower() != allowed_scheme
+                or candidate in queued
+                or candidate in visited
+            ):
                 continue
             queued.add(candidate)
             queue.append((candidate, depth + 1))
