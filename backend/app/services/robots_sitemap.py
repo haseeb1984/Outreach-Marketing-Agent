@@ -107,8 +107,6 @@ def evaluate_robots_path(*, body: str, path: str, user_agent: str = "*") -> dict
     '*' wildcards, and '$' end anchors. If no rule matches, access is allowed.
     Callers must decide fail-closed behavior when robots.txt cannot be retrieved.
     """
-    import re
-
     if not isinstance(body, str):
         raise ValueError("robots.txt body must be text")
     if not isinstance(path, str) or not path.startswith("/"):
@@ -165,20 +163,41 @@ def evaluate_robots_path(*, body: str, path: str, user_agent: str = "*") -> dict
         rules_to_check.extend(rules)
 
     candidate_path = path
+
+    def pattern_matches(candidate: str, raw_pattern: str) -> bool:
+        # Match robots '*' and '$' without compiling attacker-controlled regular
+        # expressions. The greedy wildcard matcher avoids regex backtracking.
+        anchored = raw_pattern.endswith("$")
+        pattern = raw_pattern[:-1] if anchored else raw_pattern
+        path_index = pattern_index = 0
+        last_star = -1
+        retry_path_index = 0
+        while path_index < len(candidate):
+            if pattern_index < len(pattern) and (
+                pattern[pattern_index] == "*" or pattern[pattern_index] == candidate[path_index]
+            ):
+                if pattern[pattern_index] == "*":
+                    last_star = pattern_index
+                    pattern_index += 1
+                    retry_path_index = path_index
+                else:
+                    path_index += 1
+                    pattern_index += 1
+            elif last_star != -1:
+                pattern_index = last_star + 1
+                retry_path_index += 1
+                path_index = retry_path_index
+            else:
+                return False
+            if pattern_index == len(pattern) and not anchored:
+                return True
+        while pattern_index < len(pattern) and pattern[pattern_index] == "*":
+            pattern_index += 1
+        return pattern_index == len(pattern) and (not anchored or path_index == len(candidate))
+
     matching_rules: list[tuple[int, int, str, str]] = []
     for directive, pattern in rules_to_check:
-        # Robots path matching is case-sensitive; '*' matches any sequence and '$'
-        # anchors the end. Other regex metacharacters are treated literally.
-        expression = re.escape(pattern).replace(r"\*", ".*")
-        if expression.endswith(r"\$"):
-            expression = expression[:-2] + "$"
-        else:
-            expression = expression + ".*"
-        try:
-            matched = re.match(expression, candidate_path) is not None
-        except re.error:
-            matched = False
-        if matched:
+        if pattern_matches(candidate_path, pattern):
             specificity_length = len(pattern.replace("*", "").replace("$", ""))
             # Allow wins equal-length ties.
             allow_tiebreak = 1 if directive == "allow" else 0
