@@ -125,6 +125,9 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 
 - GitHub repository visibility is now private (verified from the repository API).
 - On the last fully verified code head `9ef2d113298250c0a27a3b3a67bf2d29533272ba`, Backend CI and Hostinger Frontend CI both passed, including the three-version Python matrix, frontend type-check/build/smoke checks and Playwright browser acceptance.
-- Subsequent CI attempts on `5ac1858` and `b91cf95` failed before any job steps were available. The job payloads returned `steps: null`; no test command ran, so the cause cannot be attributed to code. Investigate GitHub Actions runner availability and private-repository included-minute/billing limits before treating a later run as a code regression.
+- Subsequent CI attempts on `5ac1858`, `b91cf95`, `a25d8fb` and `7cb15ff` failed before any job steps were available. The job payloads returned `steps: null`; no test command ran, so the cause cannot be attributed to code. The latest Backend CI run is `44950129541` and Frontend CI run is `44950129521`. Owner-side GitHub Actions billing/runner access must be restored before the tests can execute.
 - Latest Vercel production deployment remains on `main` commit `58fd1622e6ec2c5d9911174d9ac56c33a15ec7ed`; the launch-readiness PR branch is not deployed to production. No production deployment or database migration was performed.
 - Vercel runtime error aggregation returned no runtime error clusters for the inspected 24-hour window. This is not a full end-to-end production acceptance test.
+
+
+- Added [Owner Activation Checklist](OWNER_ACTIVATION_CHECKLIST.md) with the exact non-secret owner inputs, missing Vercel environment keys, Paddle sandbox/live gates, migration approvals, and GitHub Actions recovery steps. It explicitly prohibits sharing secrets in chat and separates customer-owned SMTP from platform configuration.
