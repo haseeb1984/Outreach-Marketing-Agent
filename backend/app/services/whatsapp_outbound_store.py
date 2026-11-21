@@ -287,7 +287,7 @@ class WhatsAppOutboundStore:
                            lease_token=NULL, lease_expires_at=NULL, updated_at=now()
                        FROM expired e
                        WHERE q.id=e.id
-                       RETURNING q.workspace_id,q.usage_reservation_id
+                       RETURNING q.workspace_id,q.usage_reservation_id,q.draft_id
                    ), settled AS (
                        UPDATE feature_usage_reservations r
                        SET status='consumed',updated_at=now()
@@ -296,6 +296,16 @@ class WhatsAppOutboundStore:
                          AND r.workspace_id=q.workspace_id
                          AND r.status='reserved'
                        RETURNING r.id
+                   ), paused_followups AS (
+                       UPDATE outreach_followup_enrollments e
+                       SET status='paused',pause_reason='delivery_uncertain',
+                           paused_next_run_at=e.next_run_at,next_run_at=NULL,
+                           last_error_code='whatsapp_delivery_lease_expired',updated_at=now()
+                       FROM recovered q
+                       WHERE e.workspace_id=q.workspace_id
+                         AND e.current_draft_id=q.draft_id
+                         AND e.status='awaiting_approval'
+                       RETURNING e.id
                    )
                    SELECT count(*) FROM recovered""",
                 limit,
