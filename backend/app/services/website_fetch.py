@@ -140,79 +140,79 @@ async def fetch_html(
     try:
         try:
             async with asyncio.timeout(limits.timeout_seconds):
-            for redirect_count in range(limits.max_redirects + 1):
-                current_url = validate_page_url(current_url)
-                parsed = urlsplit(current_url)
-                scheme = parsed.scheme.lower()
-                if allowed_schemes is not None and scheme not in {item.lower() for item in allowed_schemes}:
-                    raise ValueError("Request scheme is outside the allowed scheme scope")
-                host = (parsed.hostname or "").lower().rstrip(".")
-                if allowed_hosts is not None and host not in {item.lower().rstrip(".") for item in allowed_hosts}:
-                    raise ValueError("Request host is outside the allowed host scope")
-                port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
-                addresses = await resolver(host, port)
-                if not addresses:
-                    raise ValueError("Hostname returned no IP addresses")
-                for raw_address in addresses:
-                    try:
-                        resolved_ip = ipaddress.ip_address(raw_address.split("%", 1)[0])
-                    except ValueError as exc:
-                        raise ValueError("DNS returned an invalid IP address") from exc
-                    if not resolved_ip.is_global:
-                        raise ValueError("Hostname resolves to a non-public IP address")
-                async with active_client.stream("GET", current_url, follow_redirects=False) as response:
-                    if response.status_code in {301, 302, 303, 307, 308}:
-                        location = response.headers.get("location")
-                        if not location:
-                            raise ValueError("Redirect response has no Location header")
-                        if redirect_count >= limits.max_redirects:
-                            raise ValueError("Maximum redirect count exceeded")
-                        current_url = urljoin(current_url, location)
-                        # Validate destination and scope before any request to it.
-                        validate_page_url(current_url)
-                        destination = urlsplit(current_url)
-                        if allowed_schemes is not None and destination.scheme.lower() not in {item.lower() for item in allowed_schemes}:
-                            raise ValueError("Redirect destination is outside the allowed scheme scope")
-                        destination_host = (destination.hostname or "").lower().rstrip(".")
-                        if allowed_hosts is not None and destination_host not in {item.lower().rstrip(".") for item in allowed_hosts}:
-                            raise ValueError("Redirect destination is outside the allowed host scope")
-                        continue
-                    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-                    permitted_types = accepted_content_types or {"text/html", "application/xhtml+xml"}
-                    if 200 <= response.status_code < 300 and content_type not in permitted_types:
-                        if accepted_content_types is None:
-                            raise ValueError("Target response is not HTML")
-                        raise ValueError("Target response content type is not permitted")
-                    content_length = response.headers.get("content-length")
-                    if content_length:
+                for redirect_count in range(limits.max_redirects + 1):
+                    current_url = validate_page_url(current_url)
+                    parsed = urlsplit(current_url)
+                    scheme = parsed.scheme.lower()
+                    if allowed_schemes is not None and scheme not in {item.lower() for item in allowed_schemes}:
+                        raise ValueError("Request scheme is outside the allowed scheme scope")
+                    host = (parsed.hostname or "").lower().rstrip(".")
+                    if allowed_hosts is not None and host not in {item.lower().rstrip(".") for item in allowed_hosts}:
+                        raise ValueError("Request host is outside the allowed host scope")
+                    port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+                    addresses = await resolver(host, port)
+                    if not addresses:
+                        raise ValueError("Hostname returned no IP addresses")
+                    for raw_address in addresses:
                         try:
-                            if int(content_length) > limits.max_bytes:
-                                raise ValueError("Response exceeds the configured byte limit")
+                            resolved_ip = ipaddress.ip_address(raw_address.split("%", 1)[0])
                         except ValueError as exc:
-                            if str(exc) == "Response exceeds the configured byte limit":
-                                raise
-                            raise ValueError("Invalid Content-Length header") from exc
-                    chunks: list[bytes] = []
-                    total = 0
-                    async for chunk in response.aiter_bytes():
-                        total += len(chunk)
-                        if total > limits.max_bytes:
-                            raise ValueError("Response exceeds the configured byte limit")
-                        chunks.append(chunk)
-                    encoding = response.encoding or "utf-8"
-                    try:
-                        body = b"".join(chunks).decode(encoding, errors="replace")
-                    except LookupError:
-                        body = b"".join(chunks).decode("utf-8", errors="replace")
-                    return FetchedPage(
-                        requested_url=requested_url,
-                        final_url=str(response.url),
-                        status_code=response.status_code,
-                        content_type=content_type,
-                        body=body,
-                    )
-            raise ValueError("Maximum redirect count exceeded")
-            except TimeoutError as exc:
+                            raise ValueError("DNS returned an invalid IP address") from exc
+                        if not resolved_ip.is_global:
+                            raise ValueError("Hostname resolves to a non-public IP address")
+                    async with active_client.stream("GET", current_url, follow_redirects=False) as response:
+                        if response.status_code in {301, 302, 303, 307, 308}:
+                            location = response.headers.get("location")
+                            if not location:
+                                raise ValueError("Redirect response has no Location header")
+                            if redirect_count >= limits.max_redirects:
+                                raise ValueError("Maximum redirect count exceeded")
+                            current_url = urljoin(current_url, location)
+                            # Validate destination and scope before any request to it.
+                            validate_page_url(current_url)
+                            destination = urlsplit(current_url)
+                            if allowed_schemes is not None and destination.scheme.lower() not in {item.lower() for item in allowed_schemes}:
+                                raise ValueError("Redirect destination is outside the allowed scheme scope")
+                            destination_host = (destination.hostname or "").lower().rstrip(".")
+                            if allowed_hosts is not None and destination_host not in {item.lower().rstrip(".") for item in allowed_hosts}:
+                                raise ValueError("Redirect destination is outside the allowed host scope")
+                            continue
+                        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                        permitted_types = accepted_content_types or {"text/html", "application/xhtml+xml"}
+                        if 200 <= response.status_code < 300 and content_type not in permitted_types:
+                            if accepted_content_types is None:
+                                raise ValueError("Target response is not HTML")
+                            raise ValueError("Target response content type is not permitted")
+                        content_length = response.headers.get("content-length")
+                        if content_length:
+                            try:
+                                if int(content_length) > limits.max_bytes:
+                                    raise ValueError("Response exceeds the configured byte limit")
+                            except ValueError as exc:
+                                if str(exc) == "Response exceeds the configured byte limit":
+                                    raise
+                                raise ValueError("Invalid Content-Length header") from exc
+                        chunks: list[bytes] = []
+                        total = 0
+                        async for chunk in response.aiter_bytes():
+                            total += len(chunk)
+                            if total > limits.max_bytes:
+                                raise ValueError("Response exceeds the configured byte limit")
+                            chunks.append(chunk)
+                        encoding = response.encoding or "utf-8"
+                        try:
+                            body = b"".join(chunks).decode(encoding, errors="replace")
+                        except LookupError:
+                            body = b"".join(chunks).decode("utf-8", errors="replace")
+                        return FetchedPage(
+                            requested_url=requested_url,
+                            final_url=str(response.url),
+                            status_code=response.status_code,
+                            content_type=content_type,
+                            body=body,
+                        )
+                raise ValueError("Maximum redirect count exceeded")
+                except TimeoutError as exc:
             raise ValueError("Website request timed out") from exc
     except httpx.TimeoutException as exc:
         raise ValueError("Website request timed out") from exc
