@@ -24,7 +24,6 @@ from app.services.domain_authorization_store import DomainAuthorizationStore
 from app.services.subscription_store import SubscriptionStore
 from app.services.website_fetch import FetchLimits, validate_fetch_configuration
 from app.services.persisted_website_growth_pipeline import discover_persisted_workspace_site
-from app.services.workspace_growth_schedule_runner import WorkspaceGrowthScheduleRunner
 from app.services.workspace_job_queue import WorkspaceJobQueue
 
 
@@ -192,16 +191,8 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
         dsn=settings.database_url, min_size=1, max_size=5, timeout=5, command_timeout=15
     )
     worker_id = f"{socket.gethostname()}:{os.getpid()}"[:200]
-    subscriptions = SubscriptionStore(pool)
-    schedules = WorkspaceGrowthScheduleRunner(pool, subscriptions)
     try:
         while True:
-            try:
-                await schedules.enqueue_one_due()
-            except Exception as exc:
-                # Keep sensitive SQL/config details out of logs while making the failure
-                # visible to a process supervisor and log-based alerting.
-                logger.warning("growth_schedule_poll_failed error_type=%s", type(exc).__name__)
             processed = await process_one_job(pool, worker_id=worker_id)
             if once:
                 return
@@ -214,7 +205,7 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process durable website growth scan jobs.")
     parser.add_argument("--poll-seconds", type=float, default=3.0)
-    parser.add_argument("--once", action="store_true", help="enqueue due schedules and process at most one job")
+    parser.add_argument("--once", action="store_true", help="process at most one queued website-growth job")
     args = parser.parse_args()
     asyncio.run(run_worker(poll_seconds=args.poll_seconds, once=args.once))
 
