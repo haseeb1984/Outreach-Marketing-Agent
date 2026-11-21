@@ -45,6 +45,5 @@ export function SiteFooter() {
       <div><strong>Get started</strong><p>Bring your prospect research and outreach workflow together.</p><Link className="footer-start" href="/register">Create a workspace →</Link><Link href="https://juncsys.com" target="_blank" rel="noopener noreferrer">Junction Systems ↗</Link></div>
     </div>
     <div className="footer-bottom"><span>© {new Date().getFullYear()} Outreach Marketing Agent. All rights reserved.</span><span>Powered by <a href="https://juncsys.com" target="_blank" rel="noopener noreferrer">Junction Systems</a></span><span><Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/security">Security</Link></span></div>
-    <p className="fine footer-disclaimer">Features and integrations are subject to availability, eligibility and verification. No ranking, delivery or revenue outcome is guaranteed.</p>
   </div></footer>;
 }
