@@ -22,7 +22,7 @@ The Vercel environment-key inventory was inspected without decrypting values. Pr
 
 | Variable | Owner input/action |
 | --- | --- |
-| `PLATFORM_ADMIN_EMAILS` | Exact comma-separated email address(es) authorized as platform owner/admin. Use least privilege. |
+| `PLATFORM_ADMIN_EMAILS` | Set to `outreach@juncsys.com` (or a comma-separated list of exact authorized addresses). This remains an environment variable, not a hard-coded identity; configure it in Vercel Production and Preview as appropriate. |
 | `AI_API_KEY` | Provider API key for the configured AI base URL/model, if AI drafting is part of launch. |
 | `BRAVE_SEARCH_API_KEY` | Search provider API key for prospect/influencer discovery. |
 | `TRUSTED_EGRESS_PROXY_URL` | Trusted crawler egress proxy URL; provision infrastructure first. |
@@ -71,7 +71,7 @@ Each customer should configure their own workspace SMTP credentials in the custo
 ## 7. Minimum information needed from the owner
 
 Reply with non-secret confirmations only:
-1. The exact platform-owner email address to authorize in `PLATFORM_ADMIN_EMAILS`.
+1. Configure `PLATFORM_ADMIN_EMAILS=outreach@juncsys.com` in the required Vercel environments; additional owner addresses can be added as a comma-separated allowlist.
 2. Whether launch includes AI drafting, public prospect discovery, central WhatsApp, and Paddle billing (yes/no for each).
 3. Whether GitHub Actions billing/runner restrictions have been resolved.
 4. Whether production database migration and production deployment windows are approved (yes/no; no action is taken until explicit approval).
