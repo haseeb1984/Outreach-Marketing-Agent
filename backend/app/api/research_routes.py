@@ -369,10 +369,18 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         raise HTTPException(status_code=503, detail="billing_service_not_configured")
 
     site_domains = {
-        "instagram": "instagram.com", "tiktok": "tiktok.com",
-        "youtube": "youtube.com", "linkedin": "linkedin.com", "x": "x.com",
+        "instagram": ("instagram.com",), "tiktok": ("tiktok.com",),
+        "youtube": ("youtube.com",), "linkedin": ("linkedin.com",),
+        # Include the legacy host because older public creator profiles and
+        # search indexes may still publish Twitter URLs; normalization below
+        # canonicalizes both hosts to the same X profile identity.
+        "x": ("x.com", "twitter.com"),
     }
-    site_filter = " OR ".join("site:" + site_domains[name] for name in payload.platforms)
+    site_filter = " OR ".join(
+        "site:" + domain
+        for name in payload.platforms
+        for domain in site_domains[name]
+    )
     search_query = f'({payload.query.strip()}) (creator OR influencer OR "content creator") ({site_filter})'
     try:
         reservation = await subscriptions.reserve_usage(

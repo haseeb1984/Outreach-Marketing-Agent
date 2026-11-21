@@ -372,6 +372,8 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
                  "title": "Karachi food creator post", "description": "Post URL, not a profile"},
                 {"url": "https://www.youtube.com/@foodcreator",
                  "title": "Food Creator", "description": "Karachi restaurant reviews"},
+                {"url": "https://twitter.com/karachifood",
+                 "title": "Karachi Food on X", "description": "Food creator in Karachi"},
                 {"url": "https://example.com/creator",
                  "title": "Karachi food influencer", "description": "Not a supported creator profile"},
             ]}}
@@ -389,6 +391,8 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
         async def get(self, url, *, params, headers):
             assert "site:instagram.com" in params["q"]
             assert "site:youtube.com" in params["q"]
+            assert "site:x.com" in params["q"]
+            assert "site:twitter.com" in params["q"]
             assert headers["X-Subscription-Token"] == "test-search-key"
             return FakeResponse()
 
@@ -406,15 +410,16 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
         response = client.post("/api/v1/research/influencers/search", json={
             "workspace_id": "workspace-a",
             "query": "Karachi food creator",
-            "platforms": ["instagram", "youtube"],
+            "platforms": ["instagram", "youtube", "x"],
             "count": 10,
             "idempotency_key": "test-key-123",
         })
 
     assert response.status_code == 200
     body = response.json()
-    assert body["count"] == 2
-    assert {item["platform"] for item in body["items"]} == {"instagram", "youtube"}
+    assert body["count"] == 3
+    assert {item["platform"] for item in body["items"]} == {"instagram", "youtube", "x"}
+    assert "https://x.com/karachifood" in {item["profile_url"] for item in body["items"]}
     assert len({item["profile_url"] for item in body["items"]}) == 2
     assert all(item["requires_human_review"] for item in body["items"])
     assert all(item["audience_metrics"] is None for item in body["items"])

@@ -102,3 +102,9 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 - Tests are authored but remain pending the combined CI run; no verification status is inferred.
 
 - Canonicalized legacy `twitter.com` creator links to the same `x.com` profile URL so cross-domain duplicates collapse during discovery.
+
+
+## X/Twitter discovery coverage (2026-11-21)
+
+- Expanded X creator discovery queries to include both `x.com` and the legacy `twitter.com` host. Returned Twitter profile URLs are still normalized to canonical X URLs and deduplicated with matching X-host results.
+- Extended the mocked discovery endpoint regression test to assert both search domains are queried and a legacy Twitter result is returned as a canonical X profile. Tests remain pending successful CI execution.
