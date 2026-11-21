@@ -120,7 +120,7 @@ async def apply_security_headers(request: Request, call_next):
         "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
     )
     if request.url.path.startswith("/api/"):
-        response.headers.setdefault("Cache-Control", "no-store")
+        response.headers["Cache-Control"] = "no-store"
     if settings.environment.casefold() == "production" and request.url.scheme == "https":
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
