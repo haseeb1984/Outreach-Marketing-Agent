@@ -34,6 +34,7 @@ type UnifiedReplyMessage = { id: string; channel: string; provider: string; dire
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; domain?: string; description: string; relevance_score?: number; relevance_reasons?: string[]; relevance_method?: string; evidence_type: string; requires_human_review: boolean };
+type InfluencerCandidate = { profile_url: string; platform: string; title: string; description: string; relevance_score: number; relevance_reasons: string[]; requires_human_review: boolean; audience_metrics: null; audience_metrics_status: string };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
 type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
@@ -176,6 +177,10 @@ export default function DashboardPage() {
   const [researchQuery, setResearchQuery] = useState("");
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
   const [researchBusy, setResearchBusy] = useState(false);
+  const [influencerQuery, setInfluencerQuery] = useState("");
+  const [influencerPlatforms, setInfluencerPlatforms] = useState(["instagram", "tiktok", "youtube", "linkedin", "x"]);
+  const [influencerResults, setInfluencerResults] = useState<InfluencerCandidate[]>([]);
+  const [influencerBusy, setInfluencerBusy] = useState(false);
   const [domainName, setDomainName] = useState("");
   const [domainChallenge, setDomainChallenge] = useState<DomainChallenge | null>(null);
   const [domainBusy, setDomainBusy] = useState(false);
@@ -1528,6 +1533,35 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setResearchBusy(false); }
   }
 
+
+  async function searchInfluencers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !influencerQuery.trim() || influencerPlatforms.length === 0) return;
+    const requestedWorkspaceId = workspaceId;
+    setInfluencerBusy(true); setError(""); setNotice(""); setInfluencerResults([]);
+    try {
+      const result = await api<{ items: InfluencerCandidate[]; notice?: string }>(
+        "/api/v1/research/influencers/search", csrf, {
+          method: "POST",
+          body: JSON.stringify({
+            workspace_id: requestedWorkspaceId,
+            query: influencerQuery.trim(),
+            platforms: influencerPlatforms,
+            count: 10,
+            idempotency_key: "influencer-research-" + crypto.randomUUID(),
+          }),
+        }
+      );
+      if (requestedWorkspaceId !== workspaceId) return;
+      setInfluencerResults(result.items || []);
+      setNotice(result.notice || "Public creator-profile candidates are ready for review.");
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Influencer discovery could not be completed.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId) setInfluencerBusy(false);
+    }
+  }
+
   async function runProjectGrowthReview(event: FormEvent<HTMLFormElement>, project: Project) {
     event.preventDefault();
     if (!workspaceId || !csrf || !project.website_url) return;
@@ -2615,6 +2649,22 @@ export default function DashboardPage() {
             </form>
           </article>
           {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Domain: {item.domain || "Domain unavailable"} · Relevance hint: {typeof item.relevance_score === "number" ? item.relevance_score + "/100" : "not scored"} · Review required · Not saved to CRM</p>{item.relevance_reasons && item.relevance_reasons.length > 0 && <p className="fine">{item.relevance_reasons.join(" · ")}</p>}<button className="button secondary" type="button" disabled={busy || !canWrite} onClick={() => { setProspectName(item.title.slice(0, 200)); setProspectCompany(""); setProspectWebsite(""); setProspectEmail(""); setProspectPhone(""); setEvidenceUrl(item.url); setFitReason((item.description || "Public search result; verify relevance before saving.").slice(0, 2000)); setNotice("Search evidence copied to the prospect form. Verify the real contact name, company, website and relevance before saving."); document.getElementById("prospect-name")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Prepare CRM record for review</button></article>)}</div>}
+
+          <article className="card" aria-labelledby="influencer-research-title">
+            <h3 id="influencer-research-title">Discover public creator profiles</h3>
+            <p className="fine">Find public Instagram, TikTok, YouTube, LinkedIn and X profile candidates. Relevance is based on search text only; it is not an influence or quality score.</p>
+            <form onSubmit={searchInfluencers}>
+              <div className="field"><label htmlFor="influencer-query">Creator niche, audience and market</label><input id="influencer-query" required minLength={3} maxLength={400} value={influencerQuery} onChange={event=>setInfluencerQuery(event.target.value)} placeholder="e.g. Karachi food creators reviewing independent restaurants" /></div>
+              <div className="field"><label htmlFor="influencer-platforms">Platforms (choose one or more)</label><select id="influencer-platforms" multiple size={5} value={influencerPlatforms} onChange={event=>setInfluencerPlatforms(Array.from(event.target.selectedOptions, option=>option.value))}><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="linkedin">LinkedIn</option><option value="x">X</option></select></div>
+              <button className="button" type="submit" disabled={influencerBusy || researchBusy || busy || !workspaceId || !csrf || !canWrite || influencerPlatforms.length===0}>{influencerBusy ? "Finding public creator profiles…" : "Discover creators"}</button>
+            </form>
+            {influencerResults.length > 0 && <div className="cards">{influencerResults.map(item=><article className="card" key={item.profile_url}>
+              <h4><a href={item.profile_url} target="_blank" rel="noreferrer">{item.title}</a></h4>
+              <p className="fine">{item.platform.toUpperCase()} · Topical relevance: {item.relevance_score}/100 · Human review required</p>
+              <p>{item.description || "No public search description supplied."}</p>
+              <p className="fine">Audience metrics unavailable: follower counts, average views and engagement rate have not been verified. Review the profile and current audience data independently.</p>
+            </article>)}</div>}
+          </article>
         </section>
         <section className="section" id="crm"><h2>Prospect CRM</h2>
           <article className="card"><form onSubmit={searchCrmProspects}>
