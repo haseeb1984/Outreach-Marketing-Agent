@@ -76,7 +76,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Password").fill("correct-password");
     await page.getByRole("button", { name: "Sign in" }).click();
 
-    await expect(page).toHaveURL(/\\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByLabel("Active workspace")).toHaveValue("workspace-1");
     await expect(page.getByText("verified@example.test")).toBeVisible();
 
@@ -211,7 +211,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Email address").fill("verified@example.test");
     await page.getByLabel("Password").fill("correct-password");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
 
     await page.getByLabel("Creator niche, audience and market").fill("Karachi food creators");
     await page.getByLabel("Platforms (choose one or more)").selectOption(["instagram", "youtube"]);
