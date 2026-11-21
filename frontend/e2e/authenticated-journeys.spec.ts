@@ -38,7 +38,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Password").fill("incorrect-password");
     await page.getByRole("button", { name: "Sign in" }).click();
 
-    await expect(page.getByRole("alert")).toHaveText("Email or password was not accepted.");
+    await expect(page.locator("p.notice[role='alert']")).toHaveText("Email or password was not accepted.");
     await expect(page).toHaveURL(/\/login$/);
   });
 
