@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SiteHeader, SiteFooter } from "./components/site-chrome";
+import { BrandMark, SiteHeader, SiteFooter } from "./components/site-chrome";
 
 const features = [
   { icon: "✦", title: "Evidence-led prospecting", body: "Discover relevant businesses with source-backed context, fit signals and deduplication." },
@@ -28,7 +28,7 @@ export default function HomePage() {
         </div>
         <div className="dashboard-art" aria-label="Illustration of an outreach analytics workspace">
           <div className="art-orbit orbit-one"></div><div className="art-orbit orbit-two"></div>
-          <div className="mock-window"><div className="mock-top"><span className="mini-brand"><span className="mini-mark">✉</span> Outreach <small>Marketing Agent</small></span><span className="mock-dots">● ● ●</span></div>
+          <div className="mock-window"><div className="mock-top"><span className="mini-brand"><BrandMark/> Outreach <small>Marketing Agent</small></span><span className="mock-dots">● ● ●</span></div>
             <div className="mock-body"><aside className="mock-sidebar"><b>▦ &nbsp; Overview</b><span>✉ &nbsp; Campaigns</span><span>♙ &nbsp; Prospects</span><span>◷ &nbsp; Analytics</span><span>⚙ &nbsp; Settings</span></aside>
               <div className="mock-content"><div className="mock-heading"><div><b>Workspace overview</b><small>Your outreach at a glance</small></div><span className="period-chip">Last 30 days⌄</span></div>
                 <div className="mock-metrics"><div><i>✉</i><small>Campaigns</small><b>In control</b><em>Drafts & activity</em></div><div><i>♙</i><small>Prospects</small><b>Organized</b><em>Research-backed</em></div><div><i>◎</i><small>Insights</small><b>Actionable</b><em>Recorded results</em></div></div>
