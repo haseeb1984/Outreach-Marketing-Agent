@@ -127,6 +127,18 @@ async def process_pending_whatsapp_events(
                             """SELECT id, phone_number_id, payload, received_at
                                FROM meta_whatsapp_webhook_events
                                WHERE processed_at IS NULL AND attempts < 8
+                                 AND (
+                                   phone_number_id IS NULL
+                                   OR NOT EXISTS (
+                                     SELECT 1 FROM workspace_whatsapp_accounts a
+                                     WHERE a.phone_number_id=meta_whatsapp_webhook_events.phone_number_id
+                                   )
+                                   OR EXISTS (
+                                     SELECT 1 FROM workspace_whatsapp_accounts a
+                                     WHERE a.phone_number_id=meta_whatsapp_webhook_events.phone_number_id
+                                       AND a.status IN ('active','disabled')
+                                   )
+                                 )
                                ORDER BY received_at, id
                                LIMIT 1 FOR UPDATE SKIP LOCKED"""
                         )
