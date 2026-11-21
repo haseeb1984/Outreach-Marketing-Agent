@@ -10,7 +10,7 @@ const legal = [
   ["/refunds", "Refunds"], ["/disclaimer", "Disclaimer"], ["/security", "Security"],
 ] as const;
 
-function BrandMark() {
+export function BrandMark() {
   const gradientPrefix = `outreach-mark-${useId().replace(/:/g, "")}`;
   const gradientId = `${gradientPrefix}-gradient`;
   const accentId = `${gradientPrefix}-accent`;
