@@ -80,8 +80,8 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 
 ## Influencer discovery implementation (2026-11-21)
 
-- Added `POST /api/v1/research/influencers/search` for authenticated workspace members, with CSRF enforcement and the existing `prospect_research` quota reservation.
+- Added `POST /api/v1/research/influencers/search` for authenticated workspace members, with CSRF enforcement and the existing `prospect_research` quota reservation. Added a workspace dashboard form to select platforms, run discovery and review returned public profiles.
 - Supports Instagram, TikTok, YouTube, LinkedIn and X public profile candidates. It filters content/search URLs, canonicalizes profile URLs and deduplicates profiles before returning results.
 - Results are topical search candidates only. The score is query/title/snippet overlap, not creator quality or influence. Results are not automatically saved to the CRM or contacted.
 - Follower counts, average views, engagement rate, audience demographics, conversions, revenue and ROI remain unavailable unless a verified provider/first-party integration supplies them.
-- Added profile-shape and mocked endpoint tests. They have not yet run in CI; do not treat implementation tests as verified until the combined test run succeeds.
+- Added profile-shape and mocked endpoint tests. They have not yet run in CI; do not treat implementation tests as verified until the combined test run succeeds. Dashboard integration has not yet been browser-tested.
