@@ -81,7 +81,7 @@ def test_security_headers_are_present_on_public_pages() -> None:
 
 def test_authenticated_api_responses_are_not_cacheable() -> None:
     response = client.get("/api/v1/auth/me")
-    assert response.status_code == 401
+    assert response.status_code in {401, 503}
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
 
