@@ -85,3 +85,11 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 - Results are topical search candidates only. The score is query/title/snippet overlap, not creator quality or influence. Results are not automatically saved to the CRM or contacted.
 - Follower counts, average views, engagement rate, audience demographics, conversions, revenue and ROI remain unavailable unless a verified provider/first-party integration supplies them.
 - Added profile-shape and mocked endpoint tests. They have not yet run in CI; do not treat implementation tests as verified until the combined test run succeeds. Dashboard integration has not yet been browser-tested.
+
+## Influencer discovery hardening (2026-11-21)
+
+- Tightened creator profile URL validation so LinkedIn in-profile and YouTube channel/custom/user candidates must resolve to profile-shaped paths, not nested post/video/content paths.
+- Added backend regression tests for nested content-path rejection, quota-denied provider suppression and fail-closed behavior when Brave Search is not configured.
+- Added an authenticated Playwright dashboard journey covering selected-platform submission, CSRF header, idempotency key and the explicit audience-metrics-unavailable state.
+- Corrected dashboard URL assertions in the authenticated browser suite while extending it.
+- These new backend and browser tests have been authored but have **not** been executed on the current head. Do not count them as CI-verified until a runner completes them.
