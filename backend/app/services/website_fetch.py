@@ -100,6 +100,7 @@ async def fetch_html(
     limits: FetchLimits = FetchLimits(),
     resolver: Resolver = resolve_public_addresses,
     allowed_hosts: set[str] | None = None,
+    allowed_schemes: set[str] | None = None,
     accepted_content_types: set[str] | None = None,
 ) -> FetchedPage:
     """Fetch a single HTML page with bounded redirects and response size.
@@ -130,6 +131,9 @@ async def fetch_html(
         for redirect_count in range(limits.max_redirects + 1):
             current_url = validate_page_url(current_url)
             parsed = urlsplit(current_url)
+            scheme = parsed.scheme.lower()
+            if allowed_schemes is not None and scheme not in {item.lower() for item in allowed_schemes}:
+                raise ValueError("Request scheme is outside the allowed scheme scope")
             host = (parsed.hostname or "").lower().rstrip(".")
             if allowed_hosts is not None and host not in {item.lower().rstrip(".") for item in allowed_hosts}:
                 raise ValueError("Request host is outside the allowed host scope")
@@ -154,7 +158,10 @@ async def fetch_html(
                     current_url = urljoin(current_url, location)
                     # Validate destination and scope before any request to it.
                     validate_page_url(current_url)
-                    destination_host = (urlsplit(current_url).hostname or "").lower().rstrip(".")
+                    destination = urlsplit(current_url)
+                    if allowed_schemes is not None and destination.scheme.lower() not in {item.lower() for item in allowed_schemes}:
+                        raise ValueError("Redirect destination is outside the allowed scheme scope")
+                    destination_host = (destination.hostname or "").lower().rstrip(".")
                     if allowed_hosts is not None and destination_host not in {item.lower().rstrip(".") for item in allowed_hosts}:
                         raise ValueError("Redirect destination is outside the allowed host scope")
                     continue
@@ -209,6 +216,7 @@ async def fetch_text_document(
     limits: FetchLimits = FetchLimits(max_bytes=500_000),
     resolver: Resolver = resolve_public_addresses,
     allowed_hosts: set[str] | None = None,
+    allowed_schemes: set[str] | None = None,
     accepted_content_types: set[str] | None = None,
 ) -> FetchedPage:
     """Fetch a bounded text/XML document through the same SSRF and redirect guards."""
@@ -225,5 +233,6 @@ async def fetch_text_document(
         limits=limits,
         resolver=resolver,
         allowed_hosts=allowed_hosts,
+        allowed_schemes=allowed_schemes,
         accepted_content_types=permitted,
     )
