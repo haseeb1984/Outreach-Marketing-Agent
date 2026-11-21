@@ -1,1 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="16" fill="#2457d6"/><path d="M32 8 54 20.5v23L32 56 10 43.5v-23L32 8Z" fill="none" stroke="#fff" stroke-width="3"/><path d="M22 41V23h13a7 7 0 0 1 0 14H22m14 0 10 8" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="18" r="3" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mark-gradient" x1="8" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse"><stop stop-color="#8B7BFF"/><stop offset=".46" stop-color="#168BFF"/><stop offset="1" stop-color="#0645C8"/></linearGradient>
+    <linearGradient id="mark-accent" x1="19" y1="45" x2="44" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#18D5E8"/><stop offset="1" stop-color="#4D70FF"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#10234a"/>
+  <path d="M46.8 12.2A25 25 0 1 0 53 37.8" fill="none" stroke="url(#mark-gradient)" stroke-width="7" stroke-linecap="round"/>
+  <path d="M48.7 7.8 59 6l-2.1 10.4" fill="none" stroke="#8874FF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M14 43.5 23 37l7.2 4.5 9.3-13.2 7.4 4.1" fill="none" stroke="url(#mark-accent)" stroke-width="4.3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28.2 24.1 56 11.4 43.3 39.2l-5.7-9.4-9.4-5.7Z" fill="url(#mark-gradient)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="m28.2 24.1 9.4 5.7 18.4-18.4" fill="none" stroke="#BDEBFF" stroke-width="1.8" stroke-linejoin="round"/>
+  <circle cx="13.5" cy="15" r="2.2" fill="#A58CFF"/>
+</svg>
