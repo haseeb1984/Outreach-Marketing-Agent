@@ -320,7 +320,7 @@ async def rotate_whatsapp_account_token(
             async with connection.transaction():
                 row = await connection.fetchrow(
                     """UPDATE workspace_whatsapp_accounts
-                       SET encrypted_access_token=$3,status='pending',updated_at=now()
+                       SET encrypted_access_token=$3,status='pending_verification',updated_at=now()
                        WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
                        RETURNING id""",
                     account_id, payload.workspace_id, encrypted,
@@ -344,7 +344,7 @@ async def rotate_whatsapp_account_token(
                 )
         return {
             "account_id": str(account_id),
-            "status": "pending",
+            "status": "pending_verification",
             "queued_reservations_released": len(cancelled),
             "notice": "Token replaced and encrypted. Verify the account again to re-check Meta access and WABA webhook subscription before queueing sends.",
         }
