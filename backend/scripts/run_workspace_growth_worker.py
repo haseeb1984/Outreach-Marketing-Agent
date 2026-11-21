@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import socket
+import signal
 from typing import Any
 from uuid import UUID
 
@@ -194,15 +195,19 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
         dsn=settings.database_url, min_size=1, max_size=5, timeout=5, command_timeout=15
     )
     worker_id = f"{socket.gethostname()}:{os.getpid()}"[:200]
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, stop_event.set)
     logger.info("workspace growth worker started worker_id=%s poll_seconds=%s", worker_id, poll_seconds)
     try:
-        while True:
+        while not stop_event.is_set():
             processed = await process_one_job(pool, worker_id=worker_id)
             if once:
                 return
             if not processed:
                 await asyncio.sleep(poll_seconds)
     finally:
+        loop.remove_signal_handler(signal.SIGTERM)
         await pool.close()
         logger.info("workspace growth worker stopped worker_id=%s", worker_id)
 
