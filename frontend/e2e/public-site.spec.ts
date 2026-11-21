@@ -47,10 +47,19 @@ test.describe("public website browser acceptance", () => {
       const brokenLabelReferences = await page.locator("[aria-labelledby]").evaluateAll((elements) => {
         const ids = new Set(Array.from(document.querySelectorAll("[id]")).map((element) => element.id));
         return elements.filter((element) =>
-          (element.getAttribute("aria-labelledby") || "").trim().split(/\\s+/).filter(Boolean).some((id) => !ids.has(id))
+          (element.getAttribute("aria-labelledby") || "").trim().split(/\s+/).filter(Boolean).some((id) => !ids.has(id))
         ).length;
       });
       expect(brokenLabelReferences, `${route} aria-labelledby references must resolve to existing elements`).toBe(0);
+      const duplicateIds = await page.locator("[id]").evaluateAll((elements) => {
+        const counts = new Map<string, number>();
+        for (const element of elements) {
+          const id = element.id;
+          counts.set(id, (counts.get(id) || 0) + 1);
+        }
+        return Array.from(counts.values()).filter((count) => count > 1).length;
+      });
+      expect(duplicateIds, `${route} element IDs must be unique`).toBe(0);
       const unnamedImages = await page.locator("img:not([aria-hidden='true'])").evaluateAll((images) =>
         images.filter((image) => !image.hasAttribute("alt")).length
       );

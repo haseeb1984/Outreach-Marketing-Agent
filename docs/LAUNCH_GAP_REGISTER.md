@@ -116,3 +116,6 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 
 - Extended the public-route semantic browser check to validate every token in `aria-labelledby` against an existing element ID. This catches controls that appear labelled in markup but resolve to no accessible-name source.
 - This remains a structural regression check; it does not replace computed accessible-name inspection, keyboard testing, contrast checks or screen-reader review. The current-head suite has not been executed.
+
+
+- Hardened the `aria-labelledby` regression check: it now tokenizes references on actual whitespace (rather than a literal backslash sequence) and also rejects duplicate element IDs, which can make accessible-name references ambiguous. This check remains pending current-head browser execution.
