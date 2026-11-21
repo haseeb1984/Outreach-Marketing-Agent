@@ -32,10 +32,22 @@ test.describe("public website browser acceptance", () => {
       await expect(page.locator("html")).toHaveAttribute("lang", /.+/);
       await expect(page.getByRole("main"), `${route} main landmark`).toHaveCount(1);
       await expect(page.getByRole("heading", { level: 1 }), `${route} primary heading`).toHaveCount(1);
-      const unnamedButtons = await page.getByRole("button").evaluateAll((buttons) =>
-        buttons.filter((button) => !(button.textContent || "").trim() && !button.getAttribute("aria-label") && !button.getAttribute("aria-labelledby")).length
+      const unnamedControls = await page.locator('button, a, input:not([type="hidden"]), textarea, select').evaluateAll((elements) =>
+        elements.filter((element) => {
+          const explicit = element.getAttribute("aria-label") || element.getAttribute("aria-labelledby");
+          const text = (element.textContent || "").trim();
+          if (explicit || text) return false;
+          if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+            return element.labels?.length === 0;
+          }
+          return !(element instanceof HTMLAnchorElement && element.querySelector("img[alt]"));
+        }).length
       );
-      expect(unnamedButtons, `${route} buttons need accessible names`).toBe(0);
+      expect(unnamedControls, `${route} interactive controls need accessible names`).toBe(0);
+      const unnamedImages = await page.locator("img:not([aria-hidden='true'])").evaluateAll((images) =>
+        images.filter((image) => !image.hasAttribute("alt")).length
+      );
+      expect(unnamedImages, `${route} informative images need alt text`).toBe(0);
     }
   });
 
