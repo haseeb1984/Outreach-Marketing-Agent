@@ -87,7 +87,11 @@ async def crawl_website(
                     "action": "skipped_due_to_robots_txt",
                 })
                 continue
-        kwargs = {"limits": limits, "allowed_hosts": {allowed_host}}
+        kwargs = {
+            "limits": limits,
+            "allowed_hosts": {allowed_host},
+            "allowed_schemes": {allowed_scheme},
+        }
         if resolver is not None:
             kwargs["resolver"] = resolver
         try:
