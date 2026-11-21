@@ -175,8 +175,11 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
                          error_code="growth_scan_payload_or_domain_rejected",
                          retry_delay_seconds=0, retry=False)
         return True
-    except Exception:
-        # Keep provider, URL, SQL, and credential details out of the durable job record.
+    except Exception as exc:
+        # Log only the exception class: provider, URL, SQL, and credential details
+        # may be sensitive and must not leak into the service journal.
+        logger.error("growth scan execution failed job_id=%s error_type=%s",
+                     job["id"], type(exc).__name__)
         await queue.fail(job_id=job["id"], worker_id=worker_id,
                          error_code="growth_scan_execution_failed", retry_delay_seconds=60)
         return True
@@ -191,6 +194,7 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
         dsn=settings.database_url, min_size=1, max_size=5, timeout=5, command_timeout=15
     )
     worker_id = f"{socket.gethostname()}:{os.getpid()}"[:200]
+    logger.info("workspace growth worker started worker_id=%s poll_seconds=%s", worker_id, poll_seconds)
     try:
         while True:
             processed = await process_one_job(pool, worker_id=worker_id)
@@ -200,9 +204,11 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
                 await asyncio.sleep(poll_seconds)
     finally:
         await pool.close()
+        logger.info("workspace growth worker stopped worker_id=%s", worker_id)
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(description="Process durable website growth scan jobs.")
     parser.add_argument("--poll-seconds", type=float, default=3.0)
     parser.add_argument("--once", action="store_true", help="process at most one queued website-growth job")
