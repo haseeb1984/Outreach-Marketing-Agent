@@ -73,7 +73,7 @@ The schedule dispatcher is a separate process:
 python -m app.workers.workspace_growth_scheduler
 ```
 
-It should run under a process supervisor. The dispatcher uses row locking and a stable per-schedule/per-time-slot idempotency key, so a restart between queue insertion and schedule advancement will not create a duplicate job for the same slot. Missed intervals are skipped rather than producing an unbounded catch-up burst. Schedule dispatch only enqueues research; the separate `website_growth_worker` must also be running to execute scans. Pause/delete prevents future scheduling but does not cancel jobs already queued.
+It should run under a process supervisor. The dispatcher uses row locking and a stable per-schedule/per-time-slot idempotency key, so a restart between queue insertion and schedule advancement will not create a duplicate job for the same slot. Missed intervals are skipped rather than producing an unbounded catch-up burst. Schedule dispatch only enqueues research; the canonical `backend/scripts/run_workspace_growth_worker.py` process must also be running to execute scans. Pause/delete prevents future scheduling but does not cancel jobs already queued.
 
 
 ## Campaign performance analytics
