@@ -76,3 +76,12 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 - Extended the existing public-route Playwright suite with semantic checks across all 10 public routes: document language, one main landmark, one primary heading, accessible names for interactive controls (buttons, links and form fields), and alt attributes on informative images.
 - This baseline catches common structural regressions but does not claim WCAG conformance, keyboard-flow completeness, color-contrast validation or screen-reader acceptance.
 - The suite has not yet been run on the current head because the recent GitHub Actions jobs failed before runner allocation. LG-18 remains open pending successful browser execution and broader accessibility/performance/security acceptance.
+
+
+## Influencer discovery implementation (2026-11-21)
+
+- Added `POST /api/v1/research/influencers/search` for authenticated workspace members, with CSRF enforcement and the existing `prospect_research` quota reservation.
+- Supports Instagram, TikTok, YouTube, LinkedIn and X public profile candidates. It filters content/search URLs, canonicalizes profile URLs and deduplicates profiles before returning results.
+- Results are topical search candidates only. The score is query/title/snippet overlap, not creator quality or influence. Results are not automatically saved to the CRM or contacted.
+- Follower counts, average views, engagement rate, audience demographics, conversions, revenue and ROI remain unavailable unless a verified provider/first-party integration supplies them.
+- Added profile-shape and mocked endpoint tests. They have not yet run in CI; do not treat implementation tests as verified until the combined test run succeeds.
