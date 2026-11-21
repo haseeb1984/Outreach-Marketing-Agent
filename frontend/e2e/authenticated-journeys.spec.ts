@@ -150,4 +150,83 @@ test.describe("account and authenticated browser journeys", () => {
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login$/);
   });
+
+  test("influencer discovery submits selected platforms and displays review-only candidates", async ({ page }) => {
+    const csrfToken = "influencer-csrf-token-0123456789abcdef";
+    let submitted: Record<string, unknown> | undefined;
+    let searchCsrf = "";
+
+    await page.route("**/api/v1/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.pathname === "/api/v1/auth/login" || url.pathname === "/api/v1/auth/me") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ user: { user_id: "user-1", email: "verified@example.test" }, csrf_token: csrfToken }),
+        });
+      } else if (url.pathname === "/api/v1/workspaces" && request.method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [{ id: "workspace-1", name: "Acceptance workspace", role: "owner" }] }),
+        });
+      } else if (url.pathname === "/api/v1/research/influencers/search") {
+        submitted = request.postDataJSON();
+        searchCsrf = request.headers()["x-csrf-token"] || "";
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            items: [{
+              profile_url: "https://instagram.com/karachi.food.creator",
+              platform: "instagram",
+              title: "Karachi Food Creator",
+              description: "Independent restaurant reviews in Karachi.",
+              relevance_score: 82,
+              relevance_reasons: ["karachi", "food", "creator"],
+              requires_human_review: true,
+              audience_metrics: null,
+              audience_metrics_status: "not_available_from_search_results",
+            }],
+            notice: "Review creator identity and audience data independently.",
+          }),
+        });
+      } else if (url.pathname === "/api/v1/auth/sessions") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [] }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [] }),
+        });
+      }
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Email address").fill("verified@example.test");
+    await page.getByLabel("Password").fill("correct-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\\/dashboard$/);
+
+    await page.getByLabel("Creator niche, audience and market").fill("Karachi food creators");
+    await page.getByLabel("Platforms (choose one or more)").selectOption(["instagram", "youtube"]);
+    await page.getByRole("button", { name: "Discover creators" }).click();
+
+    await expect(page.getByRole("heading", { name: "Karachi Food Creator" })).toBeVisible();
+    await expect(page.getByText(/Audience metrics unavailable/)).toBeVisible();
+    expect(submitted).toMatchObject({
+      workspace_id: "workspace-1",
+      query: "Karachi food creators",
+      platforms: ["instagram", "youtube"],
+      count: 10,
+    });
+    expect(typeof submitted?.idempotency_key).toBe("string");
+    expect(searchCsrf).toBe(csrfToken);
+  });
+
 });
