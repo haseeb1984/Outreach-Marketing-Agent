@@ -312,6 +312,9 @@ def _public_influencer_profile(value: object) -> tuple[str, str] | None:
     platform = _INFLUENCER_HOSTS.get(host)
     if platform is None:
         return None
+    # Treat legacy Twitter profile links as the same canonical X identity.
+    if host == "twitter.com":
+        host = "x.com"
     segments = [segment for segment in parsed.path.split("/") if segment]
     if not segments:
         return None

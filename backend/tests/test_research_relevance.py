@@ -531,3 +531,14 @@ def test_influencer_search_input_rejects_blank_query_and_workspace_and_normalize
         InfluencerSearchInput(**{**valid, "query": "   "})
     with pytest.raises(ValidationError):
         InfluencerSearchInput(**{**valid, "workspace_id": "   "})
+
+
+def test_twitter_and_x_profile_urls_share_one_canonical_identity():
+    from app.api.research_routes import _public_influencer_profile
+
+    assert _public_influencer_profile("https://twitter.com/creator") == (
+        "https://x.com/creator", "x"
+    )
+    assert _public_influencer_profile("https://www.x.com/creator/") == (
+        "https://x.com/creator", "x"
+    )
