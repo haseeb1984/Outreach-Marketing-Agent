@@ -284,3 +284,40 @@ main.wrap a:not(.button){text-underline-offset:3px}
   line-height: 1.55;
 }
 .billing-issue-list li + li { margin-top: .2rem; }
+
+
+/* Refined public How It Works page */
+.how-page{padding-bottom:2rem}
+.how-hero{padding:clamp(2rem,5vw,4.5rem);margin-top:2.25rem}
+.how-hero h1{max-width:820px}
+.how-hero .lead{max-width:760px}
+.how-hero-meta{display:flex;align-items:center;gap:.7rem 1.4rem;flex-wrap:wrap;margin-top:1.8rem;color:#365273;font-size:.88rem;font-weight:750}
+.how-hero-meta>span{display:inline-flex;align-items:center;gap:.5rem}
+.how-hero-meta .brand-symbol{width:1.65rem;height:1.65rem;border-radius:.5rem}
+.how-flow{padding:1.5rem 0 2.5rem}
+.how-flow-heading{display:flex;justify-content:space-between;align-items:end;gap:2rem;margin-bottom:1.35rem}
+.how-flow-heading h2,.how-control h2,.how-next h2{margin:.15rem 0 .5rem;color:#14294f;font-size:clamp(1.5rem,3vw,2.15rem);line-height:1.15;letter-spacing:-.045em}
+.how-flow-heading>p{max-width:420px;margin:0 0 .35rem;color:#647792}
+.how-stage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;align-items:stretch}
+.how-stage{position:relative;min-width:0;padding:1.35rem 1.15rem 1.25rem;border:1px solid #dfe8f5;border-radius:1.1rem;background:linear-gradient(155deg,#fff 0%,#fbfdff 100%);box-shadow:0 12px 32px #173b7009}
+.how-stage-top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:1.15rem}
+.how-stage-number{display:grid;place-items:center;width:2.7rem;height:2.7rem;border-radius:.85rem;background:linear-gradient(145deg,#e5efff,#f0edff);color:#175bd4;font-size:.95rem;font-weight:900}
+.how-stage-label{padding:.3rem .65rem;border:1px solid #e1eafa;border-radius:999px;color:#59708e;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.how-stage h3{margin:0 0 .55rem;color:#172e52;font-size:1.12rem;line-height:1.25;letter-spacing:-.025em}
+.how-stage>p{min-height:8.2rem;margin:0;color:#647792;font-size:.9rem;line-height:1.65}
+.how-stage ul{display:grid;gap:.5rem;margin:1rem 0 0;padding:1rem 0 0;border-top:1px solid #e8eef7;list-style:none}
+.how-stage li{position:relative;padding-left:1.15rem;color:#344e70;font-size:.8rem;font-weight:650;line-height:1.45}
+.how-stage li:before{content:"";position:absolute;left:0;top:.48rem;width:.42rem;height:.42rem;border-radius:50%;background:#2d77df;box-shadow:0 0 0 3px #eaf2ff}
+.how-stage-arrow{position:absolute;z-index:2;right:-1.05rem;top:2.15rem;display:grid;place-items:center;width:2rem;height:2rem;border:1px solid #dce7f6;border-radius:50%;background:#fff;color:#2866ca;font-weight:900;box-shadow:0 4px 12px #173b7010}
+.how-control{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:1.2rem;margin:1rem 0 2.5rem;padding:clamp(1.25rem,3vw,2rem);border:1px solid #dce7f6;border-radius:1.2rem;background:linear-gradient(115deg,#0e2040,#173b70);box-shadow:0 18px 42px #173b701b;color:#fff}
+.how-control-mark .brand-symbol{width:3.4rem;height:3.4rem;border:1px solid #ffffff35;background:#ffffff15}
+.how-control .eyebrow{color:#9fc5ff}
+.how-control h2{color:#fff}
+.how-control p:not(.eyebrow){max-width:720px;margin:.35rem 0 0;color:#d0def2;font-size:.92rem}
+.how-control .button{white-space:nowrap;background:#fff;border-color:#fff;color:#17345d}
+.how-next{display:flex;align-items:center;justify-content:space-between;gap:2rem;margin:0 0 2rem;padding:1.6rem 0;border-top:1px solid #dfe8f3}
+.how-next p:not(.eyebrow){margin:.35rem 0 0;color:#647792}
+.how-next .actions{flex:0 0 auto;margin:0}
+@media(max-width:1000px){.how-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.how-stage-arrow{display:none}.how-stage>p{min-height:0}}
+@media(max-width:700px){.how-flow-heading,.how-next{align-items:flex-start;flex-direction:column;gap:.8rem}.how-control{grid-template-columns:auto minmax(0,1fr)}.how-control>.button{grid-column:1/-1;justify-self:start}.how-next .actions{flex-wrap:wrap}}
+@media(max-width:520px){.how-stage-grid{grid-template-columns:1fr}.how-stage{padding:1.15rem}.how-hero-meta{gap:.6rem 1rem}.how-control{grid-template-columns:1fr}.how-control-mark{display:none}.how-control>.button{grid-column:auto;width:100%}.how-next .actions{width:100%}.how-next .actions .button{flex:1}}
