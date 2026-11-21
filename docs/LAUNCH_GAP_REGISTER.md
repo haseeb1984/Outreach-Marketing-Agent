@@ -93,3 +93,10 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 - Added an authenticated Playwright dashboard journey covering selected-platform submission, CSRF header, idempotency key and the explicit audience-metrics-unavailable state.
 - Corrected dashboard URL assertions in the authenticated browser suite while extending it.
 - These new backend and browser tests have been authored but have **not** been executed on the current head. Do not count them as CI-verified until a runner completes them.
+
+## Influencer search input validation (2026-11-21)
+
+- Normalize workspace identifiers and creator-search queries by trimming surrounding whitespace; reject values that become blank before quota reservation or provider requests.
+- Normalize platform selections, remove duplicates and preserve only supported platform identifiers.
+- Added schema regression coverage for whitespace normalization, blank query/workspace rejection and duplicate platform selection.
+- Tests are authored but remain pending the combined CI run; no verification status is inferred.
