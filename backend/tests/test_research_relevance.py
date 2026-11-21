@@ -509,3 +509,25 @@ def test_influencer_search_fails_closed_when_search_provider_is_not_configured(m
 
     assert response.status_code == 503
     assert response.json()["detail"] == "search_provider_not_configured"
+
+
+def test_influencer_search_input_rejects_blank_query_and_workspace_and_normalizes_text():
+    import pytest
+    from pydantic import ValidationError
+    from app.api.research_routes import InfluencerSearchInput
+
+    valid = {
+        "workspace_id": " workspace-a ",
+        "query": " Karachi food creators ",
+        "platforms": [" Instagram ", "instagram", "YOUTUBE"],
+        "idempotency_key": "input-normalization-123",
+    }
+    parsed = InfluencerSearchInput(**valid)
+    assert parsed.workspace_id == "workspace-a"
+    assert parsed.query == "Karachi food creators"
+    assert parsed.platforms == ["instagram", "youtube"]
+
+    with pytest.raises(ValidationError):
+        InfluencerSearchInput(**{**valid, "query": "   "})
+    with pytest.raises(ValidationError):
+        InfluencerSearchInput(**{**valid, "workspace_id": "   "})

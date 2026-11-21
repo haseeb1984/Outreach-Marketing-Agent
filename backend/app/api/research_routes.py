@@ -283,6 +283,14 @@ class InfluencerSearchInput(BaseModel):
             raise ValueError("unsupported_influencer_platform")
         return normalized
 
+    @field_validator("workspace_id", "query")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value_must_not_be_blank")
+        return normalized
+
 
 _INFLUENCER_HOSTS = {
     "instagram.com": "instagram",
