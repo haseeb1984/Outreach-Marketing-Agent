@@ -78,10 +78,11 @@ async def _exercise_account_export(monkeypatch) -> None:
                 other_workspace_id,
             )
             await connection.execute(
-                """INSERT INTO auth_sessions (user_id,token_sha256,expires_at)
-                   VALUES ($1,$2,now()+interval '1 day')""",
+                """INSERT INTO auth_sessions (user_id,token_sha256,csrf_token_sha256,expires_at)
+                   VALUES ($1,$2,$3,now()+interval '1 day')""",
                 user_id,
                 ("a" * 64),
+                ("b" * 64),
             )
 
         app.state.db_pool = pool
