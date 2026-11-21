@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 from app.core.config import settings
 from app.services.domain_authorization_store import DomainAuthorizationStore
 from app.services.subscription_store import SubscriptionStore
-from app.services.website_fetch import FetchLimits
+from app.services.website_fetch import FetchLimits, validate_fetch_configuration
 from app.services.persisted_website_growth_pipeline import discover_persisted_workspace_site
 from app.services.workspace_growth_schedule_runner import WorkspaceGrowthScheduleRunner
 from app.services.workspace_job_queue import WorkspaceJobQueue
@@ -82,6 +82,27 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
         workspace_id = str(job["workspace_id"])
         subscriptions = SubscriptionStore(pool)
         reservation_id = payload.get("usage_reservation_id")
+        try:
+            validate_fetch_configuration()
+        except ValueError:
+            # Reject before consuming quota when production egress is unavailable.
+            if reservation_id:
+                try:
+                    await subscriptions.finish_reservation(
+                        workspace_id=workspace_id,
+                        reservation_id=reservation_id,
+                        outcome="released",
+                    )
+                except Exception:
+                    logger.warning("growth scan quota release failed after egress preflight rejection")
+            await queue.fail(
+                job_id=job["id"],
+                worker_id=worker_id,
+                error_code="website_growth_egress_not_configured",
+                retry_delay_seconds=0,
+                retry=False,
+            )
+            return True
         if reservation_id:
             entitlement = await subscriptions.validate_job_reservation(
                 workspace_id=workspace_id,
