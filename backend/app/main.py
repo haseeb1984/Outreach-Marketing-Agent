@@ -109,6 +109,25 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-CSRF-Token", "Idempotency-Key"],
 )
 
+@app.middleware("http")
+async def apply_security_headers(request: Request, call_next):
+    """Apply browser hardening consistently and prevent authenticated API caching."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    if settings.environment.casefold() == "production" and request.url.scheme == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 from app.api.auth_routes import router as auth_router
 from app.api.prospect_routes import router as prospect_router
 from app.api.campaign_routes import router as campaign_router
