@@ -374,6 +374,8 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
                  "title": "Food Creator", "description": "Karachi restaurant reviews"},
                 {"url": "https://twitter.com/karachifood",
                  "title": "Karachi Food on X", "description": "Food creator in Karachi"},
+                {"url": "https://www.x.com/karachifood/",
+                 "title": "Karachi Food on X", "description": "Food creator in Karachi"},
                 {"url": "https://example.com/creator",
                  "title": "Karachi food influencer", "description": "Not a supported creator profile"},
             ]}}

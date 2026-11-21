@@ -108,3 +108,5 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 
 - Expanded X creator discovery queries to include both `x.com` and the legacy `twitter.com` host. Returned Twitter profile URLs are still normalized to canonical X URLs and deduplicated with matching X-host results.
 - Extended the mocked discovery endpoint regression test to assert both search domains are queried and a legacy Twitter result is returned as a canonical X profile. Tests remain pending successful CI execution.
+
+- Follow-up regression coverage now supplies the same X creator through both `twitter.com` and `x.com`; the endpoint must return one canonical profile, not two separate candidates.
