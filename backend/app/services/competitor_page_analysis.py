@@ -100,6 +100,7 @@ async def analyze_competitor_pages(
             fetch_kwargs: dict[str, Any] = {
                 "limits": limits,
                 "allowed_hosts": {host},
+                "allowed_schemes": {"https"},
             }
             if client is not None:
                 fetch_kwargs["client"] = client
