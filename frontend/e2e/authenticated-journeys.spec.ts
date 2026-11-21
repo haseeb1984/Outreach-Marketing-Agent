@@ -77,13 +77,13 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByLabel("Active workspace")).toHaveValue("workspace-1");
+    await expect(page.getByRole("combobox", { name: "Active workspace" })).toHaveValue("workspace-1");
     await expect(page.getByText("verified@example.test")).toBeVisible();
 
     await page.getByLabel("Create another workspace").fill("Second workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
 
-    await expect(page.getByLabel("Active workspace")).toHaveValue("workspace-2");
+    await expect(page.getByRole("combobox", { name: "Active workspace" })).toHaveValue("workspace-2");
     expect(mutationHeaders?.["x-csrf-token"]).toBe(csrfToken);
   });
 
