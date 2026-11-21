@@ -212,7 +212,7 @@ async def fetch_html(
                             body=body,
                         )
                 raise ValueError("Maximum redirect count exceeded")
-                except TimeoutError as exc:
+        except TimeoutError as exc:
             raise ValueError("Website request timed out") from exc
     except httpx.TimeoutException as exc:
         raise ValueError("Website request timed out") from exc
