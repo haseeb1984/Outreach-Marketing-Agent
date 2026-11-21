@@ -24,6 +24,69 @@ test.describe("account and authenticated browser journeys", () => {
     });
   });
 
+  test("verified account login loads a workspace and sends CSRF on a protected mutation", async ({ page }) => {
+    const csrfToken = "browser-csrf-token-0123456789abcdef";
+    let mutationHeaders: Record<string, string> | undefined;
+
+    await page.route("**/api/v1/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.pathname === "/api/v1/auth/login") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ user: { user_id: "user-1", email: "verified@example.test" }, csrf_token: csrfToken }),
+        });
+      } else if (url.pathname === "/api/v1/auth/me") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ user: { user_id: "user-1", email: "verified@example.test" }, csrf_token: csrfToken }),
+        });
+      } else if (url.pathname === "/api/v1/workspaces" && request.method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [{ id: "workspace-1", name: "Acceptance workspace", role: "owner" }] }),
+        });
+      } else if (url.pathname === "/api/v1/workspaces" && request.method() === "POST") {
+        mutationHeaders = request.headers();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ workspace_id: "workspace-2", name: "Second workspace", role: "owner" }),
+        });
+      } else if (url.pathname === "/api/v1/auth/sessions") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [{ id: "session-current", created_at: "2026-01-01T00:00:00Z", last_seen_at: "2026-01-01T00:00:00Z", expires_at: "2027-01-01T00:00:00Z", is_current: true }] }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [] }),
+        });
+      }
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Email address").fill("verified@example.test");
+    await page.getByLabel("Password").fill("correct-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page).toHaveURL(/\\/dashboard$/);
+    await expect(page.getByLabel("Active workspace")).toHaveValue("workspace-1");
+    await expect(page.getByText("verified@example.test")).toBeVisible();
+
+    await page.getByLabel("Create another workspace").fill("Second workspace");
+    await page.getByRole("button", { name: "Create workspace" }).click();
+
+    await expect(page.getByLabel("Active workspace")).toHaveValue("workspace-2");
+    expect(mutationHeaders?.["x-csrf-token"]).toBe(csrfToken);
+  });
+
   test("login rejects invalid credentials without exposing backend details", async ({ page }) => {
     await page.route("**/api/v1/auth/login", async (route) => {
       await route.fulfill({
