@@ -422,7 +422,9 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
     assert body["count"] == 3
     assert {item["platform"] for item in body["items"]} == {"instagram", "youtube", "x"}
     assert "https://x.com/karachifood" in {item["profile_url"] for item in body["items"]}
-    assert len({item["profile_url"] for item in body["items"]}) == 2
+    assert len({item["profile_url"] for item in body["items"]}) == 3
+    assert sum(item["platform"] == "x" for item in body["items"]) == 1
+    assert all(not item["profile_url"].startswith("https://twitter.com/") for item in body["items"])
     assert all(item["requires_human_review"] for item in body["items"])
     assert all(item["audience_metrics"] is None for item in body["items"])
     assert "engagement rate" in body["unavailable_metrics"]
