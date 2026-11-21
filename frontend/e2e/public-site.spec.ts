@@ -26,6 +26,19 @@ test.describe("public website browser acceptance", () => {
     });
   }
 
+  test("public pages expose core document and landmark semantics", async ({ page }) => {
+    for (const [route] of publicRoutes) {
+      await page.goto(route);
+      await expect(page.locator("html")).toHaveAttribute("lang", /.+/);
+      await expect(page.getByRole("main"), `${route} main landmark`).toHaveCount(1);
+      await expect(page.getByRole("heading", { level: 1 }), `${route} primary heading`).toHaveCount(1);
+      const unnamedButtons = await page.getByRole("button").evaluateAll((buttons) =>
+        buttons.filter((button) => !(button.textContent || "").trim() && !button.getAttribute("aria-label") && !button.getAttribute("aria-labelledby")).length
+      );
+      expect(unnamedButtons, `${route} buttons need accessible names`).toBe(0);
+    }
+  });
+
   test("homepage remains usable at mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
