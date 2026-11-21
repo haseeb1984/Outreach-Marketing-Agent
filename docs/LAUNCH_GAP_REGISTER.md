@@ -110,3 +110,9 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 - Extended the mocked discovery endpoint regression test to assert both search domains are queried and a legacy Twitter result is returned as a canonical X profile. Tests remain pending successful CI execution.
 
 - Follow-up regression coverage now supplies the same X creator through both `twitter.com` and `x.com`; the endpoint must return one canonical profile, not two separate candidates.
+
+
+## Accessibility reference integrity progress (2026-11-21)
+
+- Extended the public-route semantic browser check to validate every token in `aria-labelledby` against an existing element ID. This catches controls that appear labelled in markup but resolve to no accessible-name source.
+- This remains a structural regression check; it does not replace computed accessible-name inspection, keyboard testing, contrast checks or screen-reader review. The current-head suite has not been executed.

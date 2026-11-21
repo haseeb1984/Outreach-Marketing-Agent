@@ -44,6 +44,13 @@ test.describe("public website browser acceptance", () => {
         }).length
       );
       expect(unnamedControls, `${route} interactive controls need accessible names`).toBe(0);
+      const brokenLabelReferences = await page.locator("[aria-labelledby]").evaluateAll((elements) => {
+        const ids = new Set(Array.from(document.querySelectorAll("[id]")).map((element) => element.id));
+        return elements.filter((element) =>
+          (element.getAttribute("aria-labelledby") || "").trim().split(/\\s+/).filter(Boolean).some((id) => !ids.has(id))
+        ).length;
+      });
+      expect(brokenLabelReferences, `${route} aria-labelledby references must resolve to existing elements`).toBe(0);
       const unnamedImages = await page.locator("img:not([aria-hidden='true'])").evaluateAll((images) =>
         images.filter((image) => !image.hasAttribute("alt")).length
       );
