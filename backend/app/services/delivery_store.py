@@ -220,6 +220,19 @@ class DeliveryStore:
                          AND r.idempotency_key='delivery-send:' || m.id::text
                          AND r.status='reserved'
                        RETURNING r.id
+                   ), paused_followups AS (
+                       UPDATE outreach_followup_enrollments e
+                       SET status='paused',
+                           pause_reason='delivery_uncertain',
+                           last_error_code='followup_delivery_uncertain',
+                           updated_at=now()
+                       FROM marked m
+                       JOIN outreach_deliveries q
+                         ON q.id=m.id AND q.workspace_id=m.workspace_id
+                       WHERE e.workspace_id=m.workspace_id
+                         AND e.current_draft_id=q.draft_id
+                         AND e.status='awaiting_approval'
+                       RETURNING e.id
                    )
                    SELECT count(*) FROM marked""",
                 workspace_id, older_than_seconds, limit,
