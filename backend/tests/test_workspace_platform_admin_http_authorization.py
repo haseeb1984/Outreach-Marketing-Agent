@@ -119,3 +119,26 @@ def test_platform_admin_routes_fail_closed_when_allowlist_is_empty(monkeypatch):
     assert response.status_code == 503
     assert response.json()["detail"] == "platform_admin_allowlist_not_configured"
     assert not connection.executed
+
+
+def test_workspace_member_cannot_read_another_tenants_members_via_http(monkeypatch):
+    async def authenticate(request):
+        return None, None, {
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "email": "tenant-a@example.test",
+        }
+
+    class _DenyCrossTenant:
+        async def authorize_workspace(self, **kwargs):
+            assert kwargs["workspace_id"] == "tenant-b"
+            return False
+
+    monkeypatch.setattr(workspace_member_routes, "_authenticated", authenticate)
+    with TestClient(app) as client:
+        app.state.auth_store = _DenyCrossTenant()
+        response = client.get(
+            "/api/v1/workspaces/members?workspace_id=tenant-b"
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "workspace_not_found"
