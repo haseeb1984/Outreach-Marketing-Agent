@@ -1,9 +1,8 @@
-"""Bounded HTTP retrieval primitives for the read-only website audit.
+"""Bounded HTTP retrieval with connection-pinned DNS for the read-only website audit.
 
-This service manually follows redirects and checks DNS answers before each request.
-For hostile multi-tenant production traffic, deploy behind an egress proxy that
-pins validated destination IPs to the actual connection; a separate DNS lookup
-cannot by itself eliminate DNS-rebinding races in a generic HTTP client.
+Each request connects to a previously validated IP literal while preserving the
+original Host header and TLS SNI/certificate hostname. Redirects are handled
+manually and independently resolved/pinned before the next connection.
 """
 from __future__ import annotations
 
@@ -23,38 +22,21 @@ from app.services.website_audit import validate_page_url
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
-def validate_fetch_configuration() -> str | None:
-    """Fail before reserving quota when production crawler egress is not configured."""
-    if settings.environment.strip().lower() != "production":
-        return None
-    if not settings.trusted_egress_proxy_url:
-        raise ValueError("Trusted egress proxy is required in production")
-    return _validate_trusted_proxy_url(settings.trusted_egress_proxy_url)
-
-
-def _validate_trusted_proxy_url(value: str | None) -> str:
-    """Validate proxy URL shape without echoing potentially sensitive configuration."""
-    if not isinstance(value, str) or not value or value != value.strip():
-        raise ValueError("Trusted egress proxy URL is invalid")
-    if any(ord(char) < 32 for char in value):
-        raise ValueError("Trusted egress proxy URL is invalid")
-    try:
-        parsed = urlsplit(value)
-        # Credentials in proxy URLs can leak through diagnostics; configure proxy auth
-        # using deployment-managed transport secrets rather than embedding userinfo.
-        if (
-            parsed.scheme.lower() not in {"http", "https"}
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.query
-            or parsed.fragment
-        ):
-            raise ValueError("Trusted egress proxy URL is invalid")
-        _ = parsed.port  # Force validation of malformed/out-of-range ports.
-    except ValueError:
-        raise ValueError("Trusted egress proxy URL is invalid") from None
-    return value
+def _pinned_request_target(url: str, address: str) -> tuple[str, dict[str, str], dict[str, str]]:
+    """Return an IP-literal URL plus original Host and TLS SNI identity."""
+    parsed = urlsplit(url)
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    ip = ipaddress.ip_address(address.split("%", 1)[0])
+    pinned_host = f"[{ip.compressed}]" if ip.version == 6 else ip.compressed
+    original_host = f"[{hostname}]" if ":" in hostname else hostname
+    port = parsed.port
+    default_port = 443 if parsed.scheme.lower() == "https" else 80
+    pinned_netloc = pinned_host if port in {None, default_port} else f"{pinned_host}:{port}"
+    host_header = original_host if port in {None, default_port} else f"{original_host}:{port}"
+    pinned_url = urlunsplit((parsed.scheme, pinned_netloc, parsed.path or "/", parsed.query, ""))
+    headers = {"Host": host_header}
+    extensions = {"sni_hostname": hostname} if parsed.scheme.lower() == "https" else {}
+    return pinned_url, headers, extensions
 
 
 @dataclass(frozen=True)
@@ -126,14 +108,12 @@ async def fetch_html(
     requested_url = validate_page_url(url)
     owns_client = client is None
     is_production = settings.environment.strip().lower() == "production"
-    proxy_url = validate_fetch_configuration()
     if is_production and client is not None:
         raise ValueError("Injected HTTP clients are disabled in production")
     active_client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(limits.timeout_seconds),
         follow_redirects=False,
         trust_env=False,
-        proxy=proxy_url,
         headers={"User-Agent": "OutreachMarketingAgentAudit/0.1 (+read-only; bounded-fetch)"},
     )
     current_url = requested_url
@@ -160,7 +140,18 @@ async def fetch_html(
                             raise ValueError("DNS returned an invalid IP address") from exc
                         if not resolved_ip.is_global:
                             raise ValueError("Hostname resolves to a non-public IP address")
-                    async with active_client.stream("GET", current_url, follow_redirects=False) as response:
+                    # Connect to the exact address we just validated. The original hostname
+                    # remains the HTTP Host and TLS SNI/certificate identity.
+                    pinned_url, request_headers, request_extensions = _pinned_request_target(
+                        current_url, addresses[0]
+                    )
+                    async with active_client.stream(
+                        "GET",
+                        pinned_url,
+                        headers=request_headers,
+                        extensions=request_extensions,
+                        follow_redirects=False,
+                    ) as response:
                         if response.status_code in {301, 302, 303, 307, 308}:
                             location = response.headers.get("location")
                             if not location:
@@ -206,7 +197,7 @@ async def fetch_html(
                             body = b"".join(chunks).decode("utf-8", errors="replace")
                         return FetchedPage(
                             requested_url=requested_url,
-                            final_url=str(response.url),
+                            final_url=current_url,
                             status_code=response.status_code,
                             content_type=content_type,
                             body=body,
