@@ -51,16 +51,28 @@ async def list_workspace_members(
     request: Request,
     workspace_id: str = Query(min_length=1, max_length=200),
 ) -> dict:
-    await _authorized_session(request, workspace_id)
+    session = await _authorized_session(request, workspace_id)
     try:
         async with _pool(request).acquire() as conn:
-            rows = await conn.fetch(
-                """SELECT m.user_id::text AS user_id,u.email,u.status AS account_status,u.email_verified_at,u.last_login_at,m.role,m.status,m.created_at,m.updated_at
-                   FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
-                   WHERE m.workspace_id=$1 AND m.status IN ('active','suspended')
-                   ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END,u.email""",
-                workspace_id,
-            )
+            async with conn.transaction():
+                await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    workspace_id,
+                )
+                actor_role = await conn.fetchval(
+                    """SELECT role FROM workspace_memberships
+                       WHERE workspace_id=$1 AND user_id=$2 AND status='active' FOR UPDATE""",
+                    workspace_id, UUID(str(session["user_id"])),
+                )
+                if actor_role not in {"owner", "admin"}:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                rows = await conn.fetch(
+                    """SELECT m.user_id::text AS user_id,u.email,u.status AS account_status,u.email_verified_at,u.last_login_at,m.role,m.status,m.created_at,m.updated_at
+                       FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+                       WHERE m.workspace_id=$1 AND m.status IN ('active','suspended')
+                       ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END,u.email""",
+                    workspace_id,
+                )
         return {"items": [dict(row) for row in rows]}
     except HTTPException:
         raise
