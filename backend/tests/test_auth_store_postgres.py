@@ -143,7 +143,17 @@ async def _exercise_password_reset() -> None:
         assert login_events == 3  # one audit event for each of the three created sessions
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
-        token = reset["reset_token"]
+        superseded_token = reset["reset_token"]
+
+        # Issuing a fresh reset link invalidates every earlier unconsumed link.
+        replacement_reset = await store.issue_password_reset(
+            email=f"{user_id.hex}@example.test"
+        )
+        assert replacement_reset is not None
+        token = replacement_reset["reset_token"]
+        assert await store.reset_password(
+            token=superseded_token, new_password="superseded-password-for-test"
+        ) is False
         new_password = "updated-password-for-integration"
 
         # Competing requests for one bearer token must have exactly one winner.
@@ -166,6 +176,13 @@ async def _exercise_password_reset() -> None:
                 "SELECT token_sha256 FROM password_reset_tokens WHERE user_id=$1", user_id
             )
             assert stored != token
+            reset_events = await conn.fetchval(
+                """SELECT count(*) FROM security_audit_events
+                   WHERE actor_user_id=$1 AND event_type='account.password_reset'
+                     AND outcome='success'""",
+                user_id,
+            )
+            assert reset_events == 1
         finally:
             await conn.close()
 
