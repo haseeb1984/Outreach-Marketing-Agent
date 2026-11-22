@@ -76,6 +76,12 @@ async def update_workspace_settings(payload: WorkspaceSettingsUpdate, request: R
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
+                workspace = await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    payload.workspace_id,
+                )
+                if workspace is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 membership = await conn.fetchrow(
                     """SELECT role,status FROM workspace_memberships
                        WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
