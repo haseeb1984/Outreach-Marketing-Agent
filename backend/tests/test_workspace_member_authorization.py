@@ -34,7 +34,10 @@ class _Connection:
         self.calls.append(("fetchrow", query, args))
         if "FROM workspaces WHERE id=$1 FOR UPDATE" in query:
             return {"id": "workspace-test"}
-        if "WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE" in query:
+        if (
+            "WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE" in query
+            or "WHERE m.workspace_id=$1 AND m.user_id=$2 FOR UPDATE OF m,u" in query
+        ):
             if args[1] == ACTOR_ID:
                 return {"role": self.actor_role, "status": "active"}
             return {
