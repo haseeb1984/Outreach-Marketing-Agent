@@ -22,6 +22,17 @@ from app.services.website_audit import validate_page_url
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
+def validate_fetch_configuration() -> None:
+    """Validate static fetch safety configuration.
+
+    Outbound requests are pinned to validated public IP addresses at connection
+    time, so production does not require a separately provisioned egress proxy
+    or proxy secret. Keep this callable for API/worker startup and readiness
+    checks; there is no environment-dependent proxy configuration to validate.
+    """
+    return None
+
+
 def _pinned_request_target(url: str, address: str) -> tuple[str, dict[str, str], dict[str, str]]:
     """Return an IP-literal URL plus original Host and TLS SNI identity."""
     parsed = urlsplit(url)
