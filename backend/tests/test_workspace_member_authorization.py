@@ -113,3 +113,58 @@ def test_workspace_owner_role_cannot_be_changed(monkeypatch):
     assert exc.value.status_code == 409
     assert exc.value.detail == "workspace_owner_role_is_protected"
     assert not any(call[0] == "execute" for call in connection.calls)
+
+def test_admin_cannot_remove_another_admin(monkeypatch):
+    connection = _Connection(actor_role="admin", target_role="admin")
+    _configure(monkeypatch, connection)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            workspace_member_routes.remove_workspace_member(
+                TARGET_ID, SimpleNamespace(), "workspace-test"
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "only_owner_can_remove_admin"
+    assert not any(
+        call[0] == "execute" and "SET status='revoked'" in call[1]
+        for call in connection.calls
+    )
+    assert not any(
+        call[0] == "execute" and "workspace.member.removed" in call[1]
+        for call in connection.calls
+    )
+
+
+def test_workspace_owner_cannot_be_removed(monkeypatch):
+    connection = _Connection(actor_role="owner", target_role="owner")
+    _configure(monkeypatch, connection)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            workspace_member_routes.remove_workspace_member(
+                TARGET_ID, SimpleNamespace(), "workspace-test"
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "workspace_owner_cannot_be_removed"
+    assert not any(call[0] == "execute" for call in connection.calls)
+
+
+def test_member_cannot_remove_other_workspace_members(monkeypatch):
+    connection = _Connection(actor_role="member", target_role="member")
+    _configure(monkeypatch, connection)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            workspace_member_routes.remove_workspace_member(
+                TARGET_ID, SimpleNamespace(), "workspace-test"
+            )
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "workspace_admin_required"
+    assert not any(call[0] == "execute" for call in connection.calls)
+
