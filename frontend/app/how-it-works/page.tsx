@@ -45,7 +45,7 @@ export default function HowItWorksPage() {
 
       <section className="how-next">
         <div><p className="eyebrow">Ready to get started?</p><h2>Build a workflow you can understand and control.</h2><p>Explore the platform capabilities or create your workspace to begin.</p></div>
-        <div className="actions"><Link className="button" href="/register">Get started free</Link><Link className="button secondary" href="/features">Explore features</Link></div>
+        <div className="actions"><Link className="button" href="/register">Create your account</Link><Link className="button secondary" href="/features">Explore features</Link></div>
       </section>
     </main>
     <SiteFooter />
