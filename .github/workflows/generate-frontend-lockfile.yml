@@ -1,11 +1,7 @@
 name: Generate and verify frontend lockfile
 
+# Manual only: avoid consuming Actions runners during normal development.
 on:
-  push:
-    branches: [fix/launch-blockers-and-readiness]
-    paths:
-      - "frontend/package.json"
-      - ".github/workflows/generate-frontend-lockfile.yml"
   workflow_dispatch:
 
 permissions:
