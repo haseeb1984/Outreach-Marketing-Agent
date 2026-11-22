@@ -52,9 +52,10 @@ Never send Paddle secret values in chat.
 
 **Execution update (2026-11-22):** GitHub Actions migration run `45051010880` completed successfully on `main` commit `583117609d7c69a0148104862c546d9b9294ae86`. Its job log explicitly reports migrations 057–062 applied using the GitHub Actions `DATABASE_URL` secret. Backend CI run `45050136091` passed the Python 3.11, 3.12 and 3.13 jobs on the same commit.
 
+**Verification update (2026-11-22):** The owner ran the supplied read-only production SQL verification and reported that every check returned PASS. This covered the `schema_migrations` ledger and the specified schema checks for migrations 057–062. The raw SQL output was not supplied to this agent, so this is recorded as owner-reported verification.
+
 **Still outstanding:**
 - The migration workflow did not create a pre-migration backup; the run has no artifacts and no backup evidence was found. Do not represent this migration as having a verified pre-change backup.
-- Independently query the production `schema_migrations` ledger and verify the expected columns, indexes, foreign keys, delete actions, constraints and triggers for migrations 057–062.
 - Reconcile backup/recovery evidence and perform the appropriate recovery-readiness checks before closing LG-01.
 
 No application deployment was performed as part of the migration run. This checklist records the completed migration execution; it does not authorize any additional production database or application changes.
