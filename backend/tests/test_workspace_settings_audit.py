@@ -13,8 +13,10 @@ class _Transaction:
 
 
 class _Connection:
-    def __init__(self):
+    def __init__(self, role="owner", status="active"):
         self.calls = []
+        self.role = role
+        self.status = status
 
     def transaction(self):
         return _Transaction()
@@ -22,7 +24,7 @@ class _Connection:
     async def fetchrow(self, query, *args):
         self.calls.append(("fetchrow", query, args))
         if "workspace_memberships" in query:
-            return {"role": "owner", "status": "active"}
+            return {"role": self.role, "status": self.status}
         return {"id": args[0], "name": args[1], "created_at": "2026-10-28T00:00:00Z"}
 
     async def execute(self, query, *args):
@@ -135,4 +137,60 @@ def test_workspace_settings_name_is_trimmed_and_blank_names_are_rejected():
             workspace_id="workspace-read",
             name="   ",
         )
+
+def test_workspace_settings_write_rechecks_role_after_authorization(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    connection = _Connection(role="member", status="active")
+
+    async def authorize(request, workspace_id, *, write=False):
+        assert write
+        # Simulate a stale authorization cache that still permits this actor.
+        return {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(workspace_settings_routes, "_authorized", authorize)
+    monkeypatch.setattr(workspace_settings_routes, "_pool", lambda request: _Pool(connection))
+    payload = workspace_settings_routes.WorkspaceSettingsUpdate(
+        workspace_id="workspace-test",
+        name="Unauthorized rename",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            workspace_settings_routes.update_workspace_settings(payload, SimpleNamespace())
+        )
+
+    assert exc.value.status_code == 404
+    assert len(connection.calls) == 1
+    assert "FOR UPDATE" in connection.calls[0][1]
+    assert not any("UPDATE workspaces SET name" in call[1] for call in connection.calls)
+    assert not any("security_audit_events" in call[1] for call in connection.calls)
+
+
+def test_suspended_workspace_owner_cannot_update_settings(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    connection = _Connection(role="owner", status="suspended")
+
+    async def authorize(request, workspace_id, *, write=False):
+        assert write
+        return {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(workspace_settings_routes, "_authorized", authorize)
+    monkeypatch.setattr(workspace_settings_routes, "_pool", lambda request: _Pool(connection))
+    payload = workspace_settings_routes.WorkspaceSettingsUpdate(
+        workspace_id="workspace-test",
+        name="Suspended owner rename",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            workspace_settings_routes.update_workspace_settings(payload, SimpleNamespace())
+        )
+
+    assert exc.value.status_code == 404
+    assert len(connection.calls) == 1
+    assert not any("UPDATE workspaces SET name" in call[1] for call in connection.calls)
 
