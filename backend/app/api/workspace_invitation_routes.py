@@ -315,6 +315,12 @@ async def revoke_invitation(
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
+                workspace = await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    workspace_id,
+                )
+                if workspace is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 actor_id = UUID(str(session["user_id"]))
                 actor_role = await conn.fetchval(
                     """SELECT role FROM workspace_memberships
