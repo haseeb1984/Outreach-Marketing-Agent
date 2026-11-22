@@ -606,3 +606,71 @@ def test_session_revocation_rejects_malformed_id_without_store_write(monkeypatch
     assert exc.value.status_code == 404
     assert exc.value.detail == "session_not_found"
 
+def test_session_revocation_hides_store_failure(monkeypatch):
+    import asyncio
+    from uuid import UUID
+
+    target_id = UUID("00000000-0000-0000-0000-000000000003")
+
+    class BrokenStore:
+        async def revoke_session_by_id(self, **kwargs):
+            raise RuntimeError("private session store exception")
+
+    async def authenticated(_request):
+        return BrokenStore(), "session-token", {
+            "user_id": "user-1",
+            "session_id": "00000000-0000-0000-0000-000000000002",
+        }
+
+    monkeypatch.setattr(auth_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(auth_routes, "_check_csrf", lambda request, session: None)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth_routes.revoke_account_session(str(target_id), SimpleNamespace()))
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "session_revoke_unavailable"
+    assert "private session store exception" not in str(exc.value.detail)
+
+
+def test_password_reset_request_keeps_generic_response_when_email_delivery_fails(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class ResetStore:
+        async def issue_password_reset(self, *, email):
+            return {
+                "reset_token": "r" * 43,
+                "expires_at": datetime.now(timezone.utc) + timedelta(minutes=30),
+            }
+
+    class AllowLimiter:
+        async def consume(self, **kwargs):
+            return {
+                "allowed": True,
+                "remaining": 9,
+                "reset_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+            }
+
+    async def failed_send(self, **kwargs):
+        raise auth_routes.EmailDeliveryFailed("private SMTP provider response")
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    monkeypatch.setattr(auth_routes.SMTPEmailDelivery, "send_password_reset_email", failed_send)
+
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = ResetStore()
+        app.state.auth_rate_limiter = AllowLimiter()
+        response = client.post(
+            "/api/v1/auth/password-reset/request",
+            headers={"Origin": "https://app.example.test"},
+            json={"email": "person@example.test"},
+        )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "message": "If the account is eligible, a password-reset email will be sent."
+    }
+    assert "private SMTP provider response" not in response.text
+
