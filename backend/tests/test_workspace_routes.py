@@ -122,7 +122,26 @@ def test_invitation_list_query_uses_real_sql_newlines(monkeypatch):
 
     monkeypatch.setattr(workspace_invitation_routes, "_authenticated", authenticate)
     monkeypatch.setattr(workspace_invitation_routes, "_authorize_admin", authorize)
-    connection = _Connection(active_workspaces=0)
+    class _InvitationListConnection:
+        def __init__(self):
+            self.calls = []
+
+        def transaction(self):
+            return _Transaction()
+
+        async def fetchrow(self, query, *args):
+            self.calls.append(("fetchrow", query, args))
+            return {"id": args[0]}
+
+        async def fetchval(self, query, *args):
+            self.calls.append(("fetchval", query, args))
+            return "owner"
+
+        async def fetch(self, query, *args):
+            self.calls.append(("fetch", query, args))
+            return []
+
+    connection = _InvitationListConnection()
     with TestClient(app) as client:
         app.state.db_pool = _Pool(connection)
         response = client.get("/api/v1/workspaces/invitations?workspace_id=workspace-test")
@@ -160,6 +179,11 @@ def test_invitation_revocation_locks_and_rechecks_actor_membership(monkeypatch):
 
         def transaction(self):
             return _Transaction()
+
+        async def fetchrow(self, query, *args):
+            self.calls.append(("fetchrow", query, args))
+            assert "workspaces" in query and "FOR UPDATE" in query
+            return {"id": args[0]}
 
         async def fetchval(self, query, *args):
             self.calls.append(("fetchval", query, args))
@@ -208,6 +232,11 @@ def test_invitation_revocation_rejects_actor_after_role_downgrade(monkeypatch):
 
         def transaction(self):
             return _Transaction()
+
+        async def fetchrow(self, query, *args):
+            self.calls.append(("fetchrow", query, args))
+            assert "workspaces" in query and "FOR UPDATE" in query
+            return {"id": args[0]}
 
         async def fetchval(self, query, *args):
             self.calls.append(("fetchval", query, args))
