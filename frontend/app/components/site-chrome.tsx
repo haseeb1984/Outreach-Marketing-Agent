@@ -33,7 +33,7 @@ function BrandLockup({ footer = false }: { footer?: boolean }) {
 export function SiteHeader() {
   return <header className="site-header"><div className="wrap topbar">
     <BrandLockup/>
-    <nav className="nav" aria-label="Main navigation">{primary.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}<Link className="security-nav" href="/security">♢ Security</Link><Link className="login-link" href="/login">Login</Link><Link className="button nav-cta" href="/register">Get started free <span aria-hidden="true">→</span></Link></nav>
+    <nav className="nav" aria-label="Main navigation">{primary.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}<Link className="security-nav" href="/security">♢ Security</Link><Link className="login-link" href="/login">Login</Link><Link className="button nav-cta" href="/register">Create your account <span aria-hidden="true">→</span></Link></nav>
   </div></header>;
 }
 export function SiteFooter() {
