@@ -260,6 +260,16 @@ def test_invitation_lifecycle_audit_records_all_transitions_without_tokens():
     assert "json.dumps({\"invitation_id\": str(invitation_id)" in content
 
 
+def test_workspace_settings_update_locks_workspace_before_membership():
+    from pathlib import Path
+
+    source = Path(workspace_routes.__file__).parent / "workspace_settings_routes.py"
+    content = source.read_text(encoding="utf-8")
+    workspace_lock = content.index("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE")
+    membership_lock = content.index("SELECT role,status FROM workspace_memberships")
+    assert workspace_lock < membership_lock
+
+
 def test_workspace_member_writes_serialize_with_ownership_transfer_and_audit_roles():
     from pathlib import Path
 
