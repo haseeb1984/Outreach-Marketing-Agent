@@ -131,3 +131,12 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 
 
 - Added [Owner Activation Checklist](OWNER_ACTIVATION_CHECKLIST.md) with the exact non-secret owner inputs, missing Vercel environment keys, Paddle sandbox/live gates, migration approvals, and GitHub Actions recovery steps. It explicitly prohibits sharing secrets in chat and separates customer-owned SMTP from platform configuration.
+
+## Current branch verification checkpoint (2026-11-22)
+
+- PR #89 head `140ffe382505411cf56ee6d75d38af4b3a1eb48d` completed Backend CI and Hostinger Frontend CI successfully (workflow runs `44970828384` and `44970828410`).
+- Backend CI completed the Python 3.11, 3.12 and 3.13 test jobs successfully, including the PostgreSQL-backed test environment.
+- Frontend CI completed TypeScript checking, the production build, production-server smoke tests, and all 19 Playwright browser tests successfully. The browser run includes six authenticated journeys, influencer discovery, all 10 public routes, semantic accessibility-baseline checks and the mobile homepage viewport check.
+- The frontend workflow also generated a CI ZIP artifact. This is not a release approval and does not close the external launch gaps below; no Hostinger upload, production migration, production deployment, live billing activation, WhatsApp activation or real outreach was performed by this verification.
+- The npm lockfile remains absent from the branch, so the CI install still uses the workflow's non-lockfile fallback. LG-12 remains open for reproducible dependency installation despite the successful current CI run.
+- The passing mocked/authenticated browser journeys do not replace PostgreSQL-backed HTTP staging with two real tenants, provider acceptance, or production operations evidence. LG-01 through LG-11 and LG-13 through LG-18 remain open until their stated acceptance evidence exists.
