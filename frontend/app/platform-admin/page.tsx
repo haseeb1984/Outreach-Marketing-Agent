@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { BrandMark } from "../components/site-chrome";
 
 type Plan = { slug: string; name: string; description: string; price_id: string; display_price: string | null; currency: string | null; billing_interval: string | null; entitlements: Record<string, { enabled: boolean; monthly_limit?: number | null }>; active: boolean; created_at?: string; updated_at?: string };
 type Client = { workspace_id: string; workspace_name: string; owner_email: string | null; subscription_status: string | null; package_name: string | null; billing_period_starts_at: string | null; billing_period_ends_at: string | null; usage_consumed: number; usage_reserved: number; usage_released: number };
@@ -198,7 +199,7 @@ export default function PlatformAdminPage() {
   }
 
   return <main className="page-shell platform-admin-shell">
-    <header className="page-header platform-admin-header"><p className="eyebrow">Platform operations</p><h1>SaaS administration</h1><p>Global client, subscription, package and usage visibility. Access is restricted by the server-side platform-admin email allowlist.</p><div className="platform-admin-header-actions"><Link href="/dashboard">Return to workspace dashboard</Link><button className="button secondary" type="button" disabled={!csrf || refreshing || busy} onClick={refreshAll}>{refreshing ? "Refreshing…" : "Refresh platform data"}</button>{lastRefreshed && <span className="fine">Last refreshed {new Date(lastRefreshed).toLocaleTimeString()}</span>}</div></header>
+    <header className="page-header platform-admin-header"><Link className="brand" href="/" aria-label="Outreach Marketing Agent home"><BrandMark/><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link><p className="eyebrow">Platform operations</p><h1>SaaS administration</h1><p>Global client, subscription, package and usage visibility. Access is restricted by the server-side platform-admin email allowlist.</p><div className="platform-admin-header-actions"><Link href="/dashboard">Return to workspace dashboard</Link><button className="button secondary" type="button" disabled={!csrf || refreshing || busy} onClick={refreshAll}>{refreshing ? "Refreshing…" : "Refresh platform data"}</button>{lastRefreshed && <span className="fine">Last refreshed {new Date(lastRefreshed).toLocaleTimeString()}</span>}</div></header>
     {error && <p className="notice" role="alert">{error}</p>}{notice && <p className="notice" role="status">{notice}</p>}
     {!overview && !error && <section className="card"><p>Loading protected platform summary…</p></section>}
     {overview && <>
