@@ -19,10 +19,12 @@ class _Transaction:
 
 
 class _Connection:
-    def __init__(self, active_memberships, account_exists=True, invitation_role="member"):
+    def __init__(self, active_memberships, account_exists=True, invitation_role="member", invited_email="person@example.test", expired=False):
         self.active_memberships = active_memberships
         self.account_exists = account_exists
         self.invitation_role = invitation_role
+        self.invited_email = invited_email
+        self.expired = expired
         self.calls = []
         self.token = "t" * 43
 
@@ -37,10 +39,10 @@ class _Connection:
             return {
                 "id": UUID("00000000-0000-0000-0000-000000000010"),
                 "workspace_id": "workspace-test",
-                "invited_email": "person@example.test",
+                "invited_email": self.invited_email,
                 "role": self.invitation_role,
                 "status": "pending",
-                "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
+                "expires_at": datetime.now(timezone.utc) - timedelta(days=1) if self.expired else datetime.now(timezone.utc) + timedelta(days=1),
             }
         if "FROM app_users WHERE id=$1 FOR UPDATE" in query:
             return {"id": args[0], "status": "active", "email_verified_at": datetime.now(timezone.utc)} if self.account_exists else None
@@ -128,3 +130,48 @@ def test_invitation_acceptance_rejects_missing_account_without_membership_insert
     assert exc.value.detail == "account_unavailable"
     assert not any(call[0] == "execute" and "INSERT INTO workspace_memberships" in call[1] for call in connection.calls)
     assert not any(call[0] == "execute" and "SET status='accepted'" in call[1] for call in connection.calls)
+
+def test_invitation_acceptance_rejects_different_signed_in_email_without_consuming_token(monkeypatch):
+    connection = _Connection(active_memberships=0, invited_email="different@example.test")
+    _configure(monkeypatch, connection)
+    payload = workspace_invitation_routes.InvitationAccept(token=connection.token)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(workspace_invitation_routes.accept_invitation(payload, SimpleNamespace()))
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "invitation_email_mismatch"
+    assert not any(
+        call[0] == "execute" and "INSERT INTO workspace_memberships" in call[1]
+        for call in connection.calls
+    )
+    assert not any(
+        call[0] == "execute" and "SET status='accepted'" in call[1]
+        for call in connection.calls
+    )
+
+
+def test_expired_invitation_is_marked_expired_before_error_is_returned(monkeypatch):
+    connection = _Connection(active_memberships=0, expired=True)
+    _configure(monkeypatch, connection)
+    payload = workspace_invitation_routes.InvitationAccept(token=connection.token)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(workspace_invitation_routes.accept_invitation(payload, SimpleNamespace()))
+
+    assert exc.value.status_code == 410
+    assert exc.value.detail == "invitation_expired"
+    expiry_update = next(
+        call for call in connection.calls
+        if call[0] == "execute" and "SET status='expired'" in call[1]
+    )
+    assert expiry_update[2][0] == UUID("00000000-0000-0000-0000-000000000010")
+    assert any(
+        call[0] == "execute" and "workspace.invitation.expired" in call[1]
+        for call in connection.calls
+    )
+    assert not any(
+        call[0] == "execute" and "INSERT INTO workspace_memberships" in call[1]
+        for call in connection.calls
+    )
+
