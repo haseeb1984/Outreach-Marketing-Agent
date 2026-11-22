@@ -25,7 +25,7 @@ The Vercel environment-key inventory was inspected without decrypting values. Pr
 | `PLATFORM_ADMIN_EMAILS` | Set to `outreach@juncsys.com` (or a comma-separated list of exact authorized addresses). This remains an environment variable, not a hard-coded identity; configure it in Vercel Production and Preview as appropriate. |
 | `AI_API_KEY` | Provider API key for the configured AI base URL/model, if AI drafting is part of launch. |
 | `BRAVE_SEARCH_API_KEY` | Search provider API key for prospect/influencer discovery. |
-| `TRUSTED_EGRESS_PROXY_URL` | Trusted crawler egress proxy URL; provision infrastructure first. |
+| `TRUSTED_EGRESS_PROXY_URL` | Sensitive Vercel variable. Provision an operator-managed HTTP(S) egress proxy that blocks private, loopback, link-local and cloud-metadata destinations at connection time; do not use an arbitrary public proxy. Set its endpoint in Production and the required Preview/Development environments, redeploy the backend, then verify a controlled public fetch succeeds and private/metadata destinations are blocked. |
 | `META_WHATSAPP_ACCESS_TOKEN` | Meta system-user access token, if central WhatsApp is in launch scope. |
 | `META_WHATSAPP_APP_SECRET` | Meta app secret for webhook signature verification. |
 | `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN` | High-entropy webhook verification token configured identically in Meta and Vercel. |
