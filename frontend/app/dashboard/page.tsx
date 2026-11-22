@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BrandMark } from "../components/site-chrome";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -2427,7 +2428,7 @@ export default function DashboardPage() {
   ];
 
   return <>
-    <header className="wrap topbar dashboard-header"><Link className="brand" href="/" aria-label="Outreach Marketing Agent home"><span className="brand-symbol" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M46.8 12.2A25 25 0 1 0 53 37.8" fill="none" stroke="#1675ed" strokeWidth="7" strokeLinecap="round"/><path d="M48.7 7.8 59 6l-2.1 10.4" fill="none" stroke="#8874ff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/><path d="m14 43.5 9-6.5 7.2 4.5 9.3-13.2 7.4 4.1" fill="none" stroke="#19b8e6" strokeWidth="4.3" strokeLinecap="round" strokeLinejoin="round"/><path d="m28.2 24.1 27.8-12.7-12.7 27.8-5.7-9.4-9.4-5.7Z" fill="#1767ed" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round"/></svg></span><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link><nav className="nav" aria-label="Workspace navigation"><Link href="/product">Product</Link><Link href="/pricing">Billing</Link><Link href="/platform-admin">Platform admin</Link><button className="button secondary" type="button" onClick={logout} disabled={busy}>Sign out</button></nav></header>
+    <header className="wrap topbar dashboard-header"><Link className="brand" href="/" aria-label="Outreach Marketing Agent home"><BrandMark/><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link><nav className="nav" aria-label="Workspace navigation"><Link href="/product">Product</Link><Link href="/pricing">Billing</Link><Link href="/platform-admin">Platform admin</Link><button className="button secondary" type="button" onClick={logout} disabled={busy}>Sign out</button></nav></header>
     <main className="wrap dashboard-main">
       <section className="page-head"><p className="eyebrow">Private workspace</p><h1>Your outreach workspace</h1><p className="lead">Signed in as {email || "your account"}. Research, campaigns and approvals stay separated by workspace.</p></section>
       <ErrorNotice message={error} />
