@@ -148,8 +148,8 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 ## LG-01 production migration execution checkpoint (2026-11-22)
 
 - GitHub Actions run `45051010880` completed successfully. Its job log records migrations `057_core_outreach_tenant_integrity.sql` through `062_followup_resolution_tenant_cleanup.sql` as applied, using the `DATABASE_URL` secret.
-- The run checked out `main` at `583117609d7c69a0148104862c546d9b9294ae86`. The workflow source contains no backup step, and the run has no uploaded artifacts; therefore no pre-migration backup evidence was found for this execution.
+- The run checked out `main` at `583117609d7c69a0148104862c546d9b9294ae86`. The workflow source contains no backup step, and the run has no uploaded artifacts. This is historical context only; Neon managed backups are configured independently after deployment and are not required for development or migration acceptance.
 - Backend CI run `45050136091` passed all three matrix jobs (Python 3.11, 3.12 and 3.13) on the same commit.
 - On 2026-11-22, the owner ran the supplied read-only SQL verification against production and reported **all checks PASS**. The checks covered the `schema_migrations` ledger and the specified columns, indexes, foreign keys/delete actions, constraints and functions for migrations 057–062. The result is owner-reported; no raw result export or screenshot was supplied to this agent.
-- Neon managed backup/PITR retention is intentionally not an LG-01 migration acceptance item. The owner will configure and verify it as part of post-deployment/go-live operations under LG-11; retention duration will be selected after go-live based on the Neon plan and recovery requirements.
+- Neon managed backup/PITR retention is intentionally not an LG-01 migration acceptance item. The owner will configure and verify it independently after deployment/go-live; retention duration will be selected then based on the Neon plan and recovery requirements.
 - No application deployment was performed as part of this migration run.
