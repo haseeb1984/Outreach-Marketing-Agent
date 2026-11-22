@@ -54,11 +54,18 @@ Never send Paddle secret values in chat.
 
 **Verification update (2026-11-22):** The owner ran the supplied read-only production SQL verification and reported that every check returned PASS. This covered the `schema_migrations` ledger and the specified schema checks for migrations 057–062. The raw SQL output was not supplied to this agent, so this is recorded as owner-reported verification.
 
-**Still outstanding:**
-- The migration workflow did not create a pre-migration backup; the run has no artifacts and no backup evidence was found. Do not represent this migration as having a verified pre-change backup.
-- Reconcile backup/recovery evidence and perform the appropriate recovery-readiness checks before closing LG-01.
+**Migration acceptance:**
+- The production ledger and requested schema checks were reported PASS by the owner. No pre-migration backup was created by the migration workflow; this is recorded as historical context, not a remaining migration acceptance blocker.
+- Neon managed backup/PITR setup is a separate owner task for production deployment and post-go-live operations (LG-11), not part of this migration batch.
 
 No application deployment was performed as part of the migration run. This checklist records the completed migration execution; it does not authorize any additional production database or application changes.
+
+### Neon backup and recovery — owner action after production deployment
+
+- Configure managed backup/PITR for the production Neon project as part of deployment/go-live operations. This configuration is the owner's responsibility in the Neon Console; it is not performed by the application deployment or GitHub migration workflow.
+- Decide the required history/PITR retention in days only after the service is live, using the selected Neon plan, recovery objectives (acceptable data-loss window and restore-time target), expected usage and budget. Do not hard-code a retention duration during pre-launch engineering.
+- Review any scheduled snapshot options available on the selected Neon plan, document the chosen policy, and perform/record a restore-readiness check in a safe target before relying on it.
+- Track configuration and restore evidence under LG-11. This post-deployment task does not block the already-applied and owner-verified migrations in LG-01.
 
 ## 5. Frontend release
 
