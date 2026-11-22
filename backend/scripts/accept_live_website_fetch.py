@@ -17,6 +17,7 @@ async def main() -> None:
     addresses = await resolve_public_addresses(host, 443)
     if not addresses:
         raise SystemExit("FAIL: no public DNS addresses returned")
+    print("Resolved public addresses (IPv4 preferred): " + ", ".join(addresses), flush=True)
 
     page = await fetch_html(
         "https://httpbin.org/redirect-to?url=%2Fanything&status_code=302",
