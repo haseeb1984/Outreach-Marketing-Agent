@@ -565,3 +565,44 @@ def test_revoke_other_sessions_endpoint_preserves_current_session(monkeypatch):
         assert response.status_code == 200
         assert response.json() == {"revoked_count": 3, "current_session_preserved": True}
 
+def test_session_revocation_rejects_current_session_without_store_write(monkeypatch):
+    import asyncio
+
+    current_id = "00000000-0000-0000-0000-000000000002"
+
+    class Store:
+        async def revoke_session_by_id(self, **kwargs):
+            raise AssertionError("current session must not be revoked through this endpoint")
+
+    async def authenticated(_request):
+        return Store(), "session-token", {"user_id": "user-1", "session_id": current_id}
+
+    monkeypatch.setattr(auth_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(auth_routes, "_check_csrf", lambda request, session: None)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth_routes.revoke_account_session(current_id, SimpleNamespace()))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "use_sign_out_for_current_session"
+
+
+def test_session_revocation_rejects_malformed_id_without_store_write(monkeypatch):
+    import asyncio
+
+    class Store:
+        async def revoke_session_by_id(self, **kwargs):
+            raise AssertionError("malformed session id must not reach the store")
+
+    async def authenticated(_request):
+        return Store(), "session-token", {"user_id": "user-1", "session_id": "current-session"}
+
+    monkeypatch.setattr(auth_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(auth_routes, "_check_csrf", lambda request, session: None)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth_routes.revoke_account_session("not-a-uuid", SimpleNamespace()))
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "session_not_found"
+
