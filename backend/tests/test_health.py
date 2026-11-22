@@ -69,3 +69,25 @@ def test_api_info_points_to_api_docs() -> None:
     response = client.get("/api-info")
     assert response.status_code == 200
     assert response.json()["docs"] == "/docs"
+
+
+def test_security_headers_are_present_on_public_pages() -> None:
+    response = client.get("/")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+
+
+def test_authenticated_api_responses_are_not_cacheable() -> None:
+    response = client.get("/api/v1/auth/me")
+    assert response.status_code in {401, 503}
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_production_https_responses_receive_hsts(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    secure_client = TestClient(app, base_url="https://testserver")
+    response = secure_client.get("/health")
+    assert response.headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"

@@ -728,6 +728,7 @@ async def download_whatsapp_inbound_media(
 ) -> dict:
     """Fetch a Meta attachment once and store it encrypted with workspace/account AAD."""
     _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
     await _authorize(request, workspace_id, session, "admin")
     from app.services.whatsapp_media_store import WhatsAppMediaError, download_meta_media
     try:

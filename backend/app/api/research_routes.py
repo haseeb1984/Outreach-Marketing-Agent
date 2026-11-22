@@ -265,6 +265,235 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         raise HTTPException(status_code=502, detail="search_provider_unavailable") from None
 
 
+class InfluencerSearchInput(BaseModel):
+    """Find public creator-profile candidates; never estimates audience or engagement."""
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    query: str = Field(min_length=3, max_length=400)
+    platforms: list[str] = Field(default_factory=lambda: ["instagram", "tiktok", "youtube", "linkedin", "x"], min_length=1, max_length=5)
+    count: int = Field(default=10, ge=1, le=20)
+    idempotency_key: str = Field(min_length=8, max_length=180, pattern=r"^[A-Za-z0-9._:-]+$")
+
+    @field_validator("platforms")
+    @classmethod
+    def validate_platforms(cls, values: list[str]) -> list[str]:
+        allowed = {"instagram", "tiktok", "youtube", "linkedin", "x"}
+        normalized = list(dict.fromkeys(value.strip().lower() for value in values))
+        if not normalized or any(value not in allowed for value in normalized):
+            raise ValueError("unsupported_influencer_platform")
+        return normalized
+
+    @field_validator("workspace_id", "query")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value_must_not_be_blank")
+        return normalized
+
+
+_INFLUENCER_HOSTS = {
+    "instagram.com": "instagram",
+    "tiktok.com": "tiktok",
+    "youtube.com": "youtube",
+    "linkedin.com": "linkedin",
+    "x.com": "x",
+    "twitter.com": "x",
+}
+
+
+def _public_influencer_profile(value: object) -> tuple[str, str] | None:
+    """Return a canonical public creator profile URL and platform, excluding content/search URLs."""
+    safe = _public_https_url(value)
+    if safe is None:
+        return None
+    parsed = urlsplit(safe)
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    platform = _INFLUENCER_HOSTS.get(host)
+    if platform is None:
+        return None
+    # Treat legacy Twitter profile links as the same canonical X identity.
+    if host == "twitter.com":
+        host = "x.com"
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if not segments:
+        return None
+    first = segments[0].lower()
+    reserved = {
+        "instagram": {"p", "reel", "reels", "explore", "stories", "direct", "accounts"},
+        "tiktok": {"discover", "tag", "music", "search", "foryou", "upload"},
+        "youtube": {"watch", "shorts", "playlist", "results", "feed", "gaming"},
+        "linkedin": {"company", "school", "jobs", "feed", "posts", "search"},
+        "x": {"home", "explore", "search", "i", "intent", "share", "notifications", "messages"},
+    }
+    if first in reserved[platform]:
+        return None
+    if platform == "tiktok" and not segments[0].startswith("@"):
+        return None
+    if platform == "youtube" and not (
+        segments[0].startswith("@") or first in {"channel", "c", "user"}
+    ):
+        return None
+    if platform == "linkedin" and first != "in":
+        return None
+    if platform == "linkedin" and (first != "in" or len(segments) != 2):
+        return None
+    if platform == "youtube" and first in {"channel", "c", "user"} and len(segments) != 2:
+        return None
+    if platform in {"instagram", "x"} and len(segments) != 1:
+        return None
+    if platform == "tiktok" and len(segments) != 1:
+        return None
+    if platform == "youtube" and first.startswith("@") and len(segments) != 1:
+        return None
+    canonical_path = "/" + "/".join(segments)
+    return f"https://{host}{canonical_path}", platform
+
+
+@router.post("/influencers/search")
+async def search_public_influencers(payload: InfluencerSearchInput, request: Request) -> dict:
+    """Discover public creator-profile candidates with explainable relevance, not influence scores."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None:
+        raise HTTPException(status_code=503, detail="authentication_not_configured")
+    if not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    if not settings.brave_search_api_key or not settings.brave_search_api_key.strip():
+        raise HTTPException(status_code=503, detail="search_provider_not_configured")
+    subscriptions = getattr(request.app.state, "subscription_store", None)
+    if subscriptions is None:
+        raise HTTPException(status_code=503, detail="billing_service_not_configured")
+
+    site_domains = {
+        "instagram": ("instagram.com",), "tiktok": ("tiktok.com",),
+        "youtube": ("youtube.com",), "linkedin": ("linkedin.com",),
+        # Include the legacy host because older public creator profiles and
+        # search indexes may still publish Twitter URLs; normalization below
+        # canonicalizes both hosts to the same X profile identity.
+        "x": ("x.com", "twitter.com"),
+    }
+    site_filter = " OR ".join(
+        "site:" + domain
+        for name in payload.platforms
+        for domain in site_domains[name]
+    )
+    search_query = f'({payload.query.strip()}) (creator OR influencer OR "content creator") ({site_filter})'
+    try:
+        reservation = await subscriptions.reserve_usage(
+            workspace_id=payload.workspace_id,
+            feature="prospect_research",
+            idempotency_key="influencer-research:" + payload.idempotency_key,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
+    if not reservation.get("allowed"):
+        reason = reservation.get("reason", "entitlement_denied")
+        raise HTTPException(status_code=429 if reason == "quota_exhausted" else 403, detail=reason)
+    if reservation.get("reason") == "idempotent_replay" or reservation.get("status") == "consumed":
+        raise HTTPException(status_code=409, detail="research_key_already_used")
+
+    reservation_id = reservation["reservation_id"]
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False) as client:
+            response = await client.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": search_query, "count": min(20, payload.count * 3), "safesearch": "moderate"},
+                headers={"Accept": "application/json", "X-Subscription-Token": settings.brave_search_api_key},
+            )
+        if response.status_code != 200:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+            raise HTTPException(status_code=502, detail="search_provider_unavailable")
+        data = response.json()
+        web = data.get("web") if isinstance(data, dict) else None
+        raw_results = web.get("results") if isinstance(web, dict) else None
+        if not isinstance(raw_results, list):
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+            raise HTTPException(status_code=502, detail="search_response_invalid")
+
+        by_profile: dict[str, dict] = {}
+        for item in raw_results:
+            if not isinstance(item, dict):
+                continue
+            profile = _public_influencer_profile(item.get("url"))
+            title, description = item.get("title"), item.get("description")
+            if profile is None or not isinstance(title, str) or not title.strip():
+                continue
+            profile_url, platform = profile
+            if platform not in payload.platforms:
+                continue
+            clean_title = title.strip()[:300]
+            clean_description = description.strip()[:1200] if isinstance(description, str) else ""
+            score, reasons = _relevance(payload.query.strip(), clean_title, clean_description)
+            candidate = {
+                "profile_url": profile_url,
+                "platform": platform,
+                "title": clean_title,
+                "description": clean_description,
+                "relevance_score": score,
+                "relevance_reasons": reasons,
+                "relevance_method": "query_term_overlap_v1",
+                "evidence_type": "public_search_result",
+                "requires_human_review": True,
+                "audience_metrics": None,
+                "audience_metrics_status": "not_available_from_search_results",
+            }
+            previous = by_profile.get(profile_url)
+            if previous is None or (score, len(clean_description)) > (
+                previous["relevance_score"], len(previous["description"])
+            ):
+                by_profile[profile_url] = candidate
+
+        items = sorted(
+            by_profile.values(),
+            key=lambda item: (-item["relevance_score"], item["platform"], item["profile_url"]),
+        )[:payload.count]
+        await subscriptions.finish_reservation(
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+        )
+        return {
+            "workspace_id": payload.workspace_id,
+            "query": payload.query.strip(),
+            "platforms": payload.platforms,
+            "provider": "brave_search",
+            "quota_feature": "prospect_research",
+            "ranking": {
+                "method": "query_term_overlap_v1",
+                "description": "Matches query terms against public search-result titles and snippets; this is topical relevance, not creator quality, reach, engagement or conversion likelihood.",
+            },
+            "items": items,
+            "count": len(items),
+            "persisted_to_crm": False,
+            "unavailable_metrics": ["followers", "average views", "engagement rate", "audience demographics", "verified conversions", "revenue", "ROI"],
+            "notice": "Profiles are public-search candidates, not endorsed creators. Review identity, audience fit, current metrics and commercial terms independently before contacting or saving anyone.",
+        }
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail="search_provider_unavailable") from None
+    except Exception:
+        try:
+            await subscriptions.finish_reservation(
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            )
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail="search_provider_unavailable") from None
+
+
 @router.post("/prospects/save", status_code=201)
 async def save_researched_prospect(payload: ResearchProspectSaveInput, request: Request) -> dict:
     """Save one reviewed search result; discovery results are never auto-imported."""

@@ -1,6 +1,7 @@
 """Workspace-scoped campaign and human-review persistence; never sends messages."""
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 from uuid import UUID
@@ -126,9 +127,31 @@ class CampaignStore:
             data["verified_facts"] = self._json_list(data.get("verified_facts"))
             return data
 
+    async def get_idempotent_draft(self, *, workspace_id: str, campaign_id: UUID,
+                                  prospect_id: UUID, channel: str, call_to_action: str,
+                                  idempotency_key: str) -> dict[str, Any] | None:
+        """Return a prior result for a matching request key before charging AI quota."""
+        fingerprint = hashlib.sha256(json.dumps(
+            {"workspace_id": workspace_id, "campaign_id": str(campaign_id),
+             "prospect_id": str(prospect_id), "channel": channel,
+             "call_to_action": call_to_action},
+            sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM outreach_drafts WHERE workspace_id=$1 AND idempotency_key=$2",
+                workspace_id, idempotency_key,
+            )
+        if row is None:
+            return None
+        if row["request_fingerprint"] != fingerprint:
+            raise ValueError("idempotency_key_payload_mismatch")
+        return self._serialize(dict(row))
+
     async def create_draft(self, *, workspace_id: str, campaign_id: UUID, prospect_id: UUID,
                            actor_id: UUID | str, channel: str, call_to_action: str,
                            generated_content: dict[str, Any] | None = None,
+                           idempotency_key: str | None = None,
                            ) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -213,20 +236,46 @@ class CampaignStore:
                         call_to_action=call_to_action,
                         whatsapp_opt_in_confirmed=(channel != "whatsapp" or bool(controls and controls["whatsapp_opt_in_at"])),
                     )
+                request_fingerprint = hashlib.sha256(json.dumps(
+                    {
+                        "workspace_id": workspace_id,
+                        "campaign_id": str(campaign_id),
+                        "prospect_id": str(prospect_id),
+                        "channel": channel,
+                        "call_to_action": call_to_action,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")).hexdigest()
                 row = await conn.fetchrow(
                     """INSERT INTO outreach_drafts
                        (workspace_id,campaign_id,prospect_id,channel,subject,body,source_evidence_url,
-                        verified_facts_used,created_by)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+                        verified_facts_used,created_by,idempotency_key,request_fingerprint)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)
+                       ON CONFLICT (workspace_id,idempotency_key) WHERE idempotency_key IS NOT NULL
+                       DO NOTHING
                        RETURNING *""",
                     workspace_id, campaign_id, prospect_id, channel, draft["subject"], draft["body"],
-                    draft["source_evidence_url"], json.dumps(draft["verified_facts_used"]), UUID(str(actor_id)),
+                    draft["source_evidence_url"], json.dumps(draft["verified_facts_used"]),
+                    UUID(str(actor_id)), idempotency_key, request_fingerprint,
                 )
-                await conn.execute(
-                    """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type)
-                       VALUES ($1,$2,$3,'created')""",
-                    row["id"], workspace_id, UUID(str(actor_id)),
-                )
+                created = row is not None
+                if row is None and idempotency_key is not None:
+                    row = await conn.fetchrow(
+                        """SELECT * FROM outreach_drafts
+                           WHERE workspace_id=$1 AND idempotency_key=$2""",
+                        workspace_id, idempotency_key,
+                    )
+                    if row is not None and row["request_fingerprint"] != request_fingerprint:
+                        raise ValueError("idempotency_key_payload_mismatch")
+                if row is None:
+                    raise RuntimeError("draft_idempotency_conflict_unresolved")
+                if created:
+                    await conn.execute(
+                        """INSERT INTO outreach_draft_events(draft_id,workspace_id,actor_id,event_type)
+                           VALUES ($1,$2,$3,'created')""",
+                        row["id"], workspace_id, UUID(str(actor_id)),
+                    )
         return self._serialize(dict(row))
 
     async def get_draft_regeneration_context(self, *, workspace_id: str, draft_id: UUID) -> dict[str, Any] | None:

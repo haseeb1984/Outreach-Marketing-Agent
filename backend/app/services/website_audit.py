@@ -58,6 +58,7 @@ class _SEOParser(HTMLParser):
         self.headings: dict[str, list[str]] = {f"h{i}": [] for i in range(1, 7)}
         self.heading_tag: str | None = None
         self.links: list[dict[str, str]] = []
+        self.active_link_index: int | None = None
         self.images: list[dict[str, str]] = []
         self.json_ld_blocks: list[str] = []
         self.in_json_ld = False
@@ -87,6 +88,7 @@ class _SEOParser(HTMLParser):
             href = attr.get("href", "").strip()
             if href:
                 self.links.append({"href": href, "text": ""})
+                self.active_link_index = len(self.links) - 1
         elif tag == "img":
             self.images.append({"src": attr.get("src", ""), "alt": attr.get("alt", "")})
         elif tag == "script" and attr.get("type", "").lower().split(";")[0].strip() == "application/ld+json":
@@ -97,6 +99,8 @@ class _SEOParser(HTMLParser):
         tag = tag.lower()
         if tag == "title":
             self.in_title = False
+        if tag == "a":
+            self.active_link_index = None
         if tag in self.headings and self.heading_tag == tag:
             self.heading_tag = None
         if tag == "script" and self.in_json_ld:
@@ -107,6 +111,8 @@ class _SEOParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self.in_title:
             self.title_parts.append(data)
+        if self.active_link_index is not None:
+            self.links[self.active_link_index]["text"] += data
         if self.heading_tag:
             self.headings[self.heading_tag].append(data.strip())
         if self.in_json_ld:

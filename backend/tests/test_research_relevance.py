@@ -310,3 +310,244 @@ def test_search_route_consumes_reservation_on_unexpected_provider_processing_err
     assert 'outcome="consumed"' in handler
     assert 'detail="search_provider_unavailable"' in handler
     assert "reservation_id=reservation_id" in handler
+
+
+def test_influencer_profile_normalization_accepts_only_public_profile_shapes():
+    from app.api.research_routes import _public_influencer_profile
+
+    assert _public_influencer_profile("https://www.instagram.com/creator.name/?igsh=abc") == (
+        "https://instagram.com/creator.name", "instagram"
+    )
+    assert _public_influencer_profile("https://www.tiktok.com/@creator") == (
+        "https://tiktok.com/@creator", "tiktok"
+    )
+    assert _public_influencer_profile("https://www.youtube.com/@creator/videos") is None
+    assert _public_influencer_profile("https://www.youtube.com/@creator") == (
+        "https://youtube.com/@creator", "youtube"
+    )
+    assert _public_influencer_profile("https://www.linkedin.com/in/creator-profile/") == (
+        "https://linkedin.com/in/creator-profile", "linkedin"
+    )
+    assert _public_influencer_profile("https://x.com/creator/status/123") is None
+    assert _public_influencer_profile("https://instagram.com/explore") is None
+    assert _public_influencer_profile("https://example.com/creator") is None
+
+
+def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_profile_candidates(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    user_id = "00000000-0000-0000-0000-000000000001"
+    finished = []
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return kwargs == {
+                "user_id": user_id, "workspace_id": "workspace-a", "minimum_role": "member"
+            }
+
+    class FakeSubscriptions:
+        async def reserve_usage(self, **kwargs):
+            assert kwargs["feature"] == "prospect_research"
+            assert kwargs["idempotency_key"] == "influencer-research:test-key-123"
+            return {"allowed": True, "reservation_id": "reservation-1", "status": "reserved"}
+
+        async def finish_reservation(self, **kwargs):
+            finished.append(kwargs)
+            return True
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"web": {"results": [
+                {"url": "https://www.instagram.com/creator.one/?ref=search",
+                 "title": "Creator One | Karachi food creator",
+                 "description": "Food reviews and restaurant videos in Karachi"},
+                {"url": "https://instagram.com/creator.one/",
+                 "title": "Creator One | Karachi food creator",
+                 "description": "Food reviews and restaurant videos in Karachi"},
+                {"url": "https://www.instagram.com/p/ABC123/",
+                 "title": "Karachi food creator post", "description": "Post URL, not a profile"},
+                {"url": "https://www.youtube.com/@foodcreator",
+                 "title": "Food Creator", "description": "Karachi restaurant reviews"},
+                {"url": "https://twitter.com/karachifood",
+                 "title": "Karachi Food on X", "description": "Food creator in Karachi"},
+                {"url": "https://www.x.com/karachifood/",
+                 "title": "Karachi Food on X", "description": "Food creator in Karachi"},
+                {"url": "https://example.com/creator",
+                 "title": "Karachi food influencer", "description": "Not a supported creator profile"},
+            ]}}
+
+    class FakeHttpClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, *, params, headers):
+            assert "site:instagram.com" in params["q"]
+            assert "site:youtube.com" in params["q"]
+            assert "site:x.com" in params["q"]
+            assert "site:twitter.com" in params["q"]
+            assert headers["X-Subscription-Token"] == "test-search-key"
+            return FakeResponse()
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": user_id}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(research_routes, "settings", type("Settings", (), {"brave_search_api_key": "test-search-key"})())
+    monkeypatch.setattr(research_routes.httpx, "AsyncClient", FakeHttpClient)
+
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.subscription_store = FakeSubscriptions()
+        response = client.post("/api/v1/research/influencers/search", json={
+            "workspace_id": "workspace-a",
+            "query": "Karachi food creator",
+            "platforms": ["instagram", "youtube", "x"],
+            "count": 10,
+            "idempotency_key": "test-key-123",
+        })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 3
+    assert {item["platform"] for item in body["items"]} == {"instagram", "youtube", "x"}
+    assert "https://x.com/karachifood" in {item["profile_url"] for item in body["items"]}
+    assert len({item["profile_url"] for item in body["items"]}) == 3
+    assert sum(item["platform"] == "x" for item in body["items"]) == 1
+    assert all(not item["profile_url"].startswith("https://twitter.com/") for item in body["items"])
+    assert all(item["requires_human_review"] for item in body["items"])
+    assert all(item["audience_metrics"] is None for item in body["items"])
+    assert "engagement rate" in body["unavailable_metrics"]
+    assert body["persisted_to_crm"] is False
+    assert len(finished) == 1
+    assert finished[0]["outcome"] == "consumed"
+
+
+def test_influencer_profile_normalization_rejects_nested_content_paths():
+    from app.api.research_routes import _public_influencer_profile
+
+    assert _public_influencer_profile("https://www.linkedin.com/in/creator/posts/123") is None
+    assert _public_influencer_profile("https://www.youtube.com/channel/UC123/videos") is None
+    assert _public_influencer_profile("https://www.youtube.com/c/creator/community") is None
+    assert _public_influencer_profile("https://www.linkedin.com/in/creator-profile") == (
+        "https://linkedin.com/in/creator-profile", "linkedin"
+    )
+    assert _public_influencer_profile("https://www.youtube.com/channel/UC123") == (
+        "https://youtube.com/channel/UC123", "youtube"
+    )
+
+
+def test_influencer_search_quota_denial_does_not_call_provider(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class DeniedSubscriptions:
+        async def reserve_usage(self, **kwargs):
+            return {"allowed": False, "reason": "quota_exhausted"}
+
+    class NeverHttpClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("provider must not be called when quota is denied")
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(research_routes, "settings", type("Settings", (), {"brave_search_api_key": "test-search-key"})())
+    monkeypatch.setattr(research_routes.httpx, "AsyncClient", NeverHttpClient)
+
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.subscription_store = DeniedSubscriptions()
+        response = client.post("/api/v1/research/influencers/search", json={
+            "workspace_id": "workspace-a",
+            "query": "Karachi food creators",
+            "platforms": ["instagram"],
+            "idempotency_key": "quota-key-123",
+        })
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "quota_exhausted"
+
+
+def test_influencer_search_fails_closed_when_search_provider_is_not_configured(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import research_routes
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class NeverSubscriptions:
+        async def reserve_usage(self, **kwargs):
+            raise AssertionError("quota must not be reserved without a configured provider")
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": "00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(research_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(research_routes, "settings", type("Settings", (), {"brave_search_api_key": " "})())
+
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.subscription_store = NeverSubscriptions()
+        response = client.post("/api/v1/research/influencers/search", json={
+            "workspace_id": "workspace-a",
+            "query": "Karachi food creators",
+            "platforms": ["instagram"],
+            "idempotency_key": "no-provider-123",
+        })
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "search_provider_not_configured"
+
+
+def test_influencer_search_input_rejects_blank_query_and_workspace_and_normalizes_text():
+    import pytest
+    from pydantic import ValidationError
+    from app.api.research_routes import InfluencerSearchInput
+
+    valid = {
+        "workspace_id": " workspace-a ",
+        "query": " Karachi food creators ",
+        "platforms": [" Instagram ", "instagram", "YOUTUBE"],
+        "idempotency_key": "input-normalization-123",
+    }
+    parsed = InfluencerSearchInput(**valid)
+    assert parsed.workspace_id == "workspace-a"
+    assert parsed.query == "Karachi food creators"
+    assert parsed.platforms == ["instagram", "youtube"]
+
+    with pytest.raises(ValidationError):
+        InfluencerSearchInput(**{**valid, "query": "   "})
+    with pytest.raises(ValidationError):
+        InfluencerSearchInput(**{**valid, "workspace_id": "   "})
+
+
+def test_twitter_and_x_profile_urls_share_one_canonical_identity():
+    from app.api.research_routes import _public_influencer_profile
+
+    assert _public_influencer_profile("https://twitter.com/creator") == (
+        "https://x.com/creator", "x"
+    )
+    assert _public_influencer_profile("https://www.x.com/creator/") == (
+        "https://x.com/creator", "x"
+    )

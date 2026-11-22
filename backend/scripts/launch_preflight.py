@@ -46,6 +46,12 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "054_whatsapp_tenant_integrity.sql",
     "055_whatsapp_webhook_retry_tracking.sql",
     "056_billing_transaction_past_due.sql",
+    "057_core_outreach_tenant_integrity.sql",
+    "058_draft_request_idempotency.sql",
+    "059_workspace_display_name.sql",
+    "060_account_deletion_lifecycle.sql",
+    "061_workspace_delivery_cascade_consistency.sql",
+    "062_followup_resolution_tenant_cleanup.sql",
 )
 
 
@@ -189,14 +195,49 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
         "every configured plan defines valid quotas for all protected features" if catalog_entitlements_ok
         else "every configured plan (sandbox included) must define ai_draft_generations, email_sends, website_audits, whatsapp_sends, and prospect_research with enabled:boolean and monthly_limit: non-negative integer or null")
 
-    meta_fields = ("META_WHATSAPP_ACCESS_TOKEN", "META_WHATSAPP_APP_SECRET",
-                   "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID",
-                   "META_WHATSAPP_WABA_ID", "META_GRAPH_API_VERSION")
-    meta_count = sum(bool(env.get(k, "").strip()) for k in meta_fields)
-    meta_ok = meta_count in {0, len(meta_fields)}
+    # These three values belong to the platform-owned Meta Developer App and webhook.
+    # Customer access tokens, WABA IDs and Phone Number IDs are stored per workspace;
+    # they are deliberately not required as global environment variables.
+    meta_core_fields = ("META_WHATSAPP_APP_SECRET", "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "META_GRAPH_API_VERSION")
+    meta_core_count = sum(bool(env.get(k, "").strip()) for k in meta_core_fields)
+    meta_ok = meta_core_count in {0, len(meta_core_fields)}
     add("meta_whatsapp_configuration", meta_ok,
-        "Meta global integration settings are complete or absent" if meta_ok
-        else "Meta global integration settings are partial; configure all six values or none")
+        "platform Meta app and webhook settings are complete or absent" if meta_ok
+        else "configure META_WHATSAPP_APP_SECRET, META_WHATSAPP_WEBHOOK_VERIFY_TOKEN and META_GRAPH_API_VERSION together; customer credentials remain workspace-scoped")
+
+    # Surface required feature configuration in preflight output. These checks are
+    # warnings locally because operators may intentionally run a reduced-feature build.
+    proxy = env.get("TRUSTED_EGRESS_PROXY_URL", "").strip()
+    proxy_ok = False
+    if proxy:
+        try:
+            parsed_proxy = urlsplit(proxy)
+            proxy_ok = (parsed_proxy.scheme.lower() in {"http", "https"}
+                        and bool(parsed_proxy.hostname)
+                        and parsed_proxy.username is None and parsed_proxy.password is None
+                        and not parsed_proxy.query and not parsed_proxy.fragment)
+            _ = parsed_proxy.port
+        except ValueError:
+            proxy_ok = False
+    add("trusted_egress_proxy", proxy_ok,
+        "trusted website-audit egress proxy is configured" if proxy_ok
+        else "TRUSTED_EGRESS_PROXY_URL is missing or invalid; production website audits will fail closed", "warning")
+
+    admin_emails = [item.strip() for item in env.get("PLATFORM_ADMIN_EMAILS", "").split(",") if item.strip()]
+    admin_ok = bool(admin_emails) and all(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", item) for item in admin_emails)
+    add("platform_admin_allowlist", admin_ok,
+        "platform administrator allowlist contains valid email addresses" if admin_ok
+        else "PLATFORM_ADMIN_EMAILS is missing or invalid; platform-admin APIs remain unavailable", "warning")
+
+    brave_ok = bool(env.get("BRAVE_SEARCH_API_KEY", "").strip())
+    add("prospect_research_provider", brave_ok,
+        "Brave Search provider key is configured" if brave_ok
+        else "BRAVE_SEARCH_API_KEY is missing; prospect research endpoints return unavailable", "warning")
+
+    ai_ok = bool(env.get("AI_API_KEY", "").strip())
+    add("ai_draft_provider", ai_ok,
+        "AI draft provider key is configured" if ai_ok
+        else "AI_API_KEY is missing; only non-AI fallback draft generation is available", "warning")
 
     graph_version = env.get("META_GRAPH_API_VERSION", "").strip()
     graph_ok = not graph_version or bool(re.fullmatch(r"v[0-9]{2,3}\.0", graph_version))
@@ -237,6 +278,11 @@ def evaluate_config(env: Mapping[str, str], root: Path) -> dict:
     worker_runbook = root / "docs" / "GROWTH_WORKER_HOST_RUNBOOK.md"
     add("growth_worker_runbook", worker_runbook.is_file(), "growth worker host runbook exists" if worker_runbook.is_file()
         else "docs/GROWTH_WORKER_HOST_RUNBOOK.md is missing")
+
+    account_retention_policy = root / "docs" / "ACCOUNT_DATA_RETENTION.md"
+    add("account_data_retention_policy", account_retention_policy.is_file(),
+        "account deletion and retention policy exists" if account_retention_policy.is_file()
+        else "docs/ACCOUNT_DATA_RETENTION.md is missing")
 
     production_runbook = root / "docs" / "PRODUCTION_OPERATIONS_AND_LAUNCH.md"
     add("production_operations_runbook", production_runbook.is_file(),

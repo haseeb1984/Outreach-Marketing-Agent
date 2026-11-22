@@ -14,17 +14,24 @@ class FakeConnection:
     def __init__(self, *, blocked: bool = False):
         self.blocked = blocked
         self.executed: list[tuple[str, tuple]] = []
+        self.fetch_queries: list[tuple[str, tuple]] = []
+        self.fetchval_queries: list[str] = []
 
     @asynccontextmanager
     async def transaction(self, **kwargs):
         yield
 
     async def fetchrow(self, query, *args):
-        if "SELECT id,status FROM app_users" in query:
-            return {"id": args[0], "status": "active"}
+        if "SELECT id,status,email FROM app_users" in query:
+            return {"id": args[0], "status": "active", "email": "user@example.test"}
         raise AssertionError("unexpected fetchrow query")
 
+    async def fetch(self, query, *args):
+        self.fetch_queries.append((query, args))
+        return []
+
     async def fetchval(self, query, *args):
+        self.fetchval_queries.append(query)
         assert "transfer_workspace_ownership" not in query
         return self.blocked
 
@@ -57,7 +64,11 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     assert response.json()["status"] == "deleted"
     assert "deleted+00000000000000000000000000000001@accounts.invalid" in str(conn.executed)
     assert any("UPDATE auth_sessions SET revoked_at=now()" in sql for sql, _ in conn.executed)
-    assert any("UPDATE workspace_memberships SET status='revoked'" in sql for sql, _ in conn.executed)
+    assert any("UPDATE workspace_memberships SET status='revoked'" in sql and "status<>'revoked'" in sql for sql, _ in conn.executed)
+    assert any("deleted_at=now()" in sql for sql, _ in conn.executed)
+    invitation_update = next(sql for sql, _ in conn.executed if "UPDATE workspace_invitations" in sql)
+    assert "invited_by=$1 OR invited_email=$2" in invitation_update
+    assert any("ORDER BY w.id FOR UPDATE OF w" in sql for sql, _ in conn.fetch_queries)
     assert any("UPDATE app_users" in sql and "status='deleted'" in sql for sql, _ in conn.executed)
     password_update = next(args for sql, args in conn.executed if "UPDATE app_users" in sql)
     assert password_update[2].startswith("scrypt$")
@@ -68,7 +79,7 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     assert "Cache-Control" in response.headers
 
 
-def test_delete_account_refuses_to_orphan_shared_workspace_owner(monkeypatch):
+def test_delete_account_refuses_to_orphan_workspace_with_any_non_revoked_member(monkeypatch):
     conn = FakeConnection(blocked=True)
     monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
@@ -78,6 +89,9 @@ def test_delete_account_refuses_to_orphan_shared_workspace_owner(monkeypatch):
     assert response.status_code == 409
     assert response.json()["detail"] == "transfer_workspace_ownership_before_account_deletion"
     assert conn.executed == []
+    ownership_guard = conn.fetchval_queries[0]
+    assert "own.status<>'revoked'" in ownership_guard
+    assert "other.status<>'revoked'" in ownership_guard
 
 
 def test_delete_account_requires_csrf_before_database_access(monkeypatch):
@@ -183,3 +197,46 @@ def test_account_export_marks_workspace_scoped_collections_when_memberships_are_
     truncated = response.json()["limits"]["truncated_collections"]
     assert "workspaces" in truncated
     assert "workspace_scoped_collections" in truncated
+
+
+def test_account_export_discloses_operational_collections_not_included(monkeypatch):
+    conn = FakeExportConnection()
+    monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
+    with TestClient(app) as client:
+        app.state.db_pool = FakePool(conn)
+        response = client.get("/api/v1/account/export")
+
+    assert response.status_code == 200
+    limits = response.json()["limits"]
+    assert limits["not_included_collections"] == []
+    assert "workspace_growth_schedules" in response.json()
+    assert "workspace_jobs" in response.json()
+    assert "followup_sequences" in response.json()
+    assert "followup_steps" in response.json()
+    assert "followup_enrollments" in response.json()
+    assert "followup_delivery_resolutions" in response.json()
+    assert "email_provider_events" in response.json()
+    assert "whatsapp_conversation_notes" in response.json()
+    assert "whatsapp_conversation_activity" in response.json()
+    assert "whatsapp_inbox_saved_views" in response.json()
+    assert "whatsapp_inbox_sla_policies" in response.json()
+    assert "not a complete system backup" in limits["note"]
+
+
+def test_account_export_queries_all_operational_workspace_histories(monkeypatch):
+    conn = FakeExportConnection()
+    monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
+    with TestClient(app) as client:
+        app.state.db_pool = FakePool(conn)
+        response = client.get("/api/v1/account/export")
+
+    assert response.status_code == 200
+    expected_tables = (
+        "workspace_growth_schedules", "workspace_jobs", "outreach_followup_sequences",
+        "outreach_followup_steps", "outreach_followup_enrollments",
+        "outreach_followup_delivery_resolutions", "email_provider_events",
+        "whatsapp_conversation_notes", "whatsapp_conversation_activity",
+        "whatsapp_inbox_saved_views", "whatsapp_inbox_sla_policies",
+    )
+    for table in expected_tables:
+        assert any(table in query for query in conn.fetch_queries), table

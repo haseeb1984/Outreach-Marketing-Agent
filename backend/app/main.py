@@ -109,6 +109,25 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-CSRF-Token", "Idempotency-Key"],
 )
 
+@app.middleware("http")
+async def apply_security_headers(request: Request, call_next):
+    """Apply browser hardening consistently and prevent authenticated API caching."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    if settings.environment.casefold() == "production" and request.url.scheme == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 from app.api.auth_routes import router as auth_router
 from app.api.prospect_routes import router as prospect_router
 from app.api.campaign_routes import router as campaign_router
@@ -361,8 +380,14 @@ async def readiness() -> Response:
                              '053_billing_transaction_event_fingerprints.sql',
                              '054_whatsapp_tenant_integrity.sql',
                              '055_whatsapp_webhook_retry_tracking.sql',
-                             '056_billing_transaction_past_due.sql'
-                          )) = 56
+                             '056_billing_transaction_past_due.sql',
+                            '057_core_outreach_tenant_integrity.sql',
+                            '058_draft_request_idempotency.sql',
+                            '059_workspace_display_name.sql',
+                            '060_account_deletion_lifecycle.sql',
+                            '061_workspace_delivery_cascade_consistency.sql',
+                            '062_followup_resolution_tenant_cleanup.sql'
+                          )) = 62
                      AND to_regclass('public.outreach_followup_delivery_resolutions') IS NOT NULL
                      AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversation_activity') IS NOT NULL
@@ -387,7 +412,18 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_whatsapp_accounts_id_workspace_uidx') IS NOT NULL
                      AND to_regclass('public.crm_prospects_id_workspace_uidx') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversations_id_workspace_uidx') IS NOT NULL
-                     AND to_regclass('public.whatsapp_conversations') IS NOT NULL"""
+                     AND to_regclass('public.whatsapp_conversations') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_drafts' AND column_name='idempotency_key')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_drafts' AND column_name='request_fingerprint')
+                     AND to_regclass('public.outreach_drafts_workspace_idempotency_uidx') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workspaces' AND column_name='name')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='app_users' AND column_name='deleted_at')
+                     AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='workspace_memberships_reject_deleted_account' AND NOT tgisinternal)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='outreach_drafts_campaign_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='outreach_drafts_prospect_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='outreach_deliveries_draft_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='outreach_deliveries_email_account_workspace_fk' AND convalidated)
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE connamespace='public'::regnamespace AND conname='outreach_followup_delivery_resolutions_workspace_id_fkey' AND convalidated)"""
             )
             if not schema_ready:
                 return JSONResponse(

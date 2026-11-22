@@ -46,6 +46,23 @@ class EmailProviderEventStore:
                     provider, event_id, delivery_id, event_type, occurred_at,
                 )
                 if inserted is None:
+                    # A provider event ID is globally unique within its provider.
+                    # Do not silently accept an ID replay that points to a different
+                    # delivery or changes the normalized event snapshot.
+                    prior = await conn.fetchrow(
+                        """SELECT delivery_id,event_type,occurred_at
+                           FROM email_provider_events
+                           WHERE provider=$1 AND provider_event_id=$2
+                           FOR UPDATE""",
+                        provider, event_id,
+                    )
+                    if (
+                        prior is None
+                        or prior["delivery_id"] != delivery_id
+                        or prior["event_type"] != event_type
+                        or prior["occurred_at"] != occurred_at
+                    ):
+                        raise ValueError("email_event_identity_conflict")
                     return {"duplicate": True, "event_id": event_id}
 
                 # Preserve the newest provider state; older delayed callbacks remain in

@@ -224,11 +224,20 @@ async def verify_whatsapp_account(
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_account_verification_unavailable") from None
 
+    # Do not let a successful check of an old token activate a concurrently rotated
+    # credential. Compare the encrypted snapshot atomically after the Meta round-trip.
     async with _pool(request).acquire() as connection:
-        await connection.execute(
+        activated = await connection.fetchrow(
             """UPDATE workspace_whatsapp_accounts SET status='active', updated_at=now()
-               WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'""",
-            account_id, workspace_id,
+               WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
+                 AND encrypted_access_token=$3
+               RETURNING id""",
+            account_id, workspace_id, row["encrypted_access_token"],
+        )
+    if activated is None:
+        raise HTTPException(
+            status_code=409,
+            detail="whatsapp_account_credentials_changed_during_verification",
         )
     return {
         "verified": True,
@@ -311,7 +320,7 @@ async def rotate_whatsapp_account_token(
             async with connection.transaction():
                 row = await connection.fetchrow(
                     """UPDATE workspace_whatsapp_accounts
-                       SET encrypted_access_token=$3,status='pending',updated_at=now()
+                       SET encrypted_access_token=$3,status='pending_verification',updated_at=now()
                        WHERE id=$1 AND workspace_id=$2 AND status <> 'disabled'
                        RETURNING id""",
                     account_id, payload.workspace_id, encrypted,
@@ -335,7 +344,7 @@ async def rotate_whatsapp_account_token(
                 )
         return {
             "account_id": str(account_id),
-            "status": "pending",
+            "status": "pending_verification",
             "queued_reservations_released": len(cancelled),
             "notice": "Token replaced and encrypted. Verify the account again to re-check Meta access and WABA webhook subscription before queueing sends.",
         }

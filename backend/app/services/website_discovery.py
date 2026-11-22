@@ -33,7 +33,8 @@ async def discover_and_crawl(
     if not 1 <= max_sitemaps <= 10:
         raise ValueError("max_sitemaps must be between 1 and 10")
     host = (urlsplit(start).hostname or "").lower().rstrip(".")
-    fetch_kwargs = {"limits": limits, "allowed_hosts": {host}}
+    allowed_scheme = urlsplit(start).scheme.lower()
+    fetch_kwargs = {"limits": limits, "allowed_hosts": {host}, "allowed_schemes": {allowed_scheme}}
     if resolver is not None:
         fetch_kwargs["resolver"] = resolver
 
@@ -76,7 +77,7 @@ async def discover_and_crawl(
 
     pending = list(dict.fromkeys(
         url for url in sitemap_urls
-        if _same_host(url, start)
+        if _same_host(url, start) and urlsplit(url).scheme.lower() == allowed_scheme
     ))
     sitemap_documents: list[dict] = []
     seed_urls: list[str] = []
@@ -110,11 +111,11 @@ async def discover_and_crawl(
             })
             if parsed["document_type"] == "sitemapindex":
                 for child_url in parsed["locations"]:
-                    if _same_host(child_url, start) and child_url not in seen_sitemaps and child_url not in pending:
+                    if _same_host(child_url, start) and urlsplit(child_url).scheme.lower() == allowed_scheme and child_url not in seen_sitemaps and child_url not in pending:
                         pending.append(child_url)
             else:
                 for location in parsed["locations"]:
-                    if _same_host(location, start) and location not in seed_urls:
+                    if _same_host(location, start) and urlsplit(location).scheme.lower() == allowed_scheme and location not in seed_urls:
                         seed_urls.append(location)
         except (ValueError, OSError) as exc:
             sitemap_documents.append({"url": sitemap_url, "error": str(exc)})

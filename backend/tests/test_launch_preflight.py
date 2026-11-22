@@ -42,6 +42,7 @@ def _release_root(root: Path) -> None:
     (root / "docs").mkdir()
     (root / "docs/GROWTH_WORKER_HOST_RUNBOOK.md").write_text("# test")
     (root / "docs/PRODUCTION_OPERATIONS_AND_LAUNCH.md").write_text("# test")
+    (root / "docs/ACCOUNT_DATA_RETENTION.md").write_text("# test")
 
 
 def test_preflight_passes_valid_base_config_and_reports_runtime_gates(tmp_path: Path):
@@ -63,6 +64,12 @@ def test_preflight_requires_latest_tenant_whatsapp_and_billing_migrations():
         "054_whatsapp_tenant_integrity.sql",
         "055_whatsapp_webhook_retry_tracking.sql",
         "056_billing_transaction_past_due.sql",
+        "057_core_outreach_tenant_integrity.sql",
+        "058_draft_request_idempotency.sql",
+        "059_workspace_display_name.sql",
+        "060_account_deletion_lifecycle.sql",
+        "061_workspace_delivery_cascade_consistency.sql",
+        "062_followup_resolution_tenant_cleanup.sql",
     }.issubset(set(REQUIRED_RELEASE_MIGRATIONS))
 
 
@@ -186,10 +193,28 @@ def test_preflight_accepts_valid_unique_sandbox_plan_catalog(tmp_path: Path):
     assert _statuses(result)["paddle_plan_catalog_shape"] == "pass"
 
 
-def test_preflight_flags_partial_meta_configuration(tmp_path: Path):
+def test_preflight_flags_partial_platform_meta_configuration(tmp_path: Path):
     env = _env()
-    env["META_WHATSAPP_ACCESS_TOKEN"] = "configured"
+    env["META_WHATSAPP_APP_SECRET"] = "configured"
     assert _statuses(evaluate_config(env, tmp_path))["meta_whatsapp_configuration"] == "fail"
+
+
+def test_preflight_does_not_require_customer_whatsapp_credentials_globally(tmp_path: Path):
+    env = _env()
+    env["META_WHATSAPP_ACCESS_TOKEN"] = "tenant-owned-token-placeholder"
+    env["META_WHATSAPP_PHONE_NUMBER_ID"] = "123456789"
+    env["META_WHATSAPP_WABA_ID"] = "987654321"
+    assert _statuses(evaluate_config(env, tmp_path))["meta_whatsapp_configuration"] == "pass"
+
+
+def test_preflight_surfaces_missing_feature_configuration_without_echoing_secrets(tmp_path: Path):
+    result = evaluate_config(_env(), tmp_path)
+    status = _statuses(result)
+    assert status["trusted_egress_proxy"] == "warning"
+    assert status["platform_admin_allowlist"] == "warning"
+    assert status["prospect_research_provider"] == "warning"
+    assert status["ai_draft_provider"] == "warning"
+    assert "tenant-owned-token-placeholder" not in str(result)
 
 
 def test_preflight_accepts_valid_meta_graph_version(tmp_path: Path):

@@ -14,18 +14,17 @@ from app.core.config import settings
 router=APIRouter(prefix="/api/v1",tags=["outbound-delivery"])
 
 def whatsapp_configuration_status(configuration=settings)->dict:
- """Report Meta WhatsApp setup presence only; never return credential values."""
+ """Report platform-owned Meta webhook prerequisites, not tenant-owned WhatsApp credentials."""
  required = {
-  "META_WHATSAPP_ACCESS_TOKEN": configuration.meta_whatsapp_access_token,
-  "META_WHATSAPP_APP_SECRET": configuration.meta_whatsapp_app_secret,
-  "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN": configuration.meta_whatsapp_webhook_verify_token,
-  "META_WHATSAPP_PHONE_NUMBER_ID": configuration.meta_whatsapp_phone_number_id,
-  "META_WHATSAPP_WABA_ID": configuration.meta_whatsapp_waba_id,
+  "META_WHATSAPP_APP_SECRET": getattr(configuration, "meta_whatsapp_app_secret", None),
+  "META_WHATSAPP_WEBHOOK_VERIFY_TOKEN": getattr(configuration, "meta_whatsapp_webhook_verify_token", None),
+  "META_GRAPH_API_VERSION": getattr(configuration, "meta_graph_api_version", None),
  }
  missing = sorted(name for name, value in required.items() if not isinstance(value, str) or not value.strip())
  return {
   "configuration_complete": not missing,
   "missing_fields": missing,
+  "customer_credentials_are_workspace_scoped": True,
   "coexistence_onboarding_required": True,
   "webhook_signature_verification_implemented": True,
   "inbound_event_persistence_implemented": True,
@@ -63,7 +62,7 @@ class EnqueueDelivery(BaseModel):
  model_config=ConfigDict(extra="forbid")
  workspace_id: str=Field(min_length=1,max_length=200)
  idempotency_key: str=Field(min_length=8,max_length=200,pattern=r"^[A-Za-z0-9._:-]+$")
- email_account_id: UUID|None=None
+ email_account_id: UUID
  scheduled_at: datetime|None=None
 @router.post("/drafts/{draft_id}/enqueue",status_code=201)
 async def enqueue_delivery(draft_id: UUID,payload: EnqueueDelivery,request: Request):

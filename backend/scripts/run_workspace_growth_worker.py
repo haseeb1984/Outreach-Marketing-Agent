@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import socket
+import signal
 from typing import Any
 from uuid import UUID
 
@@ -22,9 +23,8 @@ logger = logging.getLogger(__name__)
 from app.core.config import settings
 from app.services.domain_authorization_store import DomainAuthorizationStore
 from app.services.subscription_store import SubscriptionStore
-from app.services.website_fetch import FetchLimits
+from app.services.website_fetch import FetchLimits, validate_fetch_configuration
 from app.services.persisted_website_growth_pipeline import discover_persisted_workspace_site
-from app.services.workspace_growth_schedule_runner import WorkspaceGrowthScheduleRunner
 from app.services.workspace_job_queue import WorkspaceJobQueue
 
 
@@ -82,6 +82,27 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
         workspace_id = str(job["workspace_id"])
         subscriptions = SubscriptionStore(pool)
         reservation_id = payload.get("usage_reservation_id")
+        try:
+            validate_fetch_configuration()
+        except ValueError:
+            # Reject before consuming quota when production egress is unavailable.
+            if reservation_id:
+                try:
+                    await subscriptions.finish_reservation(
+                        workspace_id=workspace_id,
+                        reservation_id=reservation_id,
+                        outcome="released",
+                    )
+                except Exception:
+                    logger.warning("growth scan quota release failed after egress preflight rejection")
+            await queue.fail(
+                job_id=job["id"],
+                worker_id=worker_id,
+                error_code="website_growth_egress_not_configured",
+                retry_delay_seconds=0,
+                retry=False,
+            )
+            return True
         if reservation_id:
             entitlement = await subscriptions.validate_job_reservation(
                 workspace_id=workspace_id,
@@ -155,8 +176,11 @@ async def process_one_job(pool: Any, *, worker_id: str) -> bool:
                          error_code="growth_scan_payload_or_domain_rejected",
                          retry_delay_seconds=0, retry=False)
         return True
-    except Exception:
-        # Keep provider, URL, SQL, and credential details out of the durable job record.
+    except Exception as exc:
+        # Log only the exception class: provider, URL, SQL, and credential details
+        # may be sensitive and must not leak into the service journal.
+        logger.error("growth scan execution failed job_id=%s error_type=%s",
+                     job["id"], type(exc).__name__)
         await queue.fail(job_id=job["id"], worker_id=worker_id,
                          error_code="growth_scan_execution_failed", retry_delay_seconds=60)
         return True
@@ -171,29 +195,28 @@ async def run_worker(*, poll_seconds: float = 3.0, once: bool = False) -> None:
         dsn=settings.database_url, min_size=1, max_size=5, timeout=5, command_timeout=15
     )
     worker_id = f"{socket.gethostname()}:{os.getpid()}"[:200]
-    subscriptions = SubscriptionStore(pool)
-    schedules = WorkspaceGrowthScheduleRunner(pool, subscriptions)
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, stop_event.set)
+    logger.info("workspace growth worker started worker_id=%s poll_seconds=%s", worker_id, poll_seconds)
     try:
-        while True:
-            try:
-                await schedules.enqueue_one_due()
-            except Exception as exc:
-                # Keep sensitive SQL/config details out of logs while making the failure
-                # visible to a process supervisor and log-based alerting.
-                logger.warning("growth_schedule_poll_failed error_type=%s", type(exc).__name__)
+        while not stop_event.is_set():
             processed = await process_one_job(pool, worker_id=worker_id)
             if once:
                 return
             if not processed:
                 await asyncio.sleep(poll_seconds)
     finally:
+        loop.remove_signal_handler(signal.SIGTERM)
         await pool.close()
+        logger.info("workspace growth worker stopped worker_id=%s", worker_id)
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(description="Process durable website growth scan jobs.")
     parser.add_argument("--poll-seconds", type=float, default=3.0)
-    parser.add_argument("--once", action="store_true", help="enqueue due schedules and process at most one job")
+    parser.add_argument("--once", action="store_true", help="process at most one queued website-growth job")
     args = parser.parse_args()
     asyncio.run(run_worker(poll_seconds=args.poll_seconds, once=args.once))
 

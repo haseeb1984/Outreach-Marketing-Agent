@@ -526,3 +526,42 @@ def test_session_revocation_parses_uuid_and_scopes_to_current_user(monkeypatch):
     response = asyncio.run(auth_routes.revoke_account_session(str(target_id), SimpleNamespace()))
     assert response == {"session_id": str(target_id), "revoked": True}
 
+
+
+def test_revoke_other_sessions_endpoint_preserves_current_session(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    csrf = "c" * 43
+    session_token = "s" * 43
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    class SessionStore:
+        async def authenticate_session(self, token):
+            if token != session_token:
+                return None
+            return {
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "email": "person@example.test",
+                "session_id": "00000000-0000-0000-0000-000000000002",
+                "expires_at": expires_at,
+                "csrf_token_sha256": auth_routes.csrf_token_digest(csrf),
+            }
+
+        async def revoke_other_sessions(self, *, user_id, current_session_id):
+            assert user_id == "00000000-0000-0000-0000-000000000001"
+            assert current_session_id == "00000000-0000-0000-0000-000000000002"
+            return 3
+
+    monkeypatch.setattr(auth_routes.settings, "public_base_url", "https://app.example.test")
+    with TestClient(app, base_url="https://app.example.test") as client:
+        app.state.auth_store = SessionStore()
+        client.cookies.set("__Host-oma_session", session_token)
+        response = client.post(
+            "/api/v1/auth/sessions/revoke-others",
+            headers={"Origin": "https://app.example.test", "X-CSRF-Token": csrf},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"revoked_count": 3, "current_session_preserved": True}
+

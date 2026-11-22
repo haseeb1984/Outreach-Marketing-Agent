@@ -34,11 +34,22 @@ jobs:
         with:
           node-version: "22"
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
       - name: Type-check frontend
         run: npm run lint
       - name: Build production frontend
         run: npm run build
+      - name: Run production-server smoke tests
+        run: npm run test:smoke
+      - name: Install Chromium for browser acceptance tests
+        run: npx playwright install --with-deps chromium
+      - name: Run browser-level acceptance tests
+        run: npm run test:e2e
       - name: Package Hostinger source ZIP (exclude secrets and build outputs)
         run: |
           python - <<'PY'

@@ -31,6 +31,8 @@ class _Connection:
 
     async def fetchrow(self, query, *args):
         self.calls.append(("fetchrow", query, args))
+        if "FROM workspaces WHERE id=$1 FOR UPDATE" in query:
+            return {"id": "workspace-test"}
         if "FROM workspace_invitations WHERE token_sha256" in query:
             return {
                 "id": UUID("00000000-0000-0000-0000-000000000010"),
@@ -41,13 +43,15 @@ class _Connection:
                 "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
             }
         if "FROM app_users WHERE id=$1 FOR UPDATE" in query:
-            return {"id": args[0]} if self.account_exists else None
+            return {"id": args[0], "status": "active", "email_verified_at": datetime.now(timezone.utc)} if self.account_exists else None
         if "FROM workspace_memberships" in query:
             return None
         return None
 
     async def fetchval(self, query, *args):
         self.calls.append(("fetchval", query, args))
+        if "SELECT workspace_id FROM workspace_invitations" in query:
+            return "workspace-test"
         return self.active_memberships
 
     async def execute(self, query, *args):

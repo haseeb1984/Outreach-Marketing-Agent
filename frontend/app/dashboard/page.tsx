@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BrandMark } from "../components/site-chrome";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -19,7 +20,7 @@ type GrowthSchedule = { id: string; interval_hours: number; status: "active" | "
 type GrowthJob = { id: string; job_type: string; status: string; error_code?: string | null; attempt_count: number; max_attempts: number; created_at: string; finished_at?: string | null };
 type Project = { id: string; name: string; website_url?: string | null; business_model: string; target_market: string; language: string; audience: string; offer: string; conversion_goal: string; brand_voice: string; competitors: string[]; status: string };
 type Invitation = { id: string; invited_email: string; role: string; status: string; expires_at: string; accepted_at?: string | null; revoked_at?: string | null };
-type WorkspaceMember = { user_id: string; email: string; role: string; status: string; created_at: string };
+type WorkspaceMember = { user_id: string; email: string; account_status?: string; email_verified_at?: string | null; last_login_at?: string | null; role: string; status: string; created_at: string; updated_at?: string };
 type AuthSession = { id: string; created_at: string; last_seen_at: string; expires_at: string; user_agent?: string | null; is_current: boolean };
 type EmailAccount = { id: string; workspace_id: string; label: string; smtp_host: string; smtp_port: number; smtp_username: string; from_email: string; from_name: string; starttls: boolean; status: string; created_at: string };
 type WhatsAppAccount = { id: string; workspace_id: string; label: string; waba_id: string; phone_number_id: string; status: string; created_at: string };
@@ -34,6 +35,7 @@ type UnifiedReplyMessage = { id: string; channel: string; provider: string; dire
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type ResearchResult = { title: string; url: string; domain?: string; description: string; relevance_score?: number; relevance_reasons?: string[]; relevance_method?: string; evidence_type: string; requires_human_review: boolean };
+type InfluencerCandidate = { profile_url: string; platform: string; title: string; description: string; relevance_score: number; relevance_reasons: string[]; requires_human_review: boolean; audience_metrics: null; audience_metrics_status: string };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
 type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
@@ -176,6 +178,10 @@ export default function DashboardPage() {
   const [researchQuery, setResearchQuery] = useState("");
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
   const [researchBusy, setResearchBusy] = useState(false);
+  const [influencerQuery, setInfluencerQuery] = useState("");
+  const [influencerPlatforms, setInfluencerPlatforms] = useState(["instagram", "tiktok", "youtube", "linkedin", "x"]);
+  const [influencerResults, setInfluencerResults] = useState<InfluencerCandidate[]>([]);
+  const [influencerBusy, setInfluencerBusy] = useState(false);
   const [domainName, setDomainName] = useState("");
   const [domainChallenge, setDomainChallenge] = useState<DomainChallenge | null>(null);
   const [domainBusy, setDomainBusy] = useState(false);
@@ -618,6 +624,18 @@ export default function DashboardPage() {
       setNotice("Selected session signed out.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Session could not be revoked.");
+    } finally { setBusy(false); }
+  }
+
+  async function revokeOtherAuthSessions() {
+    if (!csrf || !window.confirm("Sign out all other devices? This device will stay signed in.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<{ revoked_count: number; current_session_preserved: boolean }>("/api/v1/auth/sessions/revoke-others", csrf, { method: "POST" });
+      setAuthSessions(current => current.filter(item => item.is_current));
+      setNotice(`Signed out ${result.revoked_count} other session${result.revoked_count === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Other sessions could not be revoked.");
     } finally { setBusy(false); }
   }
 
@@ -1516,6 +1534,35 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setResearchBusy(false); }
   }
 
+
+  async function searchInfluencers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf || !influencerQuery.trim() || influencerPlatforms.length === 0) return;
+    const requestedWorkspaceId = workspaceId;
+    setInfluencerBusy(true); setError(""); setNotice(""); setInfluencerResults([]);
+    try {
+      const result = await api<{ items: InfluencerCandidate[]; notice?: string }>(
+        "/api/v1/research/influencers/search", csrf, {
+          method: "POST",
+          body: JSON.stringify({
+            workspace_id: requestedWorkspaceId,
+            query: influencerQuery.trim(),
+            platforms: influencerPlatforms,
+            count: 10,
+            idempotency_key: "influencer-research-" + crypto.randomUUID(),
+          }),
+        }
+      );
+      if (requestedWorkspaceId !== workspaceId) return;
+      setInfluencerResults(result.items || []);
+      setNotice(result.notice || "Public creator-profile candidates are ready for review.");
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Influencer discovery could not be completed.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId) setInfluencerBusy(false);
+    }
+  }
+
   async function runProjectGrowthReview(event: FormEvent<HTMLFormElement>, project: Project) {
     event.preventDefault();
     if (!workspaceId || !csrf || !project.website_url) return;
@@ -2347,7 +2394,7 @@ export default function DashboardPage() {
   async function deleteAccount() {
     if (!csrf || busy) return;
     const requestedWorkspaceId = workspaceId;
-    if (!window.confirm("Permanently delete this account? Your sign-in will stop and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
+    if (!window.confirm("Delete this account? Sign-in will stop, sessions and pending invitations will be revoked, and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
     const confirmation = window.prompt("Type DELETE MY ACCOUNT to confirm this irreversible action.");
     if (confirmation !== "DELETE MY ACCOUNT") {
       if (requestedWorkspaceId !== workspaceId) return;
@@ -2381,8 +2428,8 @@ export default function DashboardPage() {
   ];
 
   return <>
-    <header className="wrap topbar"><Link className="brand" href="/"><span className="mark" aria-hidden="true">O</span> Outreach Marketing Agent</Link><nav className="nav" aria-label="Workspace navigation"><Link href="/product">Product</Link><Link href="/pricing">Billing</Link><Link href="/platform-admin">Platform admin</Link><button className="button secondary" type="button" onClick={logout} disabled={busy}>Sign out</button></nav></header>
-    <main className="wrap">
+    <header className="wrap topbar dashboard-header"><Link className="brand" href="/" aria-label="Outreach Marketing Agent home"><BrandMark/><span className="brand-name">Outreach<small>Marketing Agent</small></span></Link><nav className="nav" aria-label="Workspace navigation"><Link href="/product">Product</Link><Link href="/pricing">Billing</Link><Link href="/platform-admin">Platform admin</Link><button className="button secondary" type="button" onClick={logout} disabled={busy}>Sign out</button></nav></header>
+    <main className="wrap dashboard-main">
       <section className="page-head"><p className="eyebrow">Private workspace</p><h1>Your outreach workspace</h1><p className="lead">Signed in as {email || "your account"}. Research, campaigns and approvals stay separated by workspace.</p></section>
       <ErrorNotice message={error} />
       {notice && <p className="notice" role="status" aria-live="polite">{notice}</p>}
@@ -2431,9 +2478,9 @@ export default function DashboardPage() {
             </form>
           </article>
           <h3>Current members</h3>
-          <div className="cards">{members.length ? members.map(member=><article className="card" key={member.user_id}><h3>{member.email}</h3><p className="fine">{member.status} · {member.role}</p>
-            {member.role !== "owner" && <div className="field"><label htmlFor={"role-" + member.user_id}>Role</label><select id={"role-" + member.user_id} value={member.role} disabled={busy || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onChange={e=>changeMemberRole(member,e.target.value)}><option value="viewer">Viewer</option><option value="member">Member</option><option value="admin" disabled={workspaces.find(w=>w.id===workspaceId)?.role !== "owner"}>Admin</option></select></div>}
-            {member.role !== "owner" && workspaces.find(w=>w.id===workspaceId)?.role === "owner" && <button className="button secondary" type="button" disabled={busy} onClick={()=>transferOwnership(member)}>Transfer ownership</button>}
+          <div className="cards">{members.length ? members.map(member=><article className="card" key={member.user_id}><h3>{member.email}</h3><p className="fine">Membership: {member.status} · Role: {member.role}</p><p className="fine">Account: {member.account_status || "unknown"} · Email: {member.email_verified_at ? "verified" : "unverified"} · Last login: {member.last_login_at ? new Date(member.last_login_at).toLocaleString() : "Never"}</p>
+            {member.role !== "owner" && <div className="field"><label htmlFor={"role-" + member.user_id}>Role</label><select id={"role-" + member.user_id} value={member.role} disabled={busy || member.status !== "active" || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onChange={e=>changeMemberRole(member,e.target.value)}><option value="viewer">Viewer</option><option value="member">Member</option><option value="admin" disabled={workspaces.find(w=>w.id===workspaceId)?.role !== "owner"}>Admin</option></select></div>}
+            {member.role !== "owner" && workspaces.find(w=>w.id===workspaceId)?.role === "owner" && <button className="button secondary" type="button" disabled={busy || member.status !== "active" || member.account_status !== "active" || !member.email_verified_at} onClick={()=>transferOwnership(member)}>Transfer ownership</button>}
             {member.role !== "owner" && <button className="button secondary" type="button" disabled={busy || (member.role === "admin" && workspaces.find(w=>w.id===workspaceId)?.role !== "owner")} onClick={()=>removeMember(member)}>Remove member</button>}
           </article>) : <article className="card"><p>Member list is unavailable or no active memberships were returned.</p></article>}</div>
           <div className="cards">{invitations.length ? invitations.map(invitation=><article className="card" key={invitation.id}><h3>{invitation.invited_email}</h3><p className="fine">Role: {invitation.role} · Status: {invitation.status}</p><p className="fine">Expires: {new Date(invitation.expires_at).toLocaleString()}</p>{invitation.status === "pending" && <button className="button secondary" type="button" disabled={busy} onClick={() => revokeInvitation(invitation)}>Revoke invitation</button>}</article>) : <article className="card"><p>No invitations available for this workspace, or the invitation service is not yet configured.</p></article>}</div>
@@ -2603,6 +2650,22 @@ export default function DashboardPage() {
             </form>
           </article>
           {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Domain: {item.domain || "Domain unavailable"} · Relevance hint: {typeof item.relevance_score === "number" ? item.relevance_score + "/100" : "not scored"} · Review required · Not saved to CRM</p>{item.relevance_reasons && item.relevance_reasons.length > 0 && <p className="fine">{item.relevance_reasons.join(" · ")}</p>}<button className="button secondary" type="button" disabled={busy || !canWrite} onClick={() => { setProspectName(item.title.slice(0, 200)); setProspectCompany(""); setProspectWebsite(""); setProspectEmail(""); setProspectPhone(""); setEvidenceUrl(item.url); setFitReason((item.description || "Public search result; verify relevance before saving.").slice(0, 2000)); setNotice("Search evidence copied to the prospect form. Verify the real contact name, company, website and relevance before saving."); document.getElementById("prospect-name")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Prepare CRM record for review</button></article>)}</div>}
+
+          <article className="card" aria-labelledby="influencer-research-title">
+            <h3 id="influencer-research-title">Discover public creator profiles</h3>
+            <p className="fine">Find public Instagram, TikTok, YouTube, LinkedIn and X profile candidates. Relevance is based on search text only; it is not an influence or quality score.</p>
+            <form onSubmit={searchInfluencers}>
+              <div className="field"><label htmlFor="influencer-query">Creator niche, audience and market</label><input id="influencer-query" required minLength={3} maxLength={400} value={influencerQuery} onChange={event=>setInfluencerQuery(event.target.value)} placeholder="e.g. Karachi food creators reviewing independent restaurants" /></div>
+              <div className="field"><label htmlFor="influencer-platforms">Platforms (choose one or more)</label><select id="influencer-platforms" multiple size={5} value={influencerPlatforms} onChange={event=>setInfluencerPlatforms(Array.from(event.target.selectedOptions, option=>option.value))}><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="linkedin">LinkedIn</option><option value="x">X</option></select></div>
+              <button className="button" type="submit" disabled={influencerBusy || researchBusy || busy || !workspaceId || !csrf || !canWrite || influencerPlatforms.length===0}>{influencerBusy ? "Finding public creator profiles…" : "Discover creators"}</button>
+            </form>
+            {influencerResults.length > 0 && <div className="cards">{influencerResults.map(item=><article className="card" key={item.profile_url}>
+              <h4><a href={item.profile_url} target="_blank" rel="noreferrer">{item.title}</a></h4>
+              <p className="fine">{item.platform.toUpperCase()} · Topical relevance: {item.relevance_score}/100 · Human review required</p>
+              <p>{item.description || "No public search description supplied."}</p>
+              <p className="fine">Audience metrics unavailable: follower counts, average views and engagement rate have not been verified. Review the profile and current audience data independently.</p>
+            </article>)}</div>}
+          </article>
         </section>
         <section className="section" id="crm"><h2>Prospect CRM</h2>
           <article className="card"><form onSubmit={searchCrmProspects}>
@@ -2861,7 +2924,7 @@ export default function DashboardPage() {
           <h2 id="sessions-title">Signed-in devices and sessions</h2>
           <article className="card">
             <p>Review active sign-ins for this account. You can remotely sign out a device you no longer use; the current session is protected and must be ended with Sign out.</p>
-            <div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={loadAuthSessions}>Refresh sessions</button></div>
+            <div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={loadAuthSessions}>Refresh sessions</button><button className="button secondary" type="button" disabled={busy || !csrf || authSessions.filter(session=>!session.is_current).length===0} onClick={revokeOtherAuthSessions}>Sign out all other devices</button></div>
             <div className="cards">{authSessions.length ? authSessions.map(session=><article className="card" key={session.id}>
               <h3>{session.is_current ? "This device (current session)" : "Other signed-in device"}</h3>
               <p className="fine">Last active: {new Date(session.last_seen_at).toLocaleString()} · Expires: {new Date(session.expires_at).toLocaleString()}</p>
@@ -2873,8 +2936,8 @@ export default function DashboardPage() {
         <section className="section" aria-labelledby="account-danger-title">
           <h2 id="account-danger-title">Account privacy and deletion</h2>
           <article className="card">
-            <h3>Export or permanently delete your account</h3>
-            <p>Your account export is available from the footer. Account deletion revokes sessions, pseudonymizes your login identity, and removes sole-member workspaces. If another active member depends on a workspace you own, transfer ownership before retrying.</p>
+            <h3>Export or delete your account</h3>
+            <p>Your account export is available from the footer. Deletion revokes sessions and pending invitations, consumes outstanding verification/reset tokens, and pseudonymizes your login identity. Sole-member workspaces are removed; shared workspaces are retained for other non-revoked members. Security audit history remains with a pseudonymized identity; local billing rows for a deleted sole-member workspace are removed with that workspace. External provider records and backups follow separate retention controls.</p>
             <button className="button secondary" type="button" disabled={busy || !csrf} onClick={deleteAccount}>Delete my account</button>
             <p className="fine">This action is irreversible and requires two explicit confirmations. It does not claim to erase records retained by external providers or legally required operational records.</p>
           </article>

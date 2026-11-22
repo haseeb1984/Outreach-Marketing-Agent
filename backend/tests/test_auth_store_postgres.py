@@ -48,6 +48,12 @@ async def _exercise_password_reset() -> None:
                  AND conname = ANY($1::text[])""",
             [
                 "outreach_deliveries_draft_id_fkey",
+                "outreach_deliveries_draft_workspace_fk",
+                "outreach_drafts_prospect_id_fkey",
+                "outreach_drafts_prospect_workspace_fk",
+                "outreach_followup_delivery_resolutions_enrollment_id_fkey",
+                "outreach_followup_delivery_resolutions_draft_id_fkey",
+                "outreach_followup_delivery_resolutions_workspace_id_fkey",
                 "whatsapp_outbound_deliveries_account_id_fkey",
                 "whatsapp_outbound_deliveries_draft_id_fkey",
                 "whatsapp_outbound_deliveries_prospect_id_fkey",
@@ -56,6 +62,12 @@ async def _exercise_password_reset() -> None:
         )
         assert {row["conname"] for row in cascade_constraints} == {
             "outreach_deliveries_draft_id_fkey",
+            "outreach_deliveries_draft_workspace_fk",
+            "outreach_drafts_prospect_id_fkey",
+            "outreach_drafts_prospect_workspace_fk",
+            "outreach_followup_delivery_resolutions_enrollment_id_fkey",
+            "outreach_followup_delivery_resolutions_draft_id_fkey",
+            "outreach_followup_delivery_resolutions_workspace_id_fkey",
             "whatsapp_outbound_deliveries_account_id_fkey",
             "whatsapp_outbound_deliveries_draft_id_fkey",
             "whatsapp_outbound_deliveries_prospect_id_fkey",
@@ -92,6 +104,43 @@ async def _exercise_password_reset() -> None:
     try:
         store = AuthStore(pool)
         session = await store.create_session(user_id=user_id, lifetime_hours=1)
+        other_sessions = [
+            await store.create_session(user_id=user_id, lifetime_hours=1)
+            for _ in range(2)
+        ]
+        current_authenticated = await store.authenticate_session(session["token"])
+        assert current_authenticated is not None
+        revoked_count = await store.revoke_other_sessions(
+            user_id=user_id, current_session_id=current_authenticated["session_id"],
+        )
+        assert revoked_count == 2
+        assert await store.authenticate_session(session["token"]) is not None
+        other_session_states = [
+            await store.authenticate_session(other["token"])
+            for other in other_sessions
+        ]
+        assert all(state is None for state in other_session_states)
+        async with pool.acquire() as conn:
+            session_revoke_events = await conn.fetchval(
+                """SELECT count(*) FROM security_audit_events
+                   WHERE workspace_id=$1 AND actor_user_id=$2
+                     AND event_type='account.sessions.revoked_others'
+                     AND metadata->>'count'='2'""",
+                workspace_id, user_id,
+            )
+        assert session_revoke_events == 1
+        async with pool.acquire() as conn:
+            last_login = await conn.fetchval(
+                "SELECT last_login_at FROM app_users WHERE id=$1", user_id
+            )
+            login_events = await conn.fetchval(
+                """SELECT count(*) FROM security_audit_events
+                   WHERE workspace_id=$1 AND actor_user_id=$2
+                     AND event_type='account.login' AND outcome='success'""",
+                workspace_id, user_id,
+            )
+        assert last_login is not None
+        assert login_events == 3  # one audit event for each of the three created sessions
         reset = await store.issue_password_reset(email=f"{user_id.hex}@example.test")
         assert reset is not None
         token = reset["reset_token"]

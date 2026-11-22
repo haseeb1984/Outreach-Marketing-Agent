@@ -139,8 +139,44 @@ def restore(path: Path) -> None:
         raise ValueError("set_CONFIRM_RESTORE_YES_for_explicit_restore")
     environment = _connection_environment(target_url)
     # No --clean: restore is intended for a newly created empty recovery database.
-    _run(["pg_restore", "--exit-on-error", "--no-owner", "--no-privileges", "--dbname", environment["PGDATABASE"], str(path)], environment)
+    _run(["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges", "--dbname", environment["PGDATABASE"], str(path)], environment)
 
+
+
+def prune(directory: Path, older_than_days: int, keep_at_least: int, apply: bool = False) -> list[Path]:
+    """List or remove expired managed archives, always preserving the newest N.
+
+    Dry-run is the default. Only regular, non-symlink files matching the exact
+    backup naming convention are eligible; unrelated files are never touched.
+    """
+    if older_than_days < 1:
+        raise ValueError("retention_days_must_be_at_least_one")
+    if keep_at_least < 1:
+        raise ValueError("minimum_backup_count_must_be_at_least_one")
+    if not directory.exists():
+        return []
+    if not directory.is_dir() or directory.is_symlink():
+        raise ValueError("backup_directory_must_be_a_real_directory")
+
+    managed = [
+        path for path in directory.iterdir()
+        if path.name.startswith("outreach-db-")
+        and path.name.endswith(".dump")
+        and path.is_file()
+        and not path.is_symlink()
+    ]
+    managed.sort(key=lambda item: (item.stat().st_mtime_ns, item.name), reverse=True)
+    protected = {path for path in managed[:keep_at_least]}
+    cutoff = datetime.now(timezone.utc).timestamp() - older_than_days * 86400
+    expired = [
+        path for path in managed
+        if path not in protected and path.stat().st_mtime < cutoff
+    ]
+    if apply:
+        for path in expired:
+            path.unlink()
+            path.with_suffix(path.suffix + ".sha256").unlink(missing_ok=True)
+    return expired
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PostgreSQL backup and recovery helper")
@@ -150,6 +186,11 @@ def main() -> int:
     verify_parser.add_argument("backup_file", type=Path)
     restore_parser = subparsers.add_parser("restore")
     restore_parser.add_argument("backup_file", type=Path)
+    prune_parser = subparsers.add_parser("prune", help="list or remove expired managed backups")
+    prune_parser.add_argument("--directory", type=Path, default=Path(os.environ.get("BACKUP_DIR", "backups")))
+    prune_parser.add_argument("--older-than-days", type=int, required=True)
+    prune_parser.add_argument("--keep-at-least", type=int, default=2)
+    prune_parser.add_argument("--apply", action="store_true", help="perform deletion; otherwise only report candidates")
     args = parser.parse_args()
     try:
         if args.action == "backup":
@@ -158,9 +199,15 @@ def main() -> int:
         elif args.action == "verify":
             verify(args.backup_file)
             print("Backup checksum and PostgreSQL archive directory verified.")
-        else:
+        elif args.action == "restore":
             restore(args.backup_file)
             print("Restore command completed against the explicitly configured recovery database.")
+        else:
+            candidates = prune(args.directory, args.older_than_days, args.keep_at_least, apply=args.apply)
+            mode = "Deleted" if args.apply else "Would delete"
+            for candidate in candidates:
+                print(f"{mode}: {candidate.name}")
+            print(f"{mode} {len(candidates)} expired backup(s); retained at least {args.keep_at_least} newest archive(s).")
         return 0
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"Database recovery operation stopped: {exc}", file=sys.stderr)

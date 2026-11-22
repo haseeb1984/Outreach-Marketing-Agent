@@ -154,7 +154,7 @@ class WorkspaceJobQueue:
                     return None
                 job = await connection.fetchrow(
                     """UPDATE workspace_jobs
-                       SET status='running', attempt_count=attempt_count+1,
+                       SET status='running', attempt_count=attempt_count+1, error_code=NULL,
                            locked_by=$2, locked_at=$3,
                            lease_expires_at=$3 + ($4 * interval '1 second'),
                            started_at=COALESCE(started_at, $3), updated_at=$3

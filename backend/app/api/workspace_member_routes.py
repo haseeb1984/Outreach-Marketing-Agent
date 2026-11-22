@@ -55,7 +55,7 @@ async def list_workspace_members(
     try:
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
-                """SELECT m.user_id::text AS user_id,u.email,m.role,m.status,m.created_at,m.updated_at
+                """SELECT m.user_id::text AS user_id,u.email,u.status AS account_status,u.email_verified_at,u.last_login_at,m.role,m.status,m.created_at,m.updated_at
                    FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
                    WHERE m.workspace_id=$1 AND m.status IN ('active','suspended')
                    ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END,u.email""",
@@ -75,6 +75,12 @@ async def update_workspace_member(user_id: UUID, payload: MemberRoleUpdate, requ
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                workspace = await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    payload.workspace_id,
+                )
+                if workspace is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 actor_membership = await conn.fetchrow(
                     """SELECT role,status FROM workspace_memberships
                        WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
@@ -86,8 +92,9 @@ async def update_workspace_member(user_id: UUID, payload: MemberRoleUpdate, requ
                 if actor_role not in {"owner", "admin"}:
                     raise HTTPException(status_code=403, detail="workspace_admin_required")
                 target = await conn.fetchrow(
-                    """SELECT role,status FROM workspace_memberships
-                       WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
+                    """SELECT m.role,m.status,u.status AS account_status,u.email_verified_at
+                       FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+                       WHERE m.workspace_id=$1 AND m.user_id=$2 FOR UPDATE OF m,u""",
                     payload.workspace_id, user_id,
                 )
                 if target is None or target["status"] != "active":
@@ -96,6 +103,10 @@ async def update_workspace_member(user_id: UUID, payload: MemberRoleUpdate, requ
                     raise HTTPException(status_code=409, detail="workspace_owner_role_is_protected")
                 if payload.role == "admin" and actor_role != "owner":
                     raise HTTPException(status_code=403, detail="only_owner_can_grant_admin")
+                if payload.role == "admin" and (
+                    target["account_status"] != "active" or target["email_verified_at"] is None
+                ):
+                    raise HTTPException(status_code=409, detail="admin_requires_active_verified_account")
                 if target["role"] == "admin" and actor_role != "owner":
                     raise HTTPException(status_code=403, detail="only_owner_can_change_admin")
                 await conn.execute(
@@ -108,7 +119,7 @@ async def update_workspace_member(user_id: UUID, payload: MemberRoleUpdate, requ
                        (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
                        VALUES ($1,$2,'workspace.member.role_changed','success',$3::jsonb,now())""",
                     payload.workspace_id, UUID(str(actor["user_id"])),
-                    json.dumps({"target_user_id": str(user_id), "role": payload.role}),
+                    json.dumps({"target_user_id": str(user_id), "previous_role": target["role"], "role": payload.role}),
                 )
         return {"workspace_id": payload.workspace_id, "user_id": str(user_id), "role": payload.role}
     except HTTPException:
@@ -128,6 +139,12 @@ async def remove_workspace_member(
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                workspace = await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    workspace_id,
+                )
+                if workspace is None:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
                 actor_id = UUID(str(actor["user_id"]))
                 actor_membership = await conn.fetchrow(
                     """SELECT role,status FROM workspace_memberships
@@ -144,7 +161,7 @@ async def remove_workspace_member(
                        WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE""",
                     workspace_id, user_id,
                 )
-                if target is None or target["status"] != "active":
+                if target is None or target["status"] not in {"active", "suspended"}:
                     raise HTTPException(status_code=404, detail="workspace_member_not_found")
                 if target["role"] == "owner":
                     raise HTTPException(status_code=409, detail="workspace_owner_cannot_be_removed")
@@ -159,7 +176,8 @@ async def remove_workspace_member(
                     """INSERT INTO security_audit_events
                        (workspace_id,actor_user_id,event_type,outcome,metadata,created_at)
                        VALUES ($1,$2,'workspace.member.removed','success',$3::jsonb,now())""",
-                    workspace_id, actor_id, json.dumps({"target_user_id": str(user_id)}),
+                    workspace_id, actor_id,
+                    json.dumps({"target_user_id": str(user_id), "previous_role": target["role"], "previous_status": target["status"]}),
                 )
         return {"workspace_id": workspace_id, "user_id": str(user_id), "removed": True}
     except HTTPException:

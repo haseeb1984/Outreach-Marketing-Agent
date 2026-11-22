@@ -1,0 +1,65 @@
+name: Generate and verify frontend lockfile
+
+on:
+  push:
+    branches: [fix/launch-blockers-and-readiness]
+    paths:
+      - "frontend/package.json"
+      - ".github/workflows/generate-frontend-lockfile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frontend-lockfile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package.json
+      - name: Generate genuine npm lockfile from registry metadata
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify clean reproducible install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run lint
+      - name: Build production frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Run production-server smoke tests
+        working-directory: frontend
+        run: npm run test:smoke
+      - name: Install Chromium for browser acceptance tests
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run browser-level acceptance tests
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Commit generated lockfile
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already current."
+            exit 0
+          fi
+          git commit -m "Add reproducible frontend npm lockfile"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

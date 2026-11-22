@@ -6,7 +6,7 @@
 - Do not deploy the frontend to Vercel. Never place database credentials, SMTP passwords, Paddle secrets, Meta tokens, signing keys, or cookies in frontend environment variables.
 
 ## Build the upload bundle
-Preferred: download the outreach-marketing-agent-hostinger artifact from a successful Hostinger Frontend CI run. The ZIP must contain package.json, .env.example, next.config.ts, and app/ at its root. Current CI is not green, so an old artifact is not proof of the latest source.
+Preferred: download the outreach-marketing-agent-hostinger artifact from a successful Hostinger Frontend CI run. The ZIP must contain package.json, .env.example, next.config.ts, and app/ at its root. Use only an artifact from a successful Hostinger Frontend CI run for the exact commit being released; the latest verified source build is recorded in GitHub Actions, but a green build does not mean it has been uploaded to Hostinger.
 Alternative from a Windows checkout: run frontend/scripts/package-hostinger.ps1 from the repository root. This creates a source ZIP, not a prebuilt deployment. Verify the output file exists and inspect the archive before uploading.
 
 ## Hostinger configuration

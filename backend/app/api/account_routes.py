@@ -69,6 +69,17 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "invitations": [],
                     "email_accounts": [],
                     "website_audits": [],
+                    "workspace_growth_schedules": [],
+                    "workspace_jobs": [],
+                    "followup_sequences": [],
+                    "followup_steps": [],
+                    "followup_enrollments": [],
+                    "followup_delivery_resolutions": [],
+                    "email_provider_events": [],
+                    "whatsapp_conversation_notes": [],
+                    "whatsapp_conversation_activity": [],
+                    "whatsapp_inbox_saved_views": [],
+                    "whatsapp_inbox_sla_policies": [],
                     "whatsapp_accounts": [],
                     "whatsapp_conversations": [],
                     "whatsapp_inbound_messages": [],
@@ -81,7 +92,8 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "limits": {
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
                         "truncated_collections": [],
-                        "note": "A collection listed in truncated_collections exceeded the export cap; this export is incomplete for that collection.",
+                        "not_included_collections": [],
+                        "note": "This export includes the listed account, CRM, campaign, delivery, billing, website-growth, follow-up, email-provider and WhatsApp workspace records, subject to the per-collection and workspace limits. Passwords, sessions, provider credentials, worker lease internals and raw payment details are excluded; this is not a complete system backup.",
                     },
                 }
                 if export_memberships_truncated:
@@ -149,6 +161,42 @@ async def export_account_data(request: Request) -> JSONResponse:
                             recipient_wa_id,status,provider_timestamp,received_at,errors
                             FROM whatsapp_delivery_status_events WHERE workspace_id=ANY($1::text[])
                             ORDER BY received_at,id LIMIT $2""",
+                        "workspace_growth_schedules": """SELECT id,workspace_id,job_type,payload,interval_hours,status,
+                            next_run_at,last_enqueued_at,last_attempted_at,last_error_code,created_by,created_at,updated_at
+                            FROM workspace_growth_schedules WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "workspace_jobs": """SELECT id,workspace_id,job_type,status,payload,result,error_code,idempotency_key,
+                            attempt_count,max_attempts,run_after,created_at,updated_at,started_at,finished_at
+                            FROM workspace_jobs WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "followup_sequences": """SELECT id,workspace_id,campaign_id,name,channel,status,created_by,created_at,updated_at
+                            FROM outreach_followup_sequences WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "followup_steps": """SELECT st.id,st.sequence_id,st.step_number,st.delay_minutes,
+                            st.subject_template,st.body_template,st.created_at
+                            FROM outreach_followup_steps st JOIN outreach_followup_sequences s ON s.id=st.sequence_id
+                            WHERE s.workspace_id=ANY($1::text[]) ORDER BY s.created_at,st.sequence_id,st.step_number LIMIT $2""",
+                        "followup_enrollments": """SELECT id,workspace_id,sequence_id,prospect_id,created_by,current_step,status,
+                            next_run_at,paused_next_run_at,pause_reason,current_draft_id,last_delivery_id,
+                            last_whatsapp_delivery_id,last_error_code,created_at,updated_at
+                            FROM outreach_followup_enrollments WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "followup_delivery_resolutions": """SELECT id,workspace_id,enrollment_id,draft_id,delivery_id,channel,
+                            outcome,provider_status,reason,evidence_url,resolved_by,resolved_at
+                            FROM outreach_followup_delivery_resolutions WHERE workspace_id=ANY($1::text[])
+                            ORDER BY resolved_at,id LIMIT $2""",
+                        "whatsapp_conversation_notes": """SELECT id,workspace_id,conversation_id,author_user_id,body,created_at,updated_at
+                            FROM whatsapp_conversation_notes WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "whatsapp_conversation_activity": """SELECT id,workspace_id,conversation_id,actor_user_id,event_type,details,created_at
+                            FROM whatsapp_conversation_activity WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "whatsapp_inbox_saved_views": """SELECT id,workspace_id,user_id,name,filters,created_at,updated_at
+                            FROM whatsapp_inbox_saved_views WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "whatsapp_inbox_sla_policies": """SELECT workspace_id,warning_minutes,breach_minutes,updated_by,created_at,updated_at
+                            FROM whatsapp_inbox_sla_policies WHERE workspace_id=ANY($1::text[])
+                            ORDER BY workspace_id LIMIT $2""",
                         "subscriptions": """SELECT workspace_id,provider,provider_customer_id,provider_subscription_id,status,
                             billing_period_starts_at,billing_period_ends_at,entitlements,provider_event_created_at,updated_at
                             FROM workspace_subscriptions WHERE workspace_id=ANY($1::text[])
@@ -166,6 +214,16 @@ async def export_account_data(request: Request) -> JSONResponse:
                         if truncated:
                             export["limits"]["truncated_collections"].append(collection)
                         export[collection] = [dict(row) for row in rows]
+                    email_event_rows = await conn.fetch(
+                        """SELECT e.id,e.provider,e.provider_event_id,e.delivery_id,e.event_type,e.occurred_at,e.received_at
+                           FROM email_provider_events e JOIN outreach_deliveries d ON d.id=e.delivery_id
+                           WHERE d.workspace_id=ANY($1::text[]) ORDER BY e.received_at,e.id LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
+                    )
+                    email_event_rows, truncated = _bounded_export_rows(email_event_rows, limit=_MAX_EXPORT_ROWS)
+                    if truncated:
+                        export["limits"]["truncated_collections"].append("email_provider_events")
+                    export["email_provider_events"] = [dict(row) for row in email_event_rows]
                     invitation_rows = await conn.fetch(
                         """SELECT workspace_id,invited_email,role,status,created_at,expires_at,accepted_at,revoked_at
                            FROM workspace_invitations WHERE workspace_id=ANY($1::text[])
@@ -231,8 +289,9 @@ async def delete_account(request: Request) -> JSONResponse:
     """Deactivate and pseudonymize the authenticated account safely.
 
     Sole-member workspaces owned by the account are deleted with their workspace data.
-    Deletion is refused when another active member depends on a workspace owned by this
-    user; ownership must be transferred first. Shared workspace data is not silently erased.
+    Deletion is refused when any non-revoked member (active or suspended) depends on a
+    workspace owned by this user; ownership must be transferred first. Shared workspace
+    data is not silently erased. Invitations issued by or addressed to the account are revoked.
     """
     import secrets
     from app.services.auth_security import hash_password
@@ -255,21 +314,46 @@ async def delete_account(request: Request) -> JSONResponse:
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # Read identity without locking first, then take workspace locks before
+                # the account lock. Membership/invitation writers use the same workspace ->
+                # account order, avoiding a deletion-vs-invitation deadlock.
+                initial_user = await conn.fetchrow(
+                    "SELECT id,status,email FROM app_users WHERE id=$1",
+                    user_id,
+                )
+                if initial_user is None or initial_user["status"] == "deleted":
+                    raise HTTPException(status_code=404, detail="account_not_found")
+
+                await conn.fetch(
+                    """SELECT w.id FROM workspaces w
+                       WHERE EXISTS (
+                           SELECT 1 FROM workspace_memberships m
+                           WHERE m.workspace_id=w.id AND m.user_id=$1
+                       ) OR EXISTS (
+                           SELECT 1 FROM workspace_invitations i
+                           WHERE i.workspace_id=w.id AND i.status='pending'
+                             AND (i.invited_by=$1 OR i.invited_email=$2)
+                       )
+                       ORDER BY w.id FOR UPDATE OF w""",
+                    user_id, initial_user["email"],
+                )
                 user = await conn.fetchrow(
-                    "SELECT id,status FROM app_users WHERE id=$1 FOR UPDATE",
+                    "SELECT id,status,email FROM app_users WHERE id=$1 FOR UPDATE",
                     user_id,
                 )
                 if user is None or user["status"] == "deleted":
                     raise HTTPException(status_code=404, detail="account_not_found")
+                if user["email"] != initial_user["email"]:
+                    raise HTTPException(status_code=409, detail="account_changed_retry_deletion")
 
                 blocked = await conn.fetchval(
                     """SELECT EXISTS(
                          SELECT 1 FROM workspace_memberships own
-                         WHERE own.user_id=$1 AND own.role='owner' AND own.status='active'
+                         WHERE own.user_id=$1 AND own.role='owner' AND own.status<>'revoked'
                            AND EXISTS(
                              SELECT 1 FROM workspace_memberships other
                              WHERE other.workspace_id=own.workspace_id
-                               AND other.user_id<>$1 AND other.status='active'
+                               AND other.user_id<>$1 AND other.status<>'revoked'
                            )
                        )""",
                     user_id,
@@ -286,17 +370,17 @@ async def delete_account(request: Request) -> JSONResponse:
                     """DELETE FROM workspaces w
                        USING workspace_memberships own
                        WHERE w.id=own.workspace_id AND own.user_id=$1
-                         AND own.role='owner' AND own.status='active'
+                         AND own.role='owner' AND own.status<>'revoked'
                          AND NOT EXISTS(
                            SELECT 1 FROM workspace_memberships other
                            WHERE other.workspace_id=w.id AND other.user_id<>$1
-                             AND other.status='active'
+                             AND other.status<>'revoked'
                          )""",
                     user_id,
                 )
                 await conn.execute(
                     """UPDATE workspace_memberships SET status='revoked',updated_at=now()
-                       WHERE user_id=$1 AND status='active'""",
+                       WHERE user_id=$1 AND status<>'revoked'""",
                     user_id,
                 )
                 await conn.execute(
@@ -316,13 +400,13 @@ async def delete_account(request: Request) -> JSONResponse:
                 )
                 await conn.execute(
                     """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
-                       WHERE invited_by=$1 AND status='pending'""",
-                    user_id,
+                       WHERE status='pending' AND (invited_by=$1 OR invited_email=$2)""",
+                    user_id, user["email"],
                 )
                 await conn.execute(
                     """UPDATE app_users
                        SET email=$2,password_hash=$3,status='deleted',
-                           email_verified_at=NULL,updated_at=now()
+                           email_verified_at=NULL,deleted_at=now(),updated_at=now()
                        WHERE id=$1""",
                     user_id, tombstone_email, tombstone_password,
                 )

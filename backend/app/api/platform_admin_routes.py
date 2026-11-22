@@ -11,6 +11,7 @@ from app.services.email_delivery import EmailDeliveryFailed, EmailDeliveryNotCon
 router = APIRouter(prefix="/api/v1/platform-admin", tags=["platform administration"])
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,79}$")
 PRICE = re.compile(r"^pri_[A-Za-z0-9_-]+$")
+REQUIRED_ENTITLEMENT_KEYS = frozenset({"ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends", "prospect_research"})
 
 class PlanInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -41,6 +42,9 @@ class PlanInput(BaseModel):
     def valid_entitlements(cls, value):
         encoded = json.dumps(value, allow_nan=False, separators=(",", ":"))
         if len(encoded) > 100_000: raise ValueError("entitlements_too_large")
+        missing = REQUIRED_ENTITLEMENT_KEYS.difference(value)
+        if missing:
+            raise ValueError("required_entitlements_missing:" + ",".join(sorted(missing)))
         for feature, rule in value.items():
             if not isinstance(feature, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", feature):
                 raise ValueError("invalid_entitlement_feature")
@@ -127,7 +131,7 @@ def public_plan(row):
     return result
 
 @router.get("/overview")
-async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000), audit_limit: int = Query(default=100, ge=1, le=500), audit_offset: int = Query(default=0, ge=0, le=1000000)):
+async def overview(request: Request, client_limit: int = Query(default=100, ge=1, le=500), client_offset: int = Query(default=0, ge=0, le=1000000), client_search: str = Query(default="", max_length=200), usage_limit: int = Query(default=100, ge=1, le=500), usage_offset: int = Query(default=0, ge=0, le=1000000), audit_limit: int = Query(default=100, ge=1, le=500), audit_offset: int = Query(default=0, ge=0, le=1000000), audit_search: str = Query(default="", max_length=200)):
     await require_platform_admin(request)
     try:
         async with pool_for(request).acquire() as conn:
@@ -138,6 +142,21 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               (SELECT count(*) FROM workspace_subscriptions WHERE status IN ('active','trialing')) AS subscriptions_active,
               (SELECT count(*) FROM feature_usage_reservations WHERE status='consumed') AS usage_consumed,
               (SELECT count(*) FROM feature_usage_reservations WHERE status='reserved') AS usage_reserved""")
+            search_term = client_search.strip().lower()
+            client_filter = """($1 = '' OR
+              position($1 in lower(coalesce(w.name,''))) > 0 OR
+              position($1 in lower(w.id::text)) > 0 OR
+              position($1 in lower(coalesce(u.email,''))) > 0 OR
+              position($1 in lower(coalesce(s.status,''))) > 0 OR
+              position($1 in lower(coalesce((SELECT p.name FROM platform_billing_plans p WHERE p.slug=s.plan_slug),
+                (SELECT p.name FROM platform_billing_plans p WHERE p.entitlements=s.entitlements
+                  ORDER BY p.active DESC,p.created_at DESC LIMIT 1),''))) > 0)"""
+            client_search_total = await conn.fetchval("""SELECT count(*)
+              FROM workspaces w
+              LEFT JOIN workspace_memberships m ON m.workspace_id=w.id AND m.role='owner' AND m.status='active'
+              LEFT JOIN app_users u ON u.id=m.user_id
+              LEFT JOIN workspace_subscriptions s ON s.workspace_id=w.id
+              WHERE """ + client_filter, search_term)
             clients = await conn.fetch("""SELECT w.id::text AS workspace_id,w.name AS workspace_name,
               u.email AS owner_email,s.status AS subscription_status,
               COALESCE((SELECT p.name FROM platform_billing_plans p WHERE p.slug=s.plan_slug),
@@ -153,7 +172,8 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               LEFT JOIN LATERAL (SELECT count(*) FILTER(WHERE status='consumed') consumed,
                 count(*) FILTER(WHERE status='reserved') reserved,count(*) FILTER(WHERE status='released') released
                 FROM feature_usage_reservations r WHERE r.workspace_id=w.id) v ON true
-              ORDER BY w.created_at DESC LIMIT $1 OFFSET $2""", client_limit, client_offset)
+              WHERE """ + client_filter + """ ORDER BY w.created_at DESC LIMIT $2 OFFSET $3""",
+              search_term, client_limit, client_offset)
             plans = await conn.fetch("SELECT slug,name,description,price_id,display_price,currency,billing_interval,entitlements,active,created_at,updated_at FROM platform_billing_plans ORDER BY created_at DESC")
             usage_by_feature = await conn.fetch("""SELECT workspace_id::text AS workspace_id,feature,
               count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
@@ -166,20 +186,354 @@ async def overview(request: Request, client_limit: int = Query(default=100, ge=1
               FROM feature_usage_reservations r LEFT JOIN workspaces w ON w.id=r.workspace_id
               ORDER BY r.created_at DESC LIMIT $1 OFFSET $2""", usage_limit, usage_offset)
             usage_total = await conn.fetchval("SELECT count(*) FROM feature_usage_reservations")
+            audit_term = audit_search.strip().casefold()
+            audit_filter = _platform_audit_search_sql()
             admin_events = await conn.fetch("""SELECT e.id,e.actor_user_id::text AS actor_user_id,
               u.email AS actor_email,e.event_type,e.target_type,e.target_id,e.metadata,e.created_at
               FROM platform_admin_audit_events e JOIN app_users u ON u.id=e.actor_user_id
-              ORDER BY e.created_at DESC LIMIT $1 OFFSET $2""", audit_limit, audit_offset)
-            audit_total = await conn.fetchval("SELECT count(*) FROM platform_admin_audit_events")
+              WHERE """ + audit_filter + " ORDER BY e.created_at DESC,e.id DESC LIMIT $2 OFFSET $3",
+              audit_term, audit_limit, audit_offset)
+            audit_total = await conn.fetchval("""SELECT count(*) FROM platform_admin_audit_events e
+              JOIN app_users u ON u.id=e.actor_user_id WHERE """ + audit_filter, audit_term)
         return {"totals": {k:int(v or 0) for k,v in dict(totals).items()},
           "clients":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in clients],
           "plans":[public_plan(row) for row in plans],
           "usage_by_feature":[dict(row) for row in usage_by_feature],
           "recent_usage":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in recent_usage],
           "admin_events":[{k:(v.isoformat() if hasattr(v,"isoformat") else v) for k,v in dict(row).items()} for row in admin_events],
-          "clients_truncated":client_offset + len(clients) < int(totals["workspaces_total"] or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(totals["workspaces_total"] or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0), "audit_offset":audit_offset, "audit_limit":audit_limit, "audit_total":int(audit_total or 0), "audit_truncated":audit_offset + len(admin_events) < int(audit_total or 0)}
+          "clients_truncated":client_offset + len(clients) < int(client_search_total or 0), "clients_offset":client_offset, "clients_limit":client_limit, "clients_total":int(client_search_total or 0), "usage_offset":usage_offset, "usage_limit":usage_limit, "usage_total":int(usage_total or 0), "usage_truncated":usage_offset + len(recent_usage) < int(usage_total or 0), "audit_offset":audit_offset, "audit_limit":audit_limit, "audit_search":audit_search, "audit_total":int(audit_total or 0), "audit_truncated":audit_offset + len(admin_events) < int(audit_total or 0)}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503, detail="platform_admin_overview_unavailable") from None
+
+@router.get("/clients/{workspace_id}")
+async def client_detail(workspace_id: str, request: Request):
+    """Read-only platform-admin view of one workspace's members, subscription and quota history."""
+    await require_platform_admin(request)
+    if not workspace_id or len(workspace_id) > 200:
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    try:
+        async with pool_for(request).acquire() as conn:
+            workspace = await conn.fetchrow(
+                """SELECT w.id::text AS workspace_id,w.name AS workspace_name,w.created_at,
+                          s.provider,s.status AS subscription_status,s.plan_slug,
+                          s.billing_period_starts_at,s.billing_period_ends_at,s.entitlements,
+                          COALESCE(p.name, (SELECT p2.name FROM platform_billing_plans p2
+                            WHERE p2.entitlements=s.entitlements ORDER BY p2.active DESC,p2.created_at DESC LIMIT 1)) AS package_name
+                   FROM workspaces w
+                   LEFT JOIN workspace_subscriptions s ON s.workspace_id=w.id
+                   LEFT JOIN platform_billing_plans p ON p.slug=s.plan_slug
+                   WHERE w.id=$1""",
+                workspace_id,
+            )
+            if workspace is None:
+                raise HTTPException(status_code=404, detail="workspace_not_found")
+            members = await conn.fetch(
+                """SELECT u.id::text AS user_id,u.email,m.role,m.status,m.created_at,m.updated_at,
+                          u.status AS account_status,u.created_at AS account_created_at,
+                          u.email_verified_at,u.last_login_at
+                   FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+                   WHERE m.workspace_id=$1 ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,u.email""",
+                workspace_id,
+            )
+            integrity_row = await conn.fetchrow(_client_workspace_integrity_sql(), workspace_id)
+            account_events = await conn.fetch(_client_account_lifecycle_sql(), workspace_id)
+            usage = await conn.fetch(
+                """SELECT feature,count(*) FILTER(WHERE status='consumed')::bigint AS consumed,
+                          count(*) FILTER(WHERE status='reserved')::bigint AS reserved,
+                          count(*) FILTER(WHERE status='released')::bigint AS released
+                   FROM feature_usage_reservations WHERE workspace_id=$1 GROUP BY feature ORDER BY feature""",
+                workspace_id,
+            )
+            recent = await conn.fetch(
+                """SELECT id::text AS reservation_id,feature,status,created_at,updated_at,
+                          billing_period_starts_at,billing_period_ends_at
+                   FROM feature_usage_reservations WHERE workspace_id=$1
+                   ORDER BY created_at DESC LIMIT 25""",
+                workspace_id,
+            )
+            billing_transactions = await conn.fetch(_client_billing_transaction_history_sql(), workspace_id)
+            billing_events = await conn.fetch(_client_subscription_event_history_sql(), workspace_id)
+        def serialize(row):
+            return {key:(value.isoformat() if hasattr(value,"isoformat") else value) for key,value in dict(row).items()}
+        subscription = {key:(value.isoformat() if hasattr(value,"isoformat") else value) for key,value in dict(workspace).items()
+                        if key not in {"workspace_id","workspace_name","created_at"}}
+        entitlements = subscription.get("entitlements")
+        if isinstance(entitlements, str):
+            subscription["entitlements"] = json.loads(entitlements)
+        return {
+            "workspace": {"workspace_id":workspace["workspace_id"],"workspace_name":workspace["workspace_name"],
+                          "created_at":workspace["created_at"].isoformat() if workspace["created_at"] else None},
+            "subscription": subscription,
+            "members": [serialize(row) for row in members],
+            "workspace_integrity": {
+                **serialize(integrity_row),
+                "issues": (
+                    (["workspace_without_active_owner"] if int(integrity_row["active_owners"] or 0) == 0 else [])
+                    + (["workspace_multiple_active_owners"] if int(integrity_row["active_owners"] or 0) > 1 else [])
+                    + (["active_membership_for_inactive_account"] if int(integrity_row["active_memberships_for_inactive_accounts"] or 0) > 0 else [])
+                    + (["active_membership_for_unverified_account"] if int(integrity_row["active_memberships_for_unverified_accounts"] or 0) > 0 else [])
+                ),
+            },
+            "account_lifecycle_events": [
+                {
+                    "id": row["id"], "actor_user_id": row["actor_user_id"],
+                    "actor_email": row["actor_email"], "event_type": row["event_type"],
+                    "outcome": row["outcome"], "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "metadata": _safe_account_audit_metadata(row["metadata"]),
+                }
+                for row in account_events
+            ],
+            "usage_by_feature": [serialize(row) for row in usage],
+            "recent_usage": [serialize(row) for row in recent],
+            "billing_transactions": [
+                {**serialize(row), "total_minor": str(row["total_minor"]) if row["total_minor"] is not None else None}
+                for row in billing_transactions
+            ],
+            "subscription_events": [serialize(row) for row in billing_events],
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="platform_admin_client_detail_unavailable") from None
+
+
+def _platform_audit_search_sql():
+    """Parameterized server-side filter for platform-admin audit history."""
+    return """($1 = '' OR position($1 in lower(coalesce(u.email,''))) > 0
+              OR position($1 in lower(e.event_type)) > 0
+              OR position($1 in lower(e.target_type)) > 0
+              OR position($1 in lower(e.target_id)) > 0
+              OR position($1 in lower(e.metadata::text)) > 0)"""
+
+
+def _client_workspace_integrity_sql():
+    return """SELECT count(*)::bigint AS memberships_total,
+              count(*) FILTER(WHERE m.status='active')::bigint AS active_memberships,
+              count(*) FILTER(WHERE m.status='active' AND m.role='owner')::bigint AS active_owners,
+              count(*) FILTER(WHERE m.status='active' AND u.status='active'
+                AND u.email_verified_at IS NOT NULL)::bigint AS verified_active_members,
+              count(*) FILTER(WHERE m.status='active' AND u.status<>'active')::bigint AS active_memberships_for_inactive_accounts,
+              count(*) FILTER(WHERE m.status='active' AND u.email_verified_at IS NULL)::bigint AS active_memberships_for_unverified_accounts,
+              count(*) FILTER(WHERE u.status='pending_verification')::bigint AS pending_accounts
+       FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+       WHERE m.workspace_id=$1"""
+
+
+def _client_account_lifecycle_sql():
+    return """SELECT e.id,e.actor_user_id::text AS actor_user_id,u.email AS actor_email,
+              e.event_type,e.outcome,e.metadata,e.created_at
+       FROM security_audit_events e
+       LEFT JOIN app_users u ON u.id=e.actor_user_id
+       WHERE e.workspace_id=$1
+       ORDER BY e.created_at DESC,e.id DESC LIMIT 25"""
+
+
+def _safe_account_audit_metadata(metadata):
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(metadata, dict):
+        return {}
+    allowed = {"name", "role", "member_user_id", "previous_owner_user_id",
+               "new_owner_user_id", "invitation_id", "status", "reason"}
+    return {
+        key: value for key, value in metadata.items()
+        if key in allowed and isinstance(value, (str, int, float, bool, type(None)))
+    }
+
+
+def _client_billing_transaction_history_sql():
+    return """SELECT provider,transaction_id,invoice_number,status,currency_code,total_minor,
+                     billed_at,updated_at
+              FROM billing_transactions WHERE workspace_id=$1
+              ORDER BY billed_at DESC,transaction_id DESC LIMIT 10"""
+
+
+def _client_subscription_event_history_sql():
+    return """SELECT provider,provider_event_id,provider_subscription_id,event_created_at,
+                     received_at,outcome
+              FROM billing_provider_events WHERE workspace_id=$1
+              ORDER BY event_created_at DESC,received_at DESC LIMIT 10"""
+
+
+def _billing_reconciliation_sql():
+    """Shared, read-only subscription/invoice snapshot with deterministic review flags."""
+    return """WITH billing_snapshot AS (
+      SELECT w.id AS workspace_id,w.name AS workspace_name,workspace_owner.email AS owner_email,
+        s.provider,s.provider_customer_id,s.provider_subscription_id,s.plan_slug,
+        s.status AS subscription_status,s.billing_period_starts_at,s.billing_period_ends_at,
+        s.provider_event_created_at,s.updated_at AS subscription_updated_at,p.name AS plan_name,
+        tx.transaction_id AS latest_transaction_id,tx.invoice_number AS latest_invoice_number,
+        tx.status AS latest_transaction_status,tx.currency_code AS latest_currency_code,
+        tx.total_minor AS latest_total_minor,tx.billed_at AS latest_billed_at,
+        ev.provider_event_id AS latest_subscription_event_id,
+        ev.outcome AS latest_subscription_event_outcome,ev.event_created_at AS latest_subscription_event_at
+      FROM workspace_subscriptions s
+      JOIN workspaces w ON w.id=s.workspace_id
+      LEFT JOIN LATERAL (
+        SELECT catalog.name,catalog.slug FROM platform_billing_plans catalog
+        WHERE catalog.slug=s.plan_slug
+           OR (s.plan_slug IS NULL AND catalog.entitlements=s.entitlements)
+        ORDER BY (catalog.slug=s.plan_slug) DESC,catalog.active DESC,catalog.created_at DESC
+        LIMIT 1
+      ) p ON true
+      LEFT JOIN LATERAL (
+        SELECT u.email FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+        WHERE m.workspace_id=w.id AND m.role='owner' AND m.status='active'
+        ORDER BY m.created_at ASC LIMIT 1
+      ) workspace_owner ON true
+      LEFT JOIN LATERAL (
+        SELECT t.transaction_id,t.invoice_number,t.status,t.currency_code,t.total_minor,t.billed_at
+        FROM billing_transactions t
+        WHERE t.workspace_id=w.id AND t.provider=s.provider
+        ORDER BY t.billed_at DESC,t.transaction_id DESC LIMIT 1
+      ) tx ON true
+      LEFT JOIN LATERAL (
+        SELECT e.provider_event_id,e.outcome,e.event_created_at
+        FROM billing_provider_events e
+        WHERE e.workspace_id=w.id AND e.provider=s.provider
+          AND e.provider_subscription_id=s.provider_subscription_id
+        ORDER BY e.event_created_at DESC,e.received_at DESC LIMIT 1
+      ) ev ON true
+    ), flagged AS (
+      SELECT *,
+        array_remove(ARRAY[
+          CASE WHEN provider_subscription_id IS NULL OR btrim(provider_subscription_id)='' THEN 'missing_provider_subscription_id' END,
+          CASE WHEN plan_name IS NULL THEN 'plan_not_mapped' END,
+          CASE WHEN latest_transaction_id IS NULL AND subscription_status <> 'trialing' THEN 'missing_transaction_history' END,
+          CASE WHEN latest_subscription_event_id IS NULL THEN 'missing_subscription_event_history' END,
+          CASE WHEN subscription_status IN ('active','trialing')
+             AND latest_transaction_status IN ('payment_failed','past_due') THEN 'payment_attention_but_subscription_active' END,
+          CASE WHEN subscription_status='past_due' AND latest_transaction_status='completed'
+             THEN 'subscription_past_due_but_latest_payment_completed' END,
+          CASE WHEN subscription_status IN ('active','trialing')
+             AND billing_period_ends_at < now() THEN 'active_subscription_period_expired' END
+        ]::text[],NULL) AS issues
+      FROM billing_snapshot
+    )
+    """
+
+
+@router.get("/billing/reconciliation")
+async def billing_reconciliation(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=1000000),
+    search: str = Query(default="", max_length=200),
+):
+    """Read-only cross-check of subscription snapshots, signed event history and invoice ledger."""
+    await require_platform_admin(request)
+    search_term = search.strip().lower()
+    search_filter = """($1 = '' OR position($1 in lower(concat_ws(' ',
+      workspace_name,workspace_id::text,owner_email,provider,provider_subscription_id,
+      subscription_status,plan_slug,plan_name,latest_transaction_id,latest_invoice_number,
+      latest_transaction_status))) > 0)"""
+    try:
+        async with pool_for(request).acquire() as conn:
+            cte = _billing_reconciliation_sql()
+            summary = await conn.fetchrow(
+                cte + """SELECT count(*)::bigint AS subscriptions_total,
+                  count(*) FILTER(WHERE cardinality(issues)>0)::bigint AS needs_review,
+                  count(*) FILTER(WHERE 'missing_provider_subscription_id'=ANY(issues))::bigint AS missing_provider_subscription_id,
+                  count(*) FILTER(WHERE 'plan_not_mapped'=ANY(issues))::bigint AS plan_not_mapped,
+                  count(*) FILTER(WHERE 'missing_transaction_history'=ANY(issues))::bigint AS missing_transaction_history,
+                  count(*) FILTER(WHERE 'missing_subscription_event_history'=ANY(issues))::bigint AS missing_subscription_event_history,
+                  count(*) FILTER(WHERE 'payment_attention_but_subscription_active'=ANY(issues))::bigint AS payment_attention,
+                  count(*) FILTER(WHERE 'subscription_past_due_but_latest_payment_completed'=ANY(issues))::bigint AS payment_status_conflicts,
+                  count(*) FILTER(WHERE 'active_subscription_period_expired'=ANY(issues))::bigint AS expired_active_periods
+                  FROM flagged WHERE """ + search_filter, search_term)
+            rows = await conn.fetch(
+                cte + """SELECT * FROM flagged WHERE """ + search_filter + """
+                  ORDER BY cardinality(issues) DESC,subscription_updated_at DESC,workspace_name
+                  LIMIT $2 OFFSET $3""", search_term, limit, offset)
+            total = int(summary["subscriptions_total"] or 0)
+        def serialize(row):
+            result = {}
+            for key, value in dict(row).items():
+                if hasattr(value, "isoformat"):
+                    result[key] = value.isoformat()
+                elif key == "latest_total_minor" and value is not None:
+                    result[key] = str(value)
+                else:
+                    result[key] = value
+            return result
+        return {
+            "summary": {key: int(value or 0) for key, value in dict(summary).items()},
+            "items": [serialize(row) for row in rows],
+            "limit": limit, "offset": offset, "total": total,
+            "truncated": offset + len(rows) < total,
+            "search": search_term,
+            "read_only": True,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_reconciliation_unavailable") from None
+
+
+@router.get("/billing/events")
+async def billing_event_history(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=1000000),
+    search: str = Query(default="", max_length=200),
+):
+    """Read-only sanitized timeline of verified subscription and transaction webhook events."""
+    await require_platform_admin(request)
+    search_term = search.strip().lower()
+    event_sql = """
+      WITH events AS (
+        SELECT 'subscription'::text AS event_kind,e.provider,e.provider_event_id,
+          e.workspace_id::text AS workspace_id,w.name AS workspace_name,
+          e.provider_subscription_id AS related_id,e.event_created_at,e.received_at,
+          e.outcome,NULL::text AS transaction_status,NULL::text AS invoice_number
+        FROM billing_provider_events e
+        LEFT JOIN workspaces w ON w.id=e.workspace_id
+        UNION ALL
+        SELECT 'transaction'::text AS event_kind,e.provider,e.provider_event_id,
+          t.workspace_id::text AS workspace_id,w.name AS workspace_name,
+          e.transaction_id AS related_id,e.event_created_at,e.received_at,
+          'recorded'::text AS outcome,t.status AS transaction_status,t.invoice_number
+        FROM billing_transaction_events e
+        LEFT JOIN billing_transactions t
+          ON t.provider=e.provider AND t.transaction_id=e.transaction_id
+        LEFT JOIN workspaces w ON w.id=t.workspace_id
+      ), filtered AS (
+        SELECT * FROM events
+        WHERE ($1='' OR position($1 in lower(concat_ws(' ',
+          event_kind,provider,provider_event_id,workspace_id,workspace_name,
+          related_id,outcome,transaction_status,invoice_number)))>0)
+      )
+    """
+    try:
+        async with pool_for(request).acquire() as conn:
+            total = int(await conn.fetchval(
+                event_sql + "SELECT count(*) FROM filtered", search_term
+            ) or 0)
+            rows = await conn.fetch(
+                event_sql + """SELECT * FROM filtered
+                  ORDER BY event_created_at DESC,received_at DESC,provider_event_id DESC
+                  LIMIT $2 OFFSET $3""",
+                search_term, limit, offset,
+            )
+        items = []
+        for row in rows:
+            item = {}
+            for key, value in dict(row).items():
+                item[key] = value.isoformat() if hasattr(value, "isoformat") else value
+            items.append(item)
+        return {
+            "items": items, "limit": limit, "offset": offset, "total": total,
+            "truncated": offset + len(items) < total, "search": search_term,
+            "read_only": True, "payloads_exposed": False,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_event_history_unavailable") from None
+
 
 @router.post("/plans/import-configured")
 async def import_configured_plans(request: Request):

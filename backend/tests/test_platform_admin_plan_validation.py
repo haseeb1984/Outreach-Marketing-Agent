@@ -13,7 +13,13 @@ def valid_payload(**overrides):
         "display_price": "19.00",
         "currency": "USD",
         "billing_interval": "month",
-        "entitlements": {"prospect_search": {"enabled": True, "monthly_limit": 100}},
+        "entitlements": {
+            "ai_draft_generations": {"enabled": True, "monthly_limit": 100},
+            "email_sends": {"enabled": True, "monthly_limit": 1000},
+            "website_audits": {"enabled": True, "monthly_limit": 25},
+            "whatsapp_sends": {"enabled": False, "monthly_limit": 0},
+            "prospect_research": {"enabled": True, "monthly_limit": 100},
+        },
         "active": True,
     }
     payload.update(overrides)
@@ -23,7 +29,7 @@ def valid_payload(**overrides):
 def test_plan_input_accepts_valid_plan_and_entitlements():
     plan = PlanInput(**valid_payload())
     assert plan.slug == "starter"
-    assert plan.entitlements["prospect_search"]["monthly_limit"] == 100
+    assert plan.entitlements["prospect_research"]["monthly_limit"] == 100
 
 
 @pytest.mark.parametrize("slug", ["Starter", "../starter", "", "x" * 81])
@@ -40,13 +46,24 @@ def test_plan_input_rejects_invalid_paddle_price_id(price_id):
 
 @pytest.mark.parametrize("limit", [-1, True, 1.5, "100"])
 def test_plan_input_rejects_non_integer_or_negative_limits(limit):
+    entitlements = valid_payload()["entitlements"]
+    entitlements["prospect_research"] = {"enabled": True, "monthly_limit": limit}
     with pytest.raises(ValidationError):
-        PlanInput(**valid_payload(entitlements={"prospect_search": {"enabled": True, "monthly_limit": limit}}))
+        PlanInput(**valid_payload(entitlements=entitlements))
 
 
 def test_plan_input_rejects_missing_enabled_boolean():
+    entitlements = valid_payload()["entitlements"]
+    entitlements["prospect_research"] = {"monthly_limit": 10}
     with pytest.raises(ValidationError):
-        PlanInput(**valid_payload(entitlements={"prospect_search": {"monthly_limit": 10}}))
+        PlanInput(**valid_payload(entitlements=entitlements))
+
+
+def test_plan_input_rejects_missing_required_feature_entitlement():
+    entitlements = valid_payload()["entitlements"]
+    del entitlements["prospect_research"]
+    with pytest.raises(ValidationError, match="required_entitlements_missing"):
+        PlanInput(**valid_payload(entitlements=entitlements))
 
 
 def test_plan_input_rejects_unknown_fields():
@@ -56,4 +73,7 @@ def test_plan_input_rejects_unknown_fields():
 
 def test_plan_input_rejects_non_finite_json_numbers():
     with pytest.raises(ValidationError):
-        PlanInput(**valid_payload(entitlements={"prospect_search": {"enabled": True, "threshold": float("nan")}}))
+        PlanInput(**valid_payload(entitlements={
+            **valid_payload()["entitlements"],
+            "prospect_research": {"enabled": True, "monthly_limit": 100, "threshold": float("nan")},
+        }))

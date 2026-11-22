@@ -15,7 +15,7 @@ concurrency:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - name: Validate scheduler configuration
         id: validate
@@ -65,6 +65,21 @@ jobs:
             --header "Content-Type: application/json" \
             "$BACKEND_BASE_URL/api/v1/integrations/whatsapp/inbox/webhook-events/process-pending-system?batch_size=50"
 
+      - name: Materialize due follow-up steps as approval-only drafts
+        id: followup_drafts
+        if: steps.validate.outcome == 'success'
+        continue-on-error: true
+        env:
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 45 \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json" \
+            "$BACKEND_BASE_URL/api/v1/follow-up-sequences/process-due?limit=50"
+
       - name: Dispatch approved WhatsApp queue (only when explicitly enabled server-side)
         id: whatsapp_dispatch
         if: steps.validate.outcome == 'success'
@@ -87,10 +102,11 @@ jobs:
           EMAIL_OUTCOME: ${{ steps.email_delivery.outcome }}
           INBOX_OUTCOME: ${{ steps.inbox_events.outcome }}
           WHATSAPP_OUTCOME: ${{ steps.whatsapp_dispatch.outcome }}
+          FOLLOWUP_OUTCOME: ${{ steps.followup_drafts.outcome }}
         run: |
           set -euo pipefail
           failed=0
-          for task in "configuration:$VALIDATE_OUTCOME" "email:$EMAIL_OUTCOME" "whatsapp_inbox:$INBOX_OUTCOME" "whatsapp_dispatch:$WHATSAPP_OUTCOME"; do
+          for task in "configuration:$VALIDATE_OUTCOME" "email:$EMAIL_OUTCOME" "whatsapp_inbox:$INBOX_OUTCOME" "followup_drafts:$FOLLOWUP_OUTCOME" "whatsapp_dispatch:$WHATSAPP_OUTCOME"; do
             name="${task%%:*}"
             outcome="${task#*:}"
             if [ "$outcome" = "success" ]; then
