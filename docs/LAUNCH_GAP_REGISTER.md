@@ -7,7 +7,7 @@ Scope: launch and production-operational acceptance for Outreach Marketing Agent
 
 | ID | Open gap | Current evidence / acceptance needed | Status |
 | --- | --- | --- | --- |
-| LG-01 | Production database migrations | Migrations 057–062 are in the release preflight and CI, but have not been applied to production. Apply only through the approved migration process after a fresh backup and migration plan. | Operator approval / production action |
+| LG-01 | Production database migrations | GitHub Actions migration run `45051010880` completed successfully on `main` commit `583117609d7c69a0148104862c546d9b9294ae86` and reported migrations 057–062 applied. Backend CI run `45050136091` passed Python 3.11, 3.12 and 3.13. However, the migration workflow has no pre-migration backup step and the run produced no artifacts; no backup-before-change evidence is available. Independent production `schema_migrations` ledger and actual schema/constraint verification are still outstanding. | Applied; backup evidence and independent production schema verification open |
 | LG-02 | Hostinger frontend release | Frontend changes are packaged and CI-tested; Hostinger deployment has not been performed or verified from this agent. Deploy the approved frontend artifact and verify the live domain. | External deployment |
 | LG-03 | Platform-owner access configuration | Owner supplied `outreach@juncsys.com`; backend authorization already reads the configurable `PLATFORM_ADMIN_EMAILS` environment variable. The address is documented in `backend/.env.example` and the owner checklist. The current Vercel inventory did not include the variable, so add `PLATFORM_ADMIN_EMAILS=outreach@juncsys.com` to the required Vercel environments and verify owner access. | Vercel environment configuration / acceptance |
 | LG-04 | Trusted crawler egress | The current Vercel environment-key inventory did not include `TRUSTED_EGRESS_PROXY_URL`. Configure a trusted egress proxy and verify crawler requests use it. | External infrastructure |
@@ -140,3 +140,11 @@ The old audit's basic Vercel HTTP smoke checks and earlier backend CI are histor
 - The frontend workflow also generated a CI ZIP artifact. This is not a release approval and does not close the external launch gaps below; no Hostinger upload, production migration, production deployment, live billing activation, WhatsApp activation or real outreach was performed by this verification.
 - The npm lockfile remains absent from the branch, so the CI install still uses the workflow's non-lockfile fallback. LG-12 remains open for reproducible dependency installation despite the successful current CI run.
 - The passing mocked/authenticated browser journeys do not replace PostgreSQL-backed HTTP staging with two real tenants, provider acceptance, or production operations evidence. LG-01 through LG-11 and LG-13 through LG-18 remain open until their stated acceptance evidence exists.
+
+
+## LG-01 production migration execution checkpoint (2026-11-22)
+
+- GitHub Actions run `45051010880` completed successfully. Its job log records migrations `057_core_outreach_tenant_integrity.sql` through `062_followup_resolution_tenant_cleanup.sql` as applied, using the `DATABASE_URL` secret.
+- The run checked out `main` at `583117609d7c69a0148104862c546d9b9294ae86`. The workflow source contains no backup step, and the run has no uploaded artifacts; therefore no pre-migration backup evidence was found for this execution.
+- Backend CI run `45050136091` passed all three matrix jobs (Python 3.11, 3.12 and 3.13) on the same commit.
+- The production database migration ledger and live schema/constraint definitions have not been independently queried after execution. Do not close LG-01 until these are verified and backup/recovery evidence is reconciled. No application deployment was performed as part of this migration run.
