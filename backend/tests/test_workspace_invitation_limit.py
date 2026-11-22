@@ -238,3 +238,20 @@ def test_invitation_revocation_locks_workspace_before_actor_membership(monkeypat
         if call[0] == "execute" and "UPDATE workspace_invitations" in call[1]
     )
     assert workspace_lock < membership_lock < invitation_update
+
+def test_failed_invitation_email_cleanup_locks_workspace_before_revoking():
+    import inspect
+
+    source = inspect.getsource(workspace_invitation_routes.create_invitation)
+    failure_handler = source.split("except Exception:", 1)[1]
+    workspace_lock = failure_handler.index(
+        'SELECT id FROM workspaces WHERE id=$1 FOR UPDATE'
+    )
+    invitation_revoke = failure_handler.index(
+        "UPDATE workspace_invitations SET status='revoked'"
+    )
+    failure_audit = failure_handler.index(
+        "workspace.invitation.email_failed"
+    )
+
+    assert workspace_lock < invitation_revoke < failure_audit
