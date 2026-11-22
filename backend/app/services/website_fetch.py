@@ -26,6 +26,10 @@ def _pinned_request_target(url: str, address: str) -> tuple[str, dict[str, str],
     """Return an IP-literal URL plus original Host and TLS SNI identity."""
     parsed = urlsplit(url)
     hostname = (parsed.hostname or "").lower().rstrip(".")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        hostname = hostname.encode("idna").decode("ascii")
     ip = ipaddress.ip_address(address.split("%", 1)[0])
     pinned_host = f"[{ip.compressed}]" if ip.version == 6 else ip.compressed
     original_host = f"[{hostname}]" if ":" in hostname else hostname
