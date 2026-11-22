@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     database_url: str | None = None
     secret_key: str | None = None
-    trusted_egress_proxy_url: str | None = None
     public_base_url: str | None = None
     frontend_origins: str = ""
     frontend_public_url: str | None = None
