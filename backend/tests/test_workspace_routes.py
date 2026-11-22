@@ -362,6 +362,7 @@ def test_ownership_transfer_promotes_verified_active_member_and_audits(monkeypat
                          if call[0] == "fetchrow" and "JOIN app_users" in call[1])
     assert "u.status='active'" in target_lookup[1]
     assert "u.email_verified_at IS NOT NULL" in target_lookup[1]
+    assert "FOR UPDATE OF m,u" in target_lookup[1]
     updates = [call for call in connection.calls if call[0] == "execute"]
     assert len(updates) == 3
     assert "role='admin'" in updates[0][1]
