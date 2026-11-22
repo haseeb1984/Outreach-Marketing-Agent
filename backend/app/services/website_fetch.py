@@ -34,7 +34,8 @@ def _pinned_request_target(url: str, address: str) -> tuple[str, dict[str, str],
     pinned_netloc = pinned_host if port in {None, default_port} else f"{pinned_host}:{port}"
     host_header = original_host if port in {None, default_port} else f"{original_host}:{port}"
     pinned_url = urlunsplit((parsed.scheme, pinned_netloc, parsed.path or "/", parsed.query, ""))
-    headers = {"Host": host_header}
+    # Do not reuse an IP-keyed pooled TLS connection for a different hostname.
+    headers = {"Host": host_header, "Connection": "close"}
     extensions = {"sni_hostname": hostname} if parsed.scheme.lower() == "https" else {}
     return pinned_url, headers, extensions
 
