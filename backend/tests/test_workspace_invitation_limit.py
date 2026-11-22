@@ -175,3 +175,66 @@ def test_expired_invitation_is_marked_expired_before_error_is_returned(monkeypat
         for call in connection.calls
     )
 
+
+
+
+def test_invitation_revocation_locks_workspace_before_actor_membership(monkeypatch):
+    class RevocationConnection:
+        def __init__(self):
+            self.calls = []
+
+        def transaction(self):
+            return _Transaction()
+
+        async def fetchrow(self, query, *args):
+            self.calls.append(("fetchrow", query, args))
+            if "FROM workspaces WHERE id=$1 FOR UPDATE" in query:
+                return {"id": "workspace-test"}
+            return None
+
+        async def fetchval(self, query, *args):
+            self.calls.append(("fetchval", query, args))
+            return "owner"
+
+        async def execute(self, query, *args):
+            self.calls.append(("execute", query, args))
+            return "UPDATE 1"
+
+    connection = RevocationConnection()
+
+    async def authenticated(request):
+        return None, None, {
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "email": "owner@example.test",
+        }
+
+    async def authorize_admin(request, workspace_id, session):
+        return None
+
+    monkeypatch.setattr(workspace_invitation_routes, "_authenticated", authenticated)
+    monkeypatch.setattr(workspace_invitation_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(workspace_invitation_routes, "_authorize_admin", authorize_admin)
+    monkeypatch.setattr(workspace_invitation_routes, "_pool", lambda request: _Pool(connection))
+
+    result = asyncio.run(
+        workspace_invitation_routes.revoke_invitation(
+            UUID("00000000-0000-0000-0000-000000000010"),
+            SimpleNamespace(),
+            "workspace-test",
+        )
+    )
+
+    assert result == {"revoked": True}
+    workspace_lock = next(
+        index for index, call in enumerate(connection.calls)
+        if call[0] == "fetchrow" and "FROM workspaces WHERE id=$1 FOR UPDATE" in call[1]
+    )
+    membership_lock = next(
+        index for index, call in enumerate(connection.calls)
+        if call[0] == "fetchval" and "FROM workspace_memberships" in call[1] and "FOR UPDATE" in call[1]
+    )
+    invitation_update = next(
+        index for index, call in enumerate(connection.calls)
+        if call[0] == "execute" and "UPDATE workspace_invitations" in call[1]
+    )
+    assert workspace_lock < membership_lock < invitation_update
