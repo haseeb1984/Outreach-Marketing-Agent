@@ -36,7 +36,7 @@ def test_fetch_html_rechecks_redirect_destination_before_request():
 
         async def handler(request):
             requested.append(str(request.url))
-            if request.url.host == "example.com":
+            if request.headers.get("host") == "example.com":
                 return httpx.Response(302, headers={"location": "http://127.0.0.1/admin"}, request=request)
             raise AssertionError("private redirect must never be requested")
 
@@ -46,7 +46,7 @@ def test_fetch_html_rechecks_redirect_destination_before_request():
         async with make_client(handler) as client:
             with pytest.raises(ValueError):
                 await fetch_html("https://example.com/", client=client, resolver=resolver)
-        assert requested == ["https://example.com/"]
+        assert requested == ["https://93.184.216.34/"]
 
     asyncio.run(run())
 
@@ -147,7 +147,7 @@ def test_fetch_html_blocks_public_redirect_outside_allowed_host_scope():
                     resolver=resolver,
                     allowed_hosts={"example.com"},
                 )
-        assert requested == ["https://example.com/"]
+        assert requested == ["https://93.184.216.34/"]
 
     asyncio.run(run())
 
@@ -197,7 +197,7 @@ def test_fetch_html_rechecks_dns_before_following_same_host_redirect():
                 await fetch_html("https://example.com/", client=client, resolver=changing_resolver)
 
         assert resolutions == 2
-        assert requested == ["https://example.com/"]
+        assert requested == ["https://93.184.216.34/"]
 
     asyncio.run(run())
 
@@ -248,7 +248,7 @@ def test_fetch_html_rejects_cross_host_redirect_when_destination_dns_is_private(
 
         async def handler(request):
             requested.append(str(request.url))
-            if request.url.host == "example.com":
+            if request.headers.get("host") == "example.com":
                 return httpx.Response(
                     302,
                     headers={"location": "https://www.example.com/private"},
@@ -271,7 +271,7 @@ def test_fetch_html_rejects_cross_host_redirect_when_destination_dns_is_private(
                 )
 
         assert [host for host, _ in resolutions] == ["example.com", "www.example.com"]
-        assert requested == ["https://example.com/"]
+        assert requested == ["https://93.184.216.34/"]
 
     asyncio.run(run())
 
@@ -305,17 +305,54 @@ def test_fetch_html_fails_closed_when_dns_returns_no_addresses():
     asyncio.run(run())
 
 
-def test_production_fetch_fails_closed_without_trusted_egress_proxy(monkeypatch):
+def test_production_fetch_pins_validated_ip_and_preserves_host_and_tls_identity(monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
-    monkeypatch.setattr(settings, "trusted_egress_proxy_url", None)
+    captured = {}
 
-    with pytest.raises(ValueError, match="Trusted egress proxy is required"):
-        asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/html"}
+        encoding = "utf-8"
+        url = httpx.URL("https://93.184.216.34/")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def aiter_bytes(self):
+            yield b"<title>pinned</title>"
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_options"] = kwargs
+
+        def stream(self, method, url, **kwargs):
+            captured["method"] = method
+            captured["url"] = str(url)
+            captured.update(kwargs)
+            return FakeResponse()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    result = asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
+
+    assert captured["client_options"]["trust_env"] is False
+    assert "proxy" not in captured["client_options"]
+    assert captured["method"] == "GET"
+    assert captured["url"] == "https://93.184.216.34/"
+    assert captured["headers"]["Host"] == "example.com"
+    assert captured["extensions"]["sni_hostname"] == "example.com"
+    assert captured["follow_redirects"] is False
+    assert result.final_url == "https://example.com/"
+    assert result.body == "<title>pinned</title>"
 
 
 def test_production_fetch_rejects_injected_http_client(monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
-    monkeypatch.setattr(settings, "trusted_egress_proxy_url", "http://egress-proxy.internal:3128")
 
     async def handler(request):
         return httpx.Response(200, headers={"content-type": "text/html"}, text="ok", request=request)
@@ -328,79 +365,39 @@ def test_production_fetch_rejects_injected_http_client(monkeypatch):
     asyncio.run(run())
 
 
-
-def test_production_fetch_constructs_client_with_configured_egress_proxy(monkeypatch):
-    """Configuration must actually route the production client through the proxy."""
-    monkeypatch.setattr(settings, "environment", "production")
-    proxy_url = "http://egress-proxy.internal:3128"
-    monkeypatch.setattr(settings, "trusted_egress_proxy_url", proxy_url)
-    captured = {}
-
-    class FakeResponse:
-        status_code = 200
-        headers = {"content-type": "text/html"}
-        encoding = "utf-8"
-        url = httpx.URL("https://example.com/")
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def aiter_bytes(self):
-            yield b"<title>proxy-routed</title>"
-
-    class FakeClient:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
-
-        def stream(self, method, url, **kwargs):
-            assert method == "GET"
-            assert str(url) == "https://example.com/"
-            return FakeResponse()
-
-        async def aclose(self):
-            return None
-
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-
-    result = asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
-
-    assert captured["proxy"] == proxy_url
-    assert captured["trust_env"] is False
-    assert captured["follow_redirects"] is False
-    assert result.body == "<title>proxy-routed</title>"
-
-
 @pytest.mark.parametrize(
-    "proxy_url",
+    ("url", "address", "expected_url", "expected_host", "expected_sni"),
     [
-        "ftp://egress-proxy.internal:3128",
-        "http:///missing-host",
-        "http://user:password@egress-proxy.internal:3128",
-        "http://egress-proxy.internal:99999",
-        "http://egress-proxy.internal:3128?debug=true",
-        "http://egress-proxy.internal:3128#fragment",
-        " http://egress-proxy.internal:3128",
+        (
+            "https://example.com/path?q=1",
+            "93.184.216.34",
+            "https://93.184.216.34/path?q=1",
+            "example.com",
+            "example.com",
+        ),
+        (
+            "https://example.com:443/path",
+            "2001:4860:4860::8888",
+            "https://[2001:4860:4860::8888]/path",
+            "example.com",
+            "example.com",
+        ),
+        (
+            "http://example.com/path",
+            "93.184.216.34",
+            "http://93.184.216.34/path",
+            "example.com",
+            None,
+        ),
     ],
 )
-def test_production_fetch_rejects_unsafe_proxy_url_shape(monkeypatch, proxy_url):
-    monkeypatch.setattr(settings, "environment", "production")
-    monkeypatch.setattr(settings, "trusted_egress_proxy_url", proxy_url)
+def test_pinned_request_target_preserves_original_http_identity(
+    url, address, expected_url, expected_host, expected_sni
+):
+    from app.services.website_fetch import _pinned_request_target
 
-    with pytest.raises(ValueError, match="Trusted egress proxy URL is invalid"):
-        asyncio.run(fetch_html("https://example.com/", resolver=public_resolver))
+    pinned_url, headers, extensions = _pinned_request_target(url, address)
 
-
-def test_production_fetch_accepts_configured_proxy_url_shape(monkeypatch):
-    from app.services.website_fetch import _validate_trusted_proxy_url
-
-    monkeypatch.setattr(settings, "environment", "production")
-    monkeypatch.setattr(
-        settings, "trusted_egress_proxy_url", "http://egress-proxy.internal:3128"
-    )
-
-    assert _validate_trusted_proxy_url(settings.trusted_egress_proxy_url) == (
-        "http://egress-proxy.internal:3128"
-    )
+    assert pinned_url == expected_url
+    assert headers["Host"] == expected_host
+    assert extensions.get("sni_hostname") == expected_sni
