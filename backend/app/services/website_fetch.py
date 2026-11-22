@@ -78,7 +78,7 @@ async def resolve_public_addresses(host: str, port: int) -> list[str]:
         records = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except (OSError, socket.gaierror) as exc:
         raise ValueError("Hostname could not be resolved") from exc
-    addresses = sorted({record[4][0].split("%", 1)[0] for record in records})
+    addresses = sorted({record[4][0].split("%", 1)[0] for record in records}, key=lambda address: (":" in address, address))
     if not addresses:
         raise ValueError("Hostname returned no IP addresses")
     for raw in addresses:
