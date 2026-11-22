@@ -25,7 +25,7 @@ Still required before connecting Meta: eligible Coexistence onboarding, provider
 - **Subscriptions and paid entitlements:** billing provider selection, hosted checkout, signed/idempotent billing webhooks, server-side entitlements, atomic quotas, subscription lifecycle, and reconciliation remain incomplete.
 - **Research integrations:** live search/provider adapters, provider account connections, evidence capture at scale, and production analytics require implementation and staging verification.
 - **Email release verification:** actual encrypted staging SMTP configuration, provider-authenticated smoke test, deliverability evidence, and operational alerts have not been verified from this repository review.
-- **Production operations:** security review, tenant-isolation review across all resources, accessibility/manual screen-reader checks, performance measurements, backup/restore drill, incident runbook, and legal/policy launch review remain release gates.
+- **Pre-launch production gates:** security review, tenant-isolation review across all resources, accessibility/manual screen-reader checks, performance measurements, incident runbook, and legal/policy launch review remain release gates. **Post-deployment operations:** the owner configures Neon managed backup/PITR retention and snapshot policy after go-live, selects retention based on the live service's recovery objectives and Neon plan, and verifies restore readiness; track this separately from migration acceptance.
 - **Analytics:** report only provider-verified sends, delivery, replies, clicks, conversions, and ROI where data exists; do not infer successful external events from local state alone.
 
 ## Release rules
