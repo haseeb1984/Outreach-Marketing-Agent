@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-11-22
 
-This list separates engineering work from owner/provider actions that cannot safely be inferred or completed from repository access. Never paste secret values into GitHub issues, source files, or chat. Enter secrets directly in the relevant provider's environment-variable manager.
+This list separates engineering work from owner/provider actions that cannot safely be inferred or completed from repository access. Never paste secret values into GitHub issues, source files, or chat. Enter secrets directly in the relevant provider's environment-variable manager. The crawler uses direct connection-level DNS pinning; do not provision or configure `TRUSTED_EGRESS_PROXY_URL`.
 
 ## 1. Restore executable GitHub Actions
 
@@ -25,7 +25,7 @@ The Vercel environment-key inventory was inspected without decrypting values. Pr
 | `PLATFORM_ADMIN_EMAILS` | Set to `outreach@juncsys.com` (or a comma-separated list of exact authorized addresses). This remains an environment variable, not a hard-coded identity; configure it in Vercel Production and Preview as appropriate. |
 | `AI_API_KEY` | Provider API key for the configured AI base URL/model, if AI drafting is part of launch. |
 | `BRAVE_SEARCH_API_KEY` | Search provider API key for prospect/influencer discovery. |
-| `TRUSTED_EGRESS_PROXY_URL` | Sensitive Vercel variable. Provision an operator-managed HTTP(S) egress proxy that blocks private, loopback, link-local and cloud-metadata destinations at connection time; do not use an arbitrary public proxy. Set its endpoint in Production and the required Preview/Development environments, redeploy the backend, then verify a controlled public fetch succeeds and private/metadata destinations are blocked. |
+| Crawler egress | No proxy secret or third-party proxy service is required. The crawler pins each outbound request to a DNS-resolved public IP while retaining the original Host header and TLS SNI/certificate identity; every redirect is resolved and pinned separately. Complete CI and live HTTPS SSRF/DNS-rebinding acceptance before release. |
 | `META_WHATSAPP_ACCESS_TOKEN` | Meta system-user access token, if central WhatsApp is in launch scope. |
 | `META_WHATSAPP_APP_SECRET` | Meta app secret for webhook signature verification. |
 | `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN` | High-entropy webhook verification token configured identically in Meta and Vercel. |
