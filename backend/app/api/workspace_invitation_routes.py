@@ -61,14 +61,26 @@ async def list_invitations(
     await _authorize_admin(request, workspace_id, session)
     try:
         async with _pool(request).acquire() as conn:
-            rows = await conn.fetch(
-                """SELECT id,workspace_id,invited_email,role,
-                          CASE WHEN status='pending' AND expires_at <= now() THEN 'expired' ELSE status END AS status,invited_by,
-                          created_at,expires_at,accepted_at,revoked_at
-                   FROM workspace_invitations WHERE workspace_id=$1
-                   ORDER BY created_at DESC LIMIT 100""",
-                workspace_id,
-            )
+            async with conn.transaction():
+                await conn.fetchrow(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    workspace_id,
+                )
+                actor_role = await conn.fetchval(
+                    """SELECT role FROM workspace_memberships
+                       WHERE workspace_id=$1 AND user_id=$2 AND status='active' FOR UPDATE""",
+                    workspace_id, UUID(str(session["user_id"])),
+                )
+                if actor_role not in {"owner", "admin"}:
+                    raise HTTPException(status_code=404, detail="workspace_not_found")
+                rows = await conn.fetch(
+                    """SELECT id,workspace_id,invited_email,role,
+                              CASE WHEN status='pending' AND expires_at <= now() THEN 'expired' ELSE status END AS status,invited_by,
+                              created_at,expires_at,accepted_at,revoked_at
+                       FROM workspace_invitations WHERE workspace_id=$1
+                       ORDER BY created_at DESC LIMIT 100""",
+                    workspace_id,
+                )
         items = []
         for row in rows:
             item = dict(row)
