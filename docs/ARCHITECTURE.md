@@ -54,7 +54,7 @@ Ingest verifiable provider and user-supplied conversion events → reconcile by 
 - Secrets and personal data are redacted from logs.
 - Schema changes use versioned migrations.
 - Sending jobs re-check suppression, eligibility, subscription, limits and account health at execution time.
-- Use separate development/staging/production configurations, backups and restore drills, monitoring, alerts, and incident runbooks.
+- Use separate development/staging/production configurations, monitoring, alerts, and incident runbooks. For the production Neon database, the owner configures managed backup/PITR retention and any available snapshot policy as part of deployment/go-live operations; choose the retention duration after the service is live based on the Neon plan, recovery objectives and budget, and verify restore readiness. Keep this operational responsibility separate from application migrations.
 - Keep payment events and security-sensitive actions auditable; define data retention and deletion behavior before launch.
 
 
