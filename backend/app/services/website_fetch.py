@@ -11,7 +11,7 @@ import ipaddress
 import socket
 from dataclasses import dataclass
 from typing import Awaitable, Callable
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -90,10 +90,10 @@ async def fetch_html(
     By default only HTML/XHTML is accepted. Trusted callers may pass a narrow set
     of additional content types for robots.txt or XML sitemap documents.
 
-    Injected clients are useful for tests. Production callers should use the default
-    client or a vetted transport/egress proxy, never a client with redirect following
-    enabled. Only HTML/XHTML is returned; compressed payload size is bounded while
-    streaming through httpx's decoded byte iterator.
+    Injected clients are useful for tests; production callers use the default client.
+    Every request targets a validated IP literal, with the original Host and TLS
+    SNI identity retained. Only HTML/XHTML is returned; decoded response bytes are
+    bounded while streaming through httpx's byte iterator.
     """
     if (
         not isinstance(limits.timeout_seconds, (int, float))
