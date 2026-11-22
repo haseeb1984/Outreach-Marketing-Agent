@@ -345,6 +345,7 @@ def test_production_fetch_pins_validated_ip_and_preserves_host_and_tls_identity(
     assert captured["method"] == "GET"
     assert captured["url"] == "https://93.184.216.34/"
     assert captured["headers"]["Host"] == "example.com"
+    assert captured["headers"]["Connection"] == "close"
     assert captured["extensions"]["sni_hostname"] == "example.com"
     assert captured["follow_redirects"] is False
     assert result.final_url == "https://example.com/"
