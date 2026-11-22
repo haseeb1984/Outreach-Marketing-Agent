@@ -179,6 +179,10 @@ async def create_invitation(payload: InvitationCreate, request: Request) -> dict
         except Exception:
             async with pool.acquire() as conn:
                 async with conn.transaction():
+                    await conn.fetchrow(
+                        "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                        payload.workspace_id,
+                    )
                     await conn.execute(
                         """UPDATE workspace_invitations SET status='revoked',revoked_at=now()
                            WHERE id=$1 AND status='pending'""",
