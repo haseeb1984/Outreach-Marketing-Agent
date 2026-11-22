@@ -119,7 +119,7 @@ async def transfer_workspace_ownership(
                        JOIN app_users u ON u.id=m.user_id
                        WHERE m.workspace_id=$1 AND m.user_id=$2
                          AND u.status='active' AND u.email_verified_at IS NOT NULL
-                       FOR UPDATE OF m""",
+                       FOR UPDATE OF m,u""",
                     workspace_id, payload.target_user_id,
                 )
                 if target is None or target["status"] != "active":
