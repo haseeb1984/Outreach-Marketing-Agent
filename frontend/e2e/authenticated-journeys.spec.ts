@@ -79,6 +79,7 @@ test.describe("account and authenticated browser journeys", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByRole("combobox", { name: "Active workspace" })).toHaveValue("workspace-1");
     await expect(page.getByText("verified@example.test")).toBeVisible();
+    await page.screenshot({ path: "artifacts/screenshots/dashboard-workspace-desktop.png", fullPage: true, animations: "disabled" });
 
     await page.getByLabel("Create another workspace").fill("Second workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
@@ -219,6 +220,7 @@ test.describe("account and authenticated browser journeys", () => {
 
     await expect(page.getByRole("heading", { name: "Karachi Food Creator" })).toBeVisible();
     await expect(page.getByText(/Audience metrics unavailable/)).toBeVisible();
+    await page.screenshot({ path: "artifacts/screenshots/dashboard-influencer-review-desktop.png", fullPage: true, animations: "disabled" });
     expect(submitted).toMatchObject({
       workspace_id: "workspace-1",
       query: "Karachi food creators",
