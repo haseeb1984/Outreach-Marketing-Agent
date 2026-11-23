@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     frontend_public_url: str | None = None
     brave_search_api_key: str | None = None
     ai_api_key: str | None = None
-    ai_base_url: str = "https://api.openai.com/v1"
-    ai_model: str = "gpt-4o-mini"
+    ai_base_url: str = "https://api.groq.com/openai/v1"
+    ai_model: str = "openai/gpt-oss-20b"
     provider_credential_encryption_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
