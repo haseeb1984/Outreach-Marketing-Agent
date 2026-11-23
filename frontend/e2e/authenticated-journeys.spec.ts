@@ -147,7 +147,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Project name").fill("Northstar Client");
     await page.getByLabel("Website URL (optional)").fill("https://northstar.example");
     await page.getByLabel("Business model").fill("B2B SaaS");
-    await page.getByLabel("Target market").fill("United Kingdom");
+    await page.getByRole("region", { name: "Client projects and websites" }).getByLabel("Target market").fill("United Kingdom");
     await page.getByRole("button", { name: "Save project profile" }).click();
     await expect(page.getByRole("heading", { name: "Northstar Client" })).toBeVisible();
     await expect(page.getByText("Project profile saved. Website ownership verification is a separate step.")).toBeVisible();
@@ -394,7 +394,7 @@ test.describe("account and authenticated browser journeys", () => {
           contentType: "application/json",
           body: JSON.stringify({ item: emailAccounts[0] }),
         });
-      } else if (url.pathname === "/api/v1/integrations/email-accounts/owner-smtp-account/test" && method === "POST") {
+      } else if (url.pathname === "/api/v1/integrations/email-accounts/owner-smtp-account/test" && url.searchParams.get("workspace_id") === "owner-customer-workspace" && method === "POST") {
         emailAccounts = emailAccounts.map(account => ({ ...account, status: "active" }));
         await route.fulfill({
           status: 200,
@@ -432,7 +432,7 @@ test.describe("account and authenticated browser journeys", () => {
     await expect(page.getByText(/SMTP connection test succeeded/)).toBeVisible();
 
     const createCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts");
-    const testCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts/owner-smtp-account/test");
+    const testCall = calls.find(call => call.method === "POST" && call.path.startsWith("/api/v1/integrations/email-accounts/owner-smtp-account/test?workspace_id="));
     expect(createCall?.csrf).toBe(csrfToken);
     expect(testCall?.csrf).toBe(csrfToken);
 
