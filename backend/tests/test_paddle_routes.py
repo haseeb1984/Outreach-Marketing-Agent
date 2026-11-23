@@ -718,9 +718,12 @@ def test_paddle_transaction_updated_ignores_nonfinancial_status(monkeypatch):
 
 
 def test_customer_portal_endpoint_uses_authorized_workspace_customer_and_csrf(monkeypatch):
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.api import paddle_routes
-    from app.main import app
+
+    app = FastAPI()
+    app.include_router(paddle_routes.router)
 
     calls = {}
     class AuthStore:
@@ -801,9 +804,12 @@ def test_customer_portal_endpoint_uses_authorized_workspace_customer_and_csrf(mo
 
 
 def test_customer_portal_endpoint_hides_workspace_from_non_admin(monkeypatch):
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.api import paddle_routes
-    from app.main import app
+
+    app = FastAPI()
+    app.include_router(paddle_routes.router)
 
     calls = {"provider": False, "database": False}
     class AuthStore:
@@ -847,9 +853,12 @@ def test_customer_portal_endpoint_hides_workspace_from_non_admin(monkeypatch):
 
 
 def test_customer_portal_endpoint_rejects_untrusted_provider_redirect(monkeypatch):
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.api import paddle_routes
-    from app.main import app
+
+    app = FastAPI()
+    app.include_router(paddle_routes.router)
 
     class AuthStore:
         async def authorize_workspace(self, **kwargs):
