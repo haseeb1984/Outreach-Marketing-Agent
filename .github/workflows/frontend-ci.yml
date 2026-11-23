@@ -50,6 +50,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run browser-level acceptance tests
         run: npm run test:e2e
+      - name: Upload public-site browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outreach-marketing-agent-browser-screenshots
+          path: frontend/artifacts/screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 30
       - name: Package Hostinger source ZIP (exclude secrets and build outputs)
         run: |
           python - <<'PY'
