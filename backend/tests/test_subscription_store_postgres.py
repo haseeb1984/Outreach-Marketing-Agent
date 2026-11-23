@@ -229,9 +229,14 @@ async def _exercise_daily_prospect_quota() -> None:
         ) is True
         next_day_result = await store.reserve_usage(
             workspace_id=workspace_id, feature="prospect_research",
-            idempotency_key="daily-prospect-next-day", now=next_day,
+            idempotency_key="daily-prospect-next-day", units=20, now=next_day,
         )
         assert next_day_result["allowed"] is True
+        assert next_day_result["reserved_units"] == 2
+        assert await store.finish_reservation(
+            workspace_id=workspace_id, reservation_id=next_day_result["reservation_id"],
+            outcome="consumed", units=1,
+        ) is True
         daily = await store.get_entitlement(
             workspace_id=workspace_id, feature="prospect_research", now=next_day,
         )
