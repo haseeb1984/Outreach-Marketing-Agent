@@ -141,7 +141,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Email address").fill("project-owner@example.test");
     await page.getByLabel("Password").fill("correct-password");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByRole("heading", { name: "Create project profile" })).toBeVisible();
 
     await page.getByLabel("Project name").fill("Northstar Client");
@@ -166,7 +166,8 @@ test.describe("account and authenticated browser journeys", () => {
     const mutations = calls.filter(call => call.path.startsWith("/api/v1/projects") && call.method !== "GET");
     expect(mutations.map(call => call.method)).toEqual(["POST", "PATCH", "DELETE"]);
     expect(mutations.every(call => call.csrf === csrfToken)).toBe(true);
-    expect(mutations.every(call => call.body?.workspace_id === workspaceId)).toBe(true);
+    expect(mutations.filter(call => call.method !== "DELETE").every(call => call.body?.workspace_id === workspaceId)).toBe(true);
+    expect(mutations.find(call => call.method === "DELETE")?.path).toContain("workspace_id=" + workspaceId);
     expect(mutations[0].body?.name).toBe("Northstar Client");
     expect(mutations[1].body?.name).toBe("Northstar Client Updated");
   });
@@ -327,7 +328,7 @@ test.describe("account and authenticated browser journeys", () => {
       const method = request.method();
       calls.push({
         method,
-        path: url.pathname,
+        path: url.pathname + url.search,
         csrf: request.headers()["x-csrf-token"] || "",
       });
 
