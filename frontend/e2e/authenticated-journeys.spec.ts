@@ -106,7 +106,7 @@ test.describe("account and authenticated browser journeys", () => {
       const method = request.method();
       const path = url.pathname;
       const body = method === "POST" || method === "PATCH" ? request.postDataJSON() as Record<string, unknown> : undefined;
-      calls.push({ method, path, csrf: request.headers()["x-csrf-token"] || "", body });
+      calls.push({ method, path: path + url.search, csrf: request.headers()["x-csrf-token"] || "", body });
 
       if (path === "/api/v1/auth/login") {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { user_id: "project-owner", email: "project-owner@example.test" }, csrf_token: csrfToken }) });
