@@ -844,3 +844,63 @@ def test_customer_portal_endpoint_hides_workspace_from_non_admin(monkeypatch):
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
     assert calls == {"provider": False, "database": False}
+
+
+def test_customer_portal_endpoint_rejects_untrusted_provider_redirect(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    class AuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class Connection:
+        async def fetchval(self, query, workspace_id):
+            return "ctm_workspace_customer"
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    class ProviderResponse:
+        status_code = 200
+        def json(self):
+            return {"data": {"urls": {"general": {
+                "overview": "https://customer-portal.sandbox.paddle.com.attacker.example/session/steal"
+            }}}}
+
+    class ProviderClient:
+        def __init__(self, timeout):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def post(self, *args, **kwargs):
+            return ProviderResponse()
+
+    async def fake_authenticated(request):
+        return AuthStore(), None, {"user_id": "owner-user"}
+
+    monkeypatch.setattr(paddle_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(paddle_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "sandbox")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_api_key", "sandbox-api-key")
+    monkeypatch.setattr(paddle_routes.httpx, "AsyncClient", ProviderClient)
+
+    with TestClient(app) as client:
+        app.state.auth_store = AuthStore()
+        app.state.db_pool = Pool()
+        response = client.post(
+            "/api/v1/billing/paddle/portal?workspace_id=workspace-owner"
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "paddle_portal_url_unavailable"
