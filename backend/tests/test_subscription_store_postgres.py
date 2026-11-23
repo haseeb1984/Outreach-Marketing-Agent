@@ -14,6 +14,7 @@ from app.db.migrations import apply_migrations
 import pytest
 
 from app.services.subscription_store import SubscriptionStore
+from app.core.config import settings
 
 
 NOW = datetime(2026, 10, 28, 12, 0, tzinfo=timezone.utc)
@@ -236,5 +237,67 @@ async def _exercise_daily_prospect_quota() -> None:
         )
         assert daily.allowed is True
         assert daily.remaining == 1
+    finally:
+        await pool.close()
+
+@pytest.mark.skipif(
+    not os.getenv("OMA_TEST_DATABASE_URL"),
+    reason="requires a dedicated disposable PostgreSQL test database",
+)
+def test_platform_owner_gets_largest_active_package_daily_lead_cap(monkeypatch):
+    owner_email = "platform-owner-" + uuid4().hex[:10] + "@example.test"
+    monkeypatch.setattr(settings, "platform_admin_emails", owner_email)
+    asyncio.run(_exercise_platform_owner_daily_cap(owner_email))
+
+
+async def _exercise_platform_owner_daily_cap(owner_email: str) -> None:
+    database_url = os.environ["OMA_TEST_DATABASE_URL"]
+    workspace_id = "daily-owner-" + uuid4().hex
+    connection = await asyncpg.connect(database_url)
+    try:
+        await apply_migrations(database_url)
+        await connection.execute("INSERT INTO workspaces (id) VALUES ($1)", workspace_id)
+        user = await connection.fetchrow(
+            """INSERT INTO app_users (email,password_hash,status)
+               VALUES ($1,'integration-test-hash','active') RETURNING id""",
+            owner_email,
+        )
+        await connection.execute(
+            """INSERT INTO workspace_memberships (workspace_id,user_id,role,status)
+               VALUES ($1,$2,'owner','active')""", workspace_id, user["id"])
+        await connection.execute(
+            """INSERT INTO platform_billing_plans
+               (slug,name,price_id,entitlements,active)
+               VALUES
+               ('daily-owner-small','Daily Owner Small','pri_daily_owner_small',
+                $1::jsonb,true),
+               ('daily-owner-large','Daily Owner Large','pri_daily_owner_large',
+                $2::jsonb,true)""",
+            json.dumps({"prospect_research": {"enabled": True, "monthly_limit": 3}}),
+            json.dumps({"prospect_research": {"enabled": True, "monthly_limit": 5}}),
+        )
+    finally:
+        await connection.close()
+
+    pool = await asyncpg.create_pool(database_url, min_size=1, max_size=4)
+    try:
+        store = SubscriptionStore(pool)
+        decision = await store.get_entitlement(
+            workspace_id=workspace_id, feature="prospect_research", now=NOW)
+        assert decision.allowed is True
+        assert decision.remaining == 5
+        reservations = await asyncio.gather(*[
+            store.reserve_usage(
+                workspace_id=workspace_id, feature="prospect_research",
+                idempotency_key=f"owner-lead-{index:02d}", now=NOW)
+            for index in range(1, 7)
+        ])
+        assert sum(item["allowed"] for item in reservations) == 5
+        assert sum(item.get("reason") == "quota_exhausted" for item in reservations) == 1
+        next_day = await store.get_entitlement(
+            workspace_id=workspace_id, feature="prospect_research",
+            now=NOW + timedelta(days=1))
+        assert next_day.allowed is True
+        assert next_day.remaining == 5
     finally:
         await pool.close()
