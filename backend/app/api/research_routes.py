@@ -151,6 +151,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
             workspace_id=payload.workspace_id,
             feature="prospect_research",
             idempotency_key="prospect-research:" + payload.idempotency_key,
+            units=payload.count,
         )
     except Exception:
         raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
@@ -161,11 +162,12 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         raise HTTPException(status_code=409, detail="research_key_already_used")
 
     reservation_id = reservation["reservation_id"]
+    requested_count = int(reservation.get("reserved_units", payload.count))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False) as client:
             response = await client.get(
                 "https://api.search.brave.com/res/v1/web/search",
-                params={"q": payload.query.strip(), "count": min(20, payload.count * 2), "safesearch": "moderate"},
+                params={"q": payload.query.strip(), "count": min(20, requested_count * 2), "safesearch": "moderate"},
                 headers={
                     "Accept": "application/json",
                     "X-Subscription-Token": settings.brave_search_api_key,
@@ -173,7 +175,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
             )
         if response.status_code != 200:
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
             raise HTTPException(status_code=502, detail="search_provider_unavailable")
         data = response.json()
@@ -181,7 +183,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         raw_results = web.get("results") if isinstance(web, dict) else None
         if not isinstance(raw_results, list):
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
             raise HTTPException(status_code=502, detail="search_response_invalid")
 
@@ -224,9 +226,9 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         results = sorted(
             best_by_host.values(),
             key=lambda item: (-item["relevance_score"], item["domain"], item["url"]),
-        )[:payload.count]
+        )[:requested_count]
         await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed", units=len(results)
         )
         return {
             "workspace_id": payload.workspace_id,
@@ -387,6 +389,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
             workspace_id=payload.workspace_id,
             feature="prospect_research",
             idempotency_key="influencer-research:" + payload.idempotency_key,
+            units=payload.count,
         )
     except Exception:
         raise HTTPException(status_code=503, detail="billing_status_unavailable") from None
@@ -397,16 +400,17 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         raise HTTPException(status_code=409, detail="research_key_already_used")
 
     reservation_id = reservation["reservation_id"]
+    requested_count = int(reservation.get("reserved_units", payload.count))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False) as client:
             response = await client.get(
                 "https://api.search.brave.com/res/v1/web/search",
-                params={"q": search_query, "count": min(20, payload.count * 3), "safesearch": "moderate"},
+                params={"q": search_query, "count": min(20, requested_count * 3), "safesearch": "moderate"},
                 headers={"Accept": "application/json", "X-Subscription-Token": settings.brave_search_api_key},
             )
         if response.status_code != 200:
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
             raise HTTPException(status_code=502, detail="search_provider_unavailable")
         data = response.json()
@@ -414,7 +418,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         raw_results = web.get("results") if isinstance(web, dict) else None
         if not isinstance(raw_results, list):
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
             raise HTTPException(status_code=502, detail="search_response_invalid")
 
@@ -454,9 +458,9 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         items = sorted(
             by_profile.values(),
             key=lambda item: (-item["relevance_score"], item["platform"], item["profile_url"]),
-        )[:payload.count]
+        )[:requested_count]
         await subscriptions.finish_reservation(
-            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+            workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed", units=len(items)
         )
         return {
             "workspace_id": payload.workspace_id,
