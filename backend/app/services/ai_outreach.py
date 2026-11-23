@@ -42,20 +42,22 @@ def _production_ids_from_docs(html: str) -> list[str]:
     parser = _TextExtractor()
     parser.feed(html)
     text = " ".join(parser.parts)
-    start = text.find("Production Models")
-    end = text.find("Preview Models", start + 1) if start >= 0 else -1
-    if start < 0:
-        return []
-    section = text[start:end if end > start else len(text)]
-    # Groq model IDs are the compact identifiers shown in the official table.
-    found = re.findall(
-        r"(?<![A-Za-z0-9_./-])(?:[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?(?![A-Za-z0-9_./-])",
-        section,
-    )
+    starts = [match.start() for match in re.finditer("Production Models", text)]
     excluded = {"production", "models", "model", "groqcloud", "tokens", "contact", "sales"}
-    return list(dict.fromkeys(item for item in found if item not in excluded and (
-        "/" in item or any(ch.isdigit() for ch in item)
-    )))
+    sections: list[list[str]] = []
+    for start in starts:
+        end = text.find("Preview Models", start + 1)
+        section = text[start:end if end > start else len(text)]
+        found = re.findall(
+            r"(?<![A-Za-z0-9_./-])(?:[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?(?![A-Za-z0-9_./-])",
+            section,
+        )
+        ids = list(dict.fromkeys(item for item in found if item not in excluded and (
+            "/" in item or any(ch.isdigit() for ch in item)
+        )))
+        if ids:
+            sections.append(ids)
+    return max(sections, key=len) if sections else []
 
 
 async def _discover_production_models(client: httpx.AsyncClient, api_key: str,
