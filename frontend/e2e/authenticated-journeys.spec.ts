@@ -305,7 +305,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Password").fill("owner-customer-mode-test-password");
     await page.getByRole("button", { name: "Sign in" }).click();
 
-    await expect(page).toHaveURL(/\\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByRole("combobox", { name: "Active workspace" })).toHaveValue("owner-customer-workspace");
     await expect(page.getByRole("heading", { name: "Connected email accounts" })).toBeVisible();
 
