@@ -68,7 +68,7 @@ class SubscriptionStore:
             if not enabled:
                 return EntitlementDecision(False, reason)
             used = int(await conn.fetchval(
-                """SELECT count(*) FROM daily_feature_usage_reservations
+                """SELECT COALESCE(sum(units),0) FROM daily_feature_usage_reservations
                    WHERE workspace_id=$1 AND feature='prospect_research'
                      AND usage_date=$2::date AND status IN ('reserved','consumed')""",
                 workspace_id, now.astimezone(timezone.utc).date()) or 0)
@@ -76,39 +76,42 @@ class SubscriptionStore:
         return EntitlementDecision(remaining > 0, "quota_exhausted" if remaining == 0 else reason, remaining)
 
     async def _reserve_daily_prospect_usage(self, *, workspace_id: str, idempotency_key: str,
-                                            now: datetime | None = None) -> dict[str, Any]:
+                                            units: int = 1, now: datetime | None = None) -> dict[str, Any]:
         current = now or datetime.now(timezone.utc)
         usage_date = current.astimezone(timezone.utc).date()
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 await conn.fetchrow("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE", workspace_id)
                 existing = await conn.fetchrow(
-                    """SELECT id,status FROM daily_feature_usage_reservations
+                    """SELECT id,status,units FROM daily_feature_usage_reservations
                        WHERE workspace_id=$1 AND idempotency_key=$2""", workspace_id, idempotency_key)
                 if existing is not None:
                     if existing["status"] == "released":
                         return {"allowed": False, "reason": "reservation_released"}
                     return {"allowed": True, "reason": "idempotent_replay",
-                            "reservation_id": str(existing["id"]), "status": existing["status"]}
+                            "reservation_id": str(existing["id"]), "status": existing["status"],
+                            "reserved_units": int(existing["units"])}
                 enabled, limit, reason = await self._daily_prospect_policy(
                     conn, workspace_id=workspace_id, now=current)
                 if not enabled:
                     return {"allowed": False, "reason": reason}
                 used = int(await conn.fetchval(
-                    """SELECT count(*) FROM daily_feature_usage_reservations
+                    """SELECT COALESCE(sum(units),0) FROM daily_feature_usage_reservations
                        WHERE workspace_id=$1 AND feature='prospect_research'
                          AND usage_date=$2::date AND status IN ('reserved','consumed')""",
                     workspace_id, usage_date) or 0)
                 remaining = max(0, limit - used)
                 if remaining == 0:
                     return {"allowed": False, "reason": "quota_exhausted", "remaining": 0}
+                reserved_units = min(units, remaining)
                 row = await conn.fetchrow(
                     """INSERT INTO daily_feature_usage_reservations
-                       (workspace_id,feature,idempotency_key,usage_date,status,created_at,updated_at)
-                       VALUES($1,'prospect_research',$2,$3,'reserved',$4,$4) RETURNING id,status""",
-                    workspace_id, idempotency_key, usage_date, current)
+                       (workspace_id,feature,idempotency_key,usage_date,units,status,created_at,updated_at)
+                       VALUES($1,'prospect_research',$2,$3,$4,'reserved',$5,$5) RETURNING id,status""",
+                    workspace_id, idempotency_key, usage_date, reserved_units, current)
                 return {"allowed": True, "reason": reason, "reservation_id": str(row["id"]),
-                        "status": row["status"], "remaining": remaining - 1}
+                        "status": row["status"], "reserved_units": reserved_units,
+                        "remaining": remaining - reserved_units}
 
     async def get_entitlement(
         self, *, workspace_id: str, feature: str, now: datetime | None = None,
@@ -226,7 +229,7 @@ class SubscriptionStore:
 
     async def reserve_usage(
         self, *, workspace_id: str, feature: str, idempotency_key: str,
-        now: datetime | None = None, connection: Any | None = None,
+        now: datetime | None = None, connection: Any | None = None, units: int = 1,
     ) -> dict[str, Any]:
         """Atomically reserve one quota unit and return a stable reservation.
 
@@ -240,8 +243,10 @@ class SubscriptionStore:
                 raise ValueError("invalid_workspace")
             if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 200:
                 raise ValueError("invalid_idempotency_key")
+            if isinstance(units, bool) or not isinstance(units, int) or not 1 <= units <= 20:
+                raise ValueError("invalid_usage_units")
             return await self._reserve_daily_prospect_usage(
-                workspace_id=workspace_id, idempotency_key=idempotency_key, now=now
+                workspace_id=workspace_id, idempotency_key=idempotency_key, units=units, now=now
             )
         if not isinstance(workspace_id, str) or not workspace_id.strip():
             raise ValueError("invalid_workspace")
@@ -312,7 +317,7 @@ class SubscriptionStore:
 
     async def finish_reservation(
         self, *, workspace_id: str, reservation_id: str, outcome: str,
-        connection: Any | None = None,
+        connection: Any | None = None, units: int | None = None,
     ) -> bool:
         """Move a reservation to consumed or released once; no silent double-finish."""
         if outcome not in {"consumed", "released"}:
@@ -324,10 +329,13 @@ class SubscriptionStore:
         if not isinstance(workspace_id, str) or not workspace_id.strip():
             return False
         async with _connection_scope(self._pool, connection) as conn:
+            if units is not None and (isinstance(units, bool) or not isinstance(units, int) or units < 0):
+                return False
             daily_row = await conn.fetchrow(
-                """UPDATE daily_feature_usage_reservations SET status=$3,updated_at=now()
+                """UPDATE daily_feature_usage_reservations
+                   SET status=$3,units=COALESCE($4,units),updated_at=now()
                    WHERE id=$1::uuid AND workspace_id=$2 AND status='reserved' RETURNING id""",
-                reservation_uuid, workspace_id, outcome,
+                reservation_uuid, workspace_id, outcome, units,
             )
             if daily_row is not None:
                 return True
