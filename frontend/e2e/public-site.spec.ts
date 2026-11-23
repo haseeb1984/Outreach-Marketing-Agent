@@ -23,6 +23,11 @@ test.describe("public website browser acceptance", () => {
       await expect(page.locator("body")).toContainText(expectedContent);
       await expect(page.locator("body")).not.toContainText("Application error: a server-side exception has occurred");
       expect(pageErrors, `${route} browser runtime errors`).toEqual([]);
+      await page.screenshot({
+        path: `artifacts/screenshots/public-${route === "/" ? "home" : route.slice(1)}-desktop.png`,
+        fullPage: true,
+        animations: "disabled",
+      });
     });
   }
 
@@ -76,5 +81,10 @@ test.describe("public website browser acceptance", () => {
       content: document.documentElement.scrollWidth,
     }));
     expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport + 1);
+    await page.screenshot({
+      path: "artifacts/screenshots/public-home-mobile.png",
+      fullPage: true,
+      animations: "disabled",
+    });
   });
 });
