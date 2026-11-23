@@ -76,8 +76,7 @@ def _patch_auth(monkeypatch, *, role="member"):
     async def authorize(request, workspace_id, minimum_role, session):
         assert workspace_id == "workspace-a"
         assert session["user_id"] == USER_ID
-        assert minimum_role in {"viewer", "member", "admin"}
-        if role is None:
+        if role is None or minimum_role != role:
             raise HTTPException(status_code=404, detail="workspace_not_found")
 
     monkeypatch.setattr(project_routes, "_authenticated", authenticated)
