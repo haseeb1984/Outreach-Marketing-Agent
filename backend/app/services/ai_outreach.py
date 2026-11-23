@@ -165,7 +165,19 @@ async def generate_ai_outreach(*, api_key: str, base_url: str, model: str,
                 item for item in candidates if item != preferred
             ]
             last_error: Exception | None = None
-            for index, selected_model in enumerate(ordered):
+            attempted: set[str] = set()
+            refreshed = False
+            while True:
+                selected_model = next((item for item in ordered if item not in attempted), None)
+                if selected_model is None:
+                    if not refreshed:
+                        refreshed = True
+                        ordered = await _discover_production_models(
+                            client, api_key, force_refresh=True
+                        )
+                        continue
+                    break
+                attempted.add(selected_model)
                 response = await client.post(
                     endpoint,
                     headers=headers,
@@ -182,13 +194,11 @@ async def generate_ai_outreach(*, api_key: str, base_url: str, model: str,
                 )
                 if _is_model_unavailable(response):
                     last_error = AIOutreachUnavailable("groq_model_unavailable")
-                    # Refresh the official list once, then retry only with a
-                    # different active production model.
-                    if index == 0:
-                        refreshed = await _discover_production_models(
+                    if not refreshed:
+                        refreshed = True
+                        ordered = await _discover_production_models(
                             client, api_key, force_refresh=True
                         )
-                        ordered = [item for item in refreshed if item != selected_model]
                     continue
                 response.raise_for_status()
                 result = response.json()
