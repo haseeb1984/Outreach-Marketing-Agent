@@ -364,4 +364,67 @@ test.describe("account and authenticated browser journeys", () => {
     expect(calls.some(call => call.path.startsWith("/api/v1/platform-admin/smtp/"))).toBe(false);
   });
 
+  test("workspace owner opens the trusted Paddle customer portal with CSRF protection", async ({ page }) => {
+    const csrfToken = "paddle-portal-csrf-token-0123456789";
+    const workspaceId = "billing-owner-workspace";
+    let portalRequest: { method: string; url: string; csrf: string; body: unknown } | undefined;
+
+    await page.route("**/api/v1/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.pathname === "/api/v1/auth/me") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ user: { user_id: "billing-owner", email: "billing-owner@example.test" }, csrf_token: csrfToken }),
+        });
+      } else if (url.pathname === "/api/v1/workspaces" && request.method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [{ id: workspaceId, name: "Billing owner workspace", role: "owner" }] }),
+        });
+      } else if (url.pathname === "/api/v1/billing/paddle/plans") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [{ id: "starter", name: "Starter", description: "Workspace plan", display_price: "$19", currency: "USD", billing_interval: "month", checkout_available: true }] }),
+        });
+      } else if (url.pathname === "/api/v1/billing/paddle/portal") {
+        portalRequest = {
+          method: request.method(),
+          url: request.url(),
+          csrf: request.headers()["x-csrf-token"] || "",
+          body: request.postDataJSON(),
+        };
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ portal_url: "https://customer-portal.sandbox.paddle.com/portal/session/test-session" }),
+        });
+      } else if (url.pathname === "/api/v1/auth/sessions") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+      } else {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+      }
+    });
+
+    await page.route("https://customer-portal.sandbox.paddle.com/**", async route => {
+      await route.fulfill({ status: 200, contentType: "text/html", body: "<title>Paddle customer portal</title>" });
+    });
+
+    await page.goto("/dashboard");
+    await expect(page.getByRole("combobox", { name: "Active workspace" })).toHaveValue(workspaceId);
+    await page.getByRole("button", { name: "Manage billing" }).click();
+
+    await expect(page).toHaveURL(/customer-portal\.sandbox\.paddle\.com\/portal\/session\/test-session$/);
+    expect(portalRequest).toMatchObject({
+      method: "POST",
+      csrf: csrfToken,
+      body: {},
+    });
+    expect(portalRequest?.url).toContain("workspace_id=billing-owner-workspace");
+  });
+
+
 });
