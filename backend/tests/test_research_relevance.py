@@ -299,7 +299,7 @@ def test_research_save_hides_unexpected_persistence_errors(monkeypatch):
     assert "private database details" not in response.text
 
 
-def test_search_route_consumes_reservation_on_unexpected_provider_processing_error():
+def test_search_route_releases_reservation_on_unexpected_provider_processing_error():
     import inspect
     from app.api.research_routes import search_public_prospects
 
@@ -307,7 +307,7 @@ def test_search_route_consumes_reservation_on_unexpected_provider_processing_err
     provider_call = source.index("async with httpx.AsyncClient")
     outer_handler = source.index("except Exception:", provider_call)
     handler = source[outer_handler:]
-    assert 'outcome="consumed"' in handler
+    assert 'outcome="released"' in handler
     assert 'detail="search_provider_unavailable"' in handler
     assert "reservation_id=reservation_id" in handler
 
