@@ -169,13 +169,30 @@ export default function PlatformAdminPage() {
   }
 
   async function savePlan(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    event.preventDefault();
+    const currentPlan = editing ? overview?.plans.find(plan => plan.slug === editing) : undefined;
+    const pricingChanged = Boolean(currentPlan && (
+      currentPlan.price_id !== form.price_id.trim() ||
+      (currentPlan.display_price || "") !== form.display_price.trim() ||
+      (currentPlan.currency || "") !== form.currency.trim() ||
+      (currentPlan.billing_interval || "") !== form.billing_interval.trim()
+    ));
+    if (pricingChanged) {
+      const confirmed = window.confirm(
+        "Paddle & Vercel Update Required\n\nYou changed this package's pricing. Before considering the change complete:\n\n1. In Paddle, create a new recurring Price under the SAME Product (do not create another package or product).\n2. Update this package's price_id in the Paddle pricing JSON stored in Vercel Environment Variables.\n3. Redeploy the application on Vercel and verify checkout.\n\nExisting subscribers keep their current subscription price unless separately migrated. Continue saving this package now?"
+      );
+      if (!confirmed) return;
+    }
+    setBusy(true); setError(""); setNotice("");
     try {
       let entitlements: Plan["entitlements"];
       try { entitlements = JSON.parse(form.entitlements); } catch { throw new Error("Entitlements must be valid JSON."); }
       const payload = { slug: form.slug.trim(), name: form.name.trim(), description: form.description, price_id: form.price_id.trim(), display_price: form.display_price || null, currency: form.currency || null, billing_interval: form.billing_interval || null, entitlements, active: form.active };
       await api("/api/v1/platform-admin/plans" + (editing ? "/" + encodeURIComponent(editing) : ""), csrf, { method: editing ? "PATCH" : "POST", body: JSON.stringify(payload) });
-      setForm(emptyPlan); setEditing(""); await refresh(csrf, 0, 0, 0, clientQuery); setNotice(editing ? "Package updated." : "Package created.");
+      setForm(emptyPlan); setEditing(""); await refresh(csrf, 0, 0, 0, clientQuery);
+      setNotice(pricingChanged
+        ? "Package saved. Paddle and Vercel synchronization is still required: create a new recurring Price under the same Paddle Product, update this package's price_id in the Vercel pricing JSON, redeploy, and verify checkout."
+        : (editing ? "Package updated." : "Package created."));
     } catch (e) { setError(e instanceof Error ? e.message : "Package could not be saved."); }
     finally { setBusy(false); }
   }
