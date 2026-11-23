@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SiteHeader, SiteFooter } from "./components/site-chrome";
+import { BrandMark, SiteHeader, SiteFooter } from "./components/site-chrome";
 
 const workflow = [
   { number: "01", title: "Discover", detail: "Search the public web through the configured provider and review source links and relevance hints." },
@@ -16,7 +16,7 @@ const capabilities = [
 function ProductPreview() {
   return <div className="product-preview" role="img" aria-label="Illustrative workspace preview with fictional sample prospect counts, draft totals and activity metrics">
     <div className="preview-sidebar">
-      <div className="preview-brand"><span className="preview-brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 3.5 35.5 12.4v15.2L20 36.5 4.5 27.6V12.4L20 3.5Z" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round"/><path d="M11.5 26V14h7.8c3.4 0 5.2 1.6 5.2 4.2s-1.8 4.1-5.2 4.1h-7.8m12.2-1.2 7 5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M27.8 10.8 30 13l-2.2 2.2-2.2-2.2 2.2-2.2Z" fill="currentColor"/></svg></span><span>outreach<span className="preview-brand-muted">.ai</span></span></div>
+      <div className="preview-brand"><BrandMark/><span>Outreach <span className="preview-brand-muted">Marketing Agent</span></span></div>
       <span className="preview-side-label">WORKSPACE</span>
       <span className="preview-side-item active"><i>▦</i> Overview</span>
       <span className="preview-side-item"><i>⌕</i> Prospects</span>
