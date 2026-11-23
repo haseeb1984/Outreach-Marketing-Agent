@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import asyncpg
 import pytest
-from fastapi.testclient import TestClient
+import httpx
 
 from app.api.auth_routes import cookie_policy
 from app.db.migrations import apply_migrations
@@ -76,14 +76,16 @@ async def _exercise_authenticated_prospect_tenant_isolation() -> None:
         auth_store = AuthStore(pool)
         session = await auth_store.create_session(user_id=user_a, lifetime_hours=1)
 
-        with TestClient(app, base_url="https://app.example.test") as client:
-            # Replace optional lifespan services with the same real PostgreSQL pool
-            # used to create the session; no fake authorization or persistence layer.
-            app.state.auth_store = auth_store
-            app.state.prospect_store = ProspectStore(pool)
+        # ASGITransport keeps requests on this same event loop as asyncpg's pool.
+        # No TestClient thread or fake authorization/persistence layer is involved.
+        app.state.auth_store = auth_store
+        app.state.prospect_store = ProspectStore(pool)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://app.example.test"
+        ) as client:
             client.cookies.set(cookie_policy.name, session["token"])
-
-            own_response = client.get(
+            own_response = await client.get(
                 "/api/v1/prospects", params={"workspace_id": workspace_a}
             )
             assert own_response.status_code == 200
@@ -91,7 +93,7 @@ async def _exercise_authenticated_prospect_tenant_isolation() -> None:
             assert [item["name"] for item in own_items] == [prospect_a]
             assert all(item["workspace_id"] == workspace_a for item in own_items)
 
-            foreign_response = client.get(
+            foreign_response = await client.get(
                 "/api/v1/prospects", params={"workspace_id": workspace_b}
             )
             assert foreign_response.status_code == 404
