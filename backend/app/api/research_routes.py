@@ -249,7 +249,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         # The provider request was attempted, so consume the quota to prevent retry-based cost bypass.
         try:
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
         except Exception:
             pass
@@ -260,7 +260,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         # allowing an idempotent retry to repeat the paid search.
         try:
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
         except Exception:
             pass
@@ -483,7 +483,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
     except (httpx.HTTPError, ValueError, TypeError):
         try:
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
         except Exception:
             pass
@@ -491,7 +491,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
     except Exception:
         try:
             await subscriptions.finish_reservation(
-                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed"
+                workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
         except Exception:
             pass
