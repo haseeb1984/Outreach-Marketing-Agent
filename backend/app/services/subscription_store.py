@@ -11,7 +11,8 @@ from typing import Any
 from uuid import UUID
 import json
 
-from app.services.entitlements import EntitlementDecision, evaluate_entitlement
+from app.services.entitlements import ACTIVE_STATUSES, EntitlementDecision, evaluate_entitlement
+from app.core.config import settings
 
 
 @asynccontextmanager
@@ -27,11 +28,98 @@ class SubscriptionStore:
     def __init__(self, pool: Any) -> None:
         self._pool = pool
 
+    async def _daily_prospect_policy(self, conn: Any, *, workspace_id: str, now: datetime) -> tuple[bool, int | None, str]:
+        """Use each package's existing prospect quota as its daily cap; owners get the largest active cap."""
+        admin_emails = {x.strip().casefold() for x in (settings.platform_admin_emails or "").split(",") if x.strip()}
+        owner_email = await conn.fetchval(
+            """SELECT u.email FROM workspace_memberships m JOIN app_users u ON u.id=m.user_id
+               WHERE m.workspace_id=$1 AND m.role='owner' AND m.status='active' AND u.status='active'
+               ORDER BY m.created_at LIMIT 1""", workspace_id)
+        if isinstance(owner_email, str) and owner_email.strip().casefold() in admin_emails:
+            maximum = await conn.fetchval(
+                """SELECT max((entitlements->'prospect_research'->>'monthly_limit')::bigint)
+                   FROM platform_billing_plans WHERE active=true
+                     AND entitlements->'prospect_research'->>'enabled'='true'
+                     AND entitlements->'prospect_research'->>'monthly_limit' ~ '^[0-9]+$'""")
+            return (maximum is not None, int(maximum) if maximum is not None else None,
+                    "platform_owner_daily_cap" if maximum is not None else "daily_quota_not_configured")
+        row = await conn.fetchrow(
+            """SELECT status,billing_period_starts_at,billing_period_ends_at,entitlements
+               FROM workspace_subscriptions WHERE workspace_id=$1""", workspace_id)
+        if row is None:
+            return False, None, "subscription_missing"
+        current = now.astimezone(timezone.utc)
+        if row["status"] not in ACTIVE_STATUSES:
+            return False, None, "subscription_inactive"
+        if current < row["billing_period_starts_at"] or current >= row["billing_period_ends_at"]:
+            return False, None, "billing_period_invalid"
+        policies = self._mapping(row["entitlements"])
+        policy = policies.get("prospect_research") if isinstance(policies, dict) else None
+        if not isinstance(policy, dict) or policy.get("enabled") is not True:
+            return False, None, "feature_not_entitled"
+        limit = policy.get("monthly_limit")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            return False, None, "invalid_quota_configuration"
+        return True, limit, "daily_package_cap"
+
+    async def _get_daily_prospect_entitlement(self, *, workspace_id: str, now: datetime) -> EntitlementDecision:
+        async with self._pool.acquire() as conn:
+            enabled, limit, reason = await self._daily_prospect_policy(conn, workspace_id=workspace_id, now=now)
+            if not enabled:
+                return EntitlementDecision(False, reason)
+            used = int(await conn.fetchval(
+                """SELECT COALESCE(sum(units),0) FROM daily_feature_usage_reservations
+                   WHERE workspace_id=$1 AND feature='prospect_research'
+                     AND usage_date=$2::date AND status IN ('reserved','consumed')""",
+                workspace_id, now.astimezone(timezone.utc).date()) or 0)
+        remaining = max(0, limit - used)
+        return EntitlementDecision(remaining > 0, "quota_exhausted" if remaining == 0 else reason, remaining)
+
+    async def _reserve_daily_prospect_usage(self, *, workspace_id: str, idempotency_key: str,
+                                            units: int = 1, now: datetime | None = None) -> dict[str, Any]:
+        current = now or datetime.now(timezone.utc)
+        usage_date = current.astimezone(timezone.utc).date()
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.fetchrow("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE", workspace_id)
+                existing = await conn.fetchrow(
+                    """SELECT id,status,units FROM daily_feature_usage_reservations
+                       WHERE workspace_id=$1 AND idempotency_key=$2""", workspace_id, idempotency_key)
+                if existing is not None:
+                    if existing["status"] == "released":
+                        return {"allowed": False, "reason": "reservation_released"}
+                    return {"allowed": True, "reason": "idempotent_replay",
+                            "reservation_id": str(existing["id"]), "status": existing["status"],
+                            "reserved_units": int(existing["units"])}
+                enabled, limit, reason = await self._daily_prospect_policy(
+                    conn, workspace_id=workspace_id, now=current)
+                if not enabled:
+                    return {"allowed": False, "reason": reason}
+                used = int(await conn.fetchval(
+                    """SELECT COALESCE(sum(units),0) FROM daily_feature_usage_reservations
+                       WHERE workspace_id=$1 AND feature='prospect_research'
+                         AND usage_date=$2::date AND status IN ('reserved','consumed')""",
+                    workspace_id, usage_date) or 0)
+                remaining = max(0, limit - used)
+                if remaining == 0:
+                    return {"allowed": False, "reason": "quota_exhausted", "remaining": 0}
+                reserved_units = min(units, remaining)
+                row = await conn.fetchrow(
+                    """INSERT INTO daily_feature_usage_reservations
+                       (workspace_id,feature,idempotency_key,usage_date,units,status,created_at,updated_at)
+                       VALUES($1,'prospect_research',$2,$3,$4,'reserved',$5,$5) RETURNING id,status""",
+                    workspace_id, idempotency_key, usage_date, reserved_units, current)
+                return {"allowed": True, "reason": reason, "reservation_id": str(row["id"]),
+                        "status": row["status"], "reserved_units": reserved_units,
+                        "remaining": remaining - reserved_units}
+
     async def get_entitlement(
         self, *, workspace_id: str, feature: str, now: datetime | None = None,
     ) -> EntitlementDecision:
         """Evaluate a persisted snapshot; missing database state denies access."""
         current = now or datetime.now(timezone.utc)
+        if feature == "prospect_research":
+            return await self._get_daily_prospect_entitlement(workspace_id=workspace_id, now=current)
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT s.status, s.billing_period_starts_at, s.billing_period_ends_at,
@@ -141,7 +229,7 @@ class SubscriptionStore:
 
     async def reserve_usage(
         self, *, workspace_id: str, feature: str, idempotency_key: str,
-        now: datetime | None = None, connection: Any | None = None,
+        now: datetime | None = None, connection: Any | None = None, units: int = 1,
     ) -> dict[str, Any]:
         """Atomically reserve one quota unit and return a stable reservation.
 
@@ -150,6 +238,16 @@ class SubscriptionStore:
         is rejected. A caller must mark successful work consumed or explicitly
         release a reservation after proving no billable action occurred.
         """
+        if feature == "prospect_research":
+            if not isinstance(workspace_id, str) or not workspace_id.strip():
+                raise ValueError("invalid_workspace")
+            if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 200:
+                raise ValueError("invalid_idempotency_key")
+            if isinstance(units, bool) or not isinstance(units, int) or not 1 <= units <= 20:
+                raise ValueError("invalid_usage_units")
+            return await self._reserve_daily_prospect_usage(
+                workspace_id=workspace_id, idempotency_key=idempotency_key, units=units, now=now
+            )
         if not isinstance(workspace_id, str) or not workspace_id.strip():
             raise ValueError("invalid_workspace")
         if not isinstance(feature, str) or not feature.strip() or len(feature) > 100:
@@ -219,7 +317,7 @@ class SubscriptionStore:
 
     async def finish_reservation(
         self, *, workspace_id: str, reservation_id: str, outcome: str,
-        connection: Any | None = None,
+        connection: Any | None = None, units: int | None = None,
     ) -> bool:
         """Move a reservation to consumed or released once; no silent double-finish."""
         if outcome not in {"consumed", "released"}:
@@ -231,6 +329,16 @@ class SubscriptionStore:
         if not isinstance(workspace_id, str) or not workspace_id.strip():
             return False
         async with _connection_scope(self._pool, connection) as conn:
+            if units is not None and (isinstance(units, bool) or not isinstance(units, int) or units < 0):
+                return False
+            daily_row = await conn.fetchrow(
+                """UPDATE daily_feature_usage_reservations
+                   SET status=$3,units=COALESCE($4,units),updated_at=now()
+                   WHERE id=$1::uuid AND workspace_id=$2 AND status='reserved' RETURNING id""",
+                reservation_uuid, workspace_id, outcome, units,
+            )
+            if daily_row is not None:
+                return True
             row = await conn.fetchrow(
                 """UPDATE feature_usage_reservations SET status=$3,updated_at=now()
                    WHERE id=$1::uuid AND workspace_id=$2 AND status='reserved'

@@ -119,7 +119,20 @@ async def _effective_plans(request: Request, *, include_inactive: bool = False) 
             raise HTTPException(status_code=503, detail="billing_plan_catalog_invalid")
         seen_price_ids.add(price_id)
         item["entitlements"] = value
+        item["legacy_price_ids"] = []
         result[item["slug"]] = item
+    try:
+        async with pool.acquire() as conn:
+            history = await conn.fetch(
+                """SELECT plan_slug,price_id FROM platform_billing_plan_price_history
+                   ORDER BY created_at"""
+            )
+        for entry in history:
+            plan = result.get(entry["plan_slug"])
+            if plan is not None:
+                plan["legacy_price_ids"].append(entry["price_id"])
+    except Exception:
+        raise HTTPException(status_code=503, detail="billing_plan_price_history_unavailable") from None
     return result
 
 
@@ -300,7 +313,10 @@ def _resolve_subscription_plan(custom_data: Any, price_ids: set[Any], plans: dic
     if not isinstance(declared_plan, str) or not declared_plan:
         raise ValueError("subscription_plan_metadata_missing")
     matching = [(slug, plan) for slug, plan in plans.items()
-                if isinstance(plan, dict) and plan.get("price_id") in price_ids]
+                if isinstance(plan, dict) and (
+                    plan.get("price_id") in price_ids
+                    or bool(set(plan.get("legacy_price_ids", [])) & price_ids)
+                )]
     if len(matching) != 1:
         raise ValueError("subscription_plan_mapping_invalid")
     matched_slug, plan = matching[0]
