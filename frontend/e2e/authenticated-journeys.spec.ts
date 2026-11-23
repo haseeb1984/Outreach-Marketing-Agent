@@ -287,6 +287,7 @@ test.describe("account and authenticated browser journeys", () => {
           body: JSON.stringify({ item: emailAccounts[0] }),
         });
       } else if (url.pathname === "/api/v1/integrations/email-accounts/owner-smtp-account/test" && method === "POST") {
+        emailAccounts = emailAccounts.map(account => ({ ...account, status: "active" }));
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -315,7 +316,7 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("SMTP password").fill("test-app-password-not-real");
     await page.getByLabel("Verified sender email").fill("owner-test@example.test");
     await page.getByLabel("Sender name").fill("Owner Test");
-    await page.getByRole("button", { name: "Connect account" }).click();
+    await page.getByRole("button", { name: "Encrypt and connect account" }).click();
 
     await expect.poll(() => calls.some(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts")).toBeTruthy();
     await expect(page.getByText("Owner workspace SMTP")).toBeVisible();
