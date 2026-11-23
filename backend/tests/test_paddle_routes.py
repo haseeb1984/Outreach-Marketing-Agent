@@ -715,3 +715,132 @@ def test_paddle_transaction_updated_ignores_nonfinancial_status(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"received": True, "outcome": "ignored"}
+
+
+def test_customer_portal_endpoint_uses_authorized_workspace_customer_and_csrf(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    calls = {}
+    class AuthStore:
+        async def authorize_workspace(self, **kwargs):
+            calls["authorization"] = kwargs
+            return True
+
+    class Connection:
+        async def fetchval(self, query, workspace_id):
+            calls["workspace_query"] = workspace_id
+            return "ctm_workspace_customer"
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+        async def __aexit__(self, *args):
+            return False
+
+    class Pool:
+        def acquire(self):
+            return Acquire()
+
+    class ProviderResponse:
+        status_code = 201
+        def json(self):
+            return {"data": {"urls": {"general": {
+                "overview": "https://customer-portal.sandbox.paddle.com/session/owner-test"
+            }}}}
+
+    class ProviderClient:
+        def __init__(self, timeout):
+            calls["timeout"] = timeout
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def post(self, url, **kwargs):
+            calls["provider_url"] = url
+            calls["provider_headers"] = kwargs["headers"]
+            calls["provider_json"] = kwargs["json"]
+            return ProviderResponse()
+
+    async def fake_authenticated(request):
+        return AuthStore(), None, {"user_id": "owner-user"}
+
+    def fake_csrf(request, session):
+        calls["csrf"] = session["user_id"]
+
+    monkeypatch.setattr(paddle_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(paddle_routes, "_check_csrf", fake_csrf)
+    monkeypatch.setattr(paddle_routes.settings, "paddle_environment", "sandbox")
+    monkeypatch.setattr(paddle_routes.settings, "paddle_api_key", "sandbox-api-key")
+    monkeypatch.setattr(paddle_routes.httpx, "AsyncClient", ProviderClient)
+
+    with TestClient(app) as client:
+        app.state.auth_store = AuthStore()
+        app.state.db_pool = Pool()
+        response = client.post(
+            "/api/v1/billing/paddle/portal?workspace_id=workspace-owner"
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "portal_url": "https://customer-portal.sandbox.paddle.com/session/owner-test"
+    }
+    assert calls["csrf"] == "owner-user"
+    assert calls["authorization"] == {
+        "user_id": "owner-user",
+        "workspace_id": "workspace-owner",
+        "minimum_role": "admin",
+    }
+    assert calls["workspace_query"] == "workspace-owner"
+    assert calls["provider_url"] == (
+        "https://sandbox-api.paddle.com/customers/ctm_workspace_customer/portal-sessions"
+    )
+    assert calls["provider_headers"]["Authorization"] == "Bearer sandbox-api-key"
+    assert calls["provider_json"] == {}
+
+
+def test_customer_portal_endpoint_hides_workspace_from_non_admin(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api import paddle_routes
+    from app.main import app
+
+    calls = {"provider": False, "database": False}
+    class AuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return False
+
+    class Pool:
+        def acquire(self):
+            calls["database"] = True
+            raise AssertionError("unauthorized workspace must not be queried")
+
+    class ProviderClient:
+        def __init__(self, timeout):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def post(self, *args, **kwargs):
+            calls["provider"] = True
+            raise AssertionError("unauthorized workspace must not contact Paddle")
+
+    async def fake_authenticated(request):
+        return AuthStore(), None, {"user_id": "other-user"}
+
+    monkeypatch.setattr(paddle_routes, "_authenticated", fake_authenticated)
+    monkeypatch.setattr(paddle_routes, "_check_csrf", lambda request, session: None)
+    monkeypatch.setattr(paddle_routes.settings, "paddle_api_key", "sandbox-api-key")
+    monkeypatch.setattr(paddle_routes.httpx, "AsyncClient", ProviderClient)
+
+    with TestClient(app) as client:
+        app.state.auth_store = AuthStore()
+        app.state.db_pool = Pool()
+        response = client.post(
+            "/api/v1/billing/paddle/portal?workspace_id=workspace-private"
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "workspace_not_found"
+    assert calls == {"provider": False, "database": False}
