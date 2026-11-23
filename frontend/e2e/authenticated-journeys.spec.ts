@@ -310,7 +310,7 @@ test.describe("account and authenticated browser journeys", () => {
     await expect(page.getByRole("heading", { name: "Connected email accounts" })).toBeVisible();
 
     await page.getByText("Connect an SMTP account").click();
-    await page.getByLabel("Account label").fill("Owner workspace SMTP");
+    await page.locator("#email-account-label").fill("Owner workspace SMTP");
     await page.getByLabel("SMTP provider host").selectOption("smtp.gmail.com");
     await page.getByLabel("SMTP username").fill("owner-test@example.test");
     await page.getByLabel("SMTP password").fill("test-app-password-not-real");
