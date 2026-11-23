@@ -34,6 +34,20 @@ def test_rejects_unknown_provider_price():
     with pytest.raises(ValueError, match="subscription_plan_mapping_invalid"):
         _resolve_subscription_plan({"plan_id": "starter"}, {"pri_unknown"}, PLANS)
 
+def test_resolves_existing_subscription_using_historical_price_id():
+    plans = {
+        "starter": {
+            "price_id": "pri_starter_new",
+            "legacy_price_ids": ["pri_starter_old"],
+            "entitlements": {"email": {"enabled": True}},
+        }
+    }
+    slug, plan = _resolve_subscription_plan(
+        {"plan_id": "starter"}, {"pri_starter_old"}, plans
+    )
+    assert slug == "starter"
+    assert plan is plans["starter"]
+
 
 def test_rejects_ambiguous_price_mapping():
     plans = {"starter": {"price_id": "pri_same"}, "growth": {"price_id": "pri_same"}}
