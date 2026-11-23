@@ -231,4 +231,102 @@ test.describe("account and authenticated browser journeys", () => {
     expect(searchCsrf).toBe(csrfToken);
   });
 
+
+  test("platform owner can use the normal customer workspace and its own SMTP connection test", async ({ page }) => {
+    const csrfToken = "platform-owner-customer-csrf-0123456789";
+    const ownerEmail = "outreach@juncsys.com";
+    const calls: Array<{ method: string; path: string; csrf: string }> = [];
+    let emailAccounts: Array<Record<string, unknown>> = [];
+
+    await page.route("**/api/v1/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const method = request.method();
+      calls.push({
+        method,
+        path: url.pathname,
+        csrf: request.headers()["x-csrf-token"] || "",
+      });
+
+      if (url.pathname === "/api/v1/auth/login" || url.pathname === "/api/v1/auth/me") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ user: { user_id: "platform-owner-user", email: ownerEmail }, csrf_token: csrfToken }),
+        });
+      } else if (url.pathname === "/api/v1/workspaces" && method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [{ id: "owner-customer-workspace", name: "Owner test workspace", role: "owner" }] }),
+        });
+      } else if (url.pathname === "/api/v1/integrations/email-accounts" && method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: emailAccounts }),
+        });
+      } else if (url.pathname === "/api/v1/integrations/email-accounts" && method === "POST") {
+        const body = request.postDataJSON();
+        emailAccounts = [{
+          id: "owner-smtp-account",
+          workspace_id: body.workspace_id,
+          label: body.label,
+          smtp_host: body.smtp_host,
+          smtp_port: body.smtp_port,
+          smtp_username: body.smtp_username,
+          from_email: body.from_email,
+          from_name: body.from_name,
+          starttls: body.starttls,
+          status: "pending_test",
+          created_at: "2026-11-23T00:00:00Z",
+        }];
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ item: emailAccounts[0] }),
+        });
+      } else if (url.pathname === "/api/v1/integrations/email-accounts/owner-smtp-account/test" && method === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "SMTP connection test succeeded. No email was sent." }),
+        });
+      } else if (url.pathname === "/api/v1/auth/sessions") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+      } else {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+      }
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Email address").fill(ownerEmail);
+    await page.getByLabel("Password").fill("owner-customer-mode-test-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page).toHaveURL(/\\/dashboard$/);
+    await expect(page.getByRole("combobox", { name: "Active workspace" })).toHaveValue("owner-customer-workspace");
+    await expect(page.getByRole("heading", { name: "Connected email accounts" })).toBeVisible();
+
+    await page.getByText("Connect an SMTP account").click();
+    await page.getByLabel("Account label").fill("Owner workspace SMTP");
+    await page.getByLabel("SMTP provider host").selectOption("smtp.gmail.com");
+    await page.getByLabel("SMTP username").fill("owner-test@example.test");
+    await page.getByLabel("SMTP password").fill("test-app-password-not-real");
+    await page.getByLabel("Verified sender email").fill("owner-test@example.test");
+    await page.getByLabel("Sender name").fill("Owner Test");
+    await page.getByRole("button", { name: "Connect account" }).click();
+
+    await expect.poll(() => calls.some(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts")).toBeTruthy();
+    await expect(page.getByText("Owner workspace SMTP")).toBeVisible();
+    await page.getByRole("button", { name: "Test connection" }).click();
+    await expect(page.getByText(/SMTP connection test succeeded/)).toBeVisible();
+
+    const createCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts");
+    const testCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts/owner-smtp-account/test");
+    expect(createCall?.csrf).toBe(csrfToken);
+    expect(testCall?.csrf).toBe(csrfToken);
+    expect(calls.some(call => call.path.startsWith("/api/v1/platform-admin/smtp/"))).toBe(false);
+  });
+
 });
