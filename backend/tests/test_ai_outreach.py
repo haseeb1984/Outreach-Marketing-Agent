@@ -1,8 +1,10 @@
 import asyncio
 import json
 
+import httpx
 import pytest
 
+from app.services import ai_outreach
 from app.services.ai_outreach import AIOutreachUnavailable, generate_ai_outreach
 
 
@@ -18,7 +20,7 @@ CONTEXT = {
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, payload=None):
+    def __init__(self, status_code=200, payload=None, text=""):
         self.status_code = status_code
         self._payload = payload or {
             "choices": [{
@@ -30,52 +32,82 @@ class FakeResponse:
                 }
             }]
         }
+        self.text = text
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            import httpx
-            raise httpx.HTTPStatusError("provider error", request=None, response=None)
+            request = httpx.Request("GET", "https://api.groq.com")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError("provider error", request=request, response=response)
 
     def json(self):
         return self._payload
 
 
 class FakeAsyncClient:
-    response = FakeResponse()
-    captured = {}
+    responses = []
+    captured = []
+    available_models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
     def __init__(self, **kwargs):
-        self.captured = {"client_options": kwargs}
+        self.options = kwargs
 
     async def __aenter__(self):
-        type(self).captured = self.captured
+        type(self).captured = []
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
+    async def get(self, url, **kwargs):
+        if url == ai_outreach.GROQ_MODELS_URL:
+            return FakeResponse(payload={"data": [{"id": item} for item in self.available_models]})
+        if url == ai_outreach.GROQ_MODEL_DOCS_URL:
+            html = """
+              <h2>Production Models</h2>
+              <table><tr><td>GPT OSS 120B</td><td>openai/gpt-oss-120b</td></tr>
+              <tr><td>GPT OSS 20B</td><td>openai/gpt-oss-20b</td></tr></table>
+              <h2>Preview Models</h2><p>preview/test-model</p>
+            """
+            return FakeResponse(text=html)
+        raise AssertionError("unexpected GET " + url)
+
     async def post(self, url, **kwargs):
-        type(self).captured.update({"url": url, **kwargs})
-        return type(self).response
+        type(self).captured.append({"url": url, **kwargs})
+        if type(self).responses:
+            return type(self).responses.pop(0)
+        return FakeResponse()
 
 
-def test_generate_ai_outreach_uses_https_and_openai_compatible_contract(monkeypatch):
-    FakeAsyncClient.response = FakeResponse()
+@pytest.fixture(autouse=True)
+def reset_provider_state(monkeypatch):
+    ai_outreach._model_cache.update({"expires_at": 0.0, "models": []})
+    ai_outreach._last_good_model = None
+    FakeAsyncClient.responses = []
+    FakeAsyncClient.captured = []
+    FakeAsyncClient.available_models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
     monkeypatch.setattr("app.services.ai_outreach.httpx.AsyncClient", FakeAsyncClient)
 
-    result = asyncio.run(generate_ai_outreach(
-        api_key="test-key",
-        base_url="https://api.example.test/v1",
-        model="test-model",
-        channel="email",
-        call_to_action="Would a short call help?",
-        context=CONTEXT,
-    ))
 
-    captured = FakeAsyncClient.captured
-    assert captured["url"] == "https://api.example.test/v1/chat/completions"
+def _generate(**overrides):
+    args = {
+        "api_key": "test-key",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "openai/gpt-oss-20b",
+        "channel": "email",
+        "call_to_action": "Would a short call help?",
+        "context": CONTEXT,
+    }
+    args.update(overrides)
+    return asyncio.run(generate_ai_outreach(**args))
+
+
+def test_generate_ai_outreach_uses_groq_and_live_production_catalog():
+    result = _generate()
+    captured = FakeAsyncClient.captured[0]
+    assert captured["url"] == "https://api.groq.com/openai/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer test-key"
-    assert captured["json"]["model"] == "test-model"
+    assert captured["json"]["model"] == "openai/gpt-oss-20b"
     assert captured["json"]["response_format"] == {"type": "json_object"}
     prompt = captured["json"]["messages"][1]["content"]
     assert "UNTRUSTED INPUT DATA" in prompt
@@ -85,81 +117,59 @@ def test_generate_ai_outreach_uses_https_and_openai_compatible_contract(monkeypa
 
 
 @pytest.mark.parametrize("base_url", [
-    "http://api.example.test/v1",
-    "https://user:password@api.example.test/v1",
+    "http://api.groq.com/openai/v1",
+    "https://user:password@api.groq.com/openai/v1",
+    "https://api.example.test/v1",
     "not-a-url",
 ])
-def test_generate_ai_outreach_rejects_insecure_or_invalid_provider_url(base_url):
+def test_generate_ai_outreach_rejects_non_groq_or_insecure_provider_url(base_url):
     with pytest.raises(AIOutreachUnavailable, match="ai_provider_configuration_invalid"):
-        asyncio.run(generate_ai_outreach(
-            api_key="test-key",
-            base_url=base_url,
-            model="test-model",
-            channel="email",
-            call_to_action="Talk?",
-            context=CONTEXT,
-        ))
+        _generate(base_url=base_url)
 
 
 def test_generate_ai_outreach_requires_verified_facts():
-    context = {**CONTEXT, "verified_facts": []}
     with pytest.raises(ValueError, match="verified fact"):
-        asyncio.run(generate_ai_outreach(
-            api_key="test-key",
-            base_url="https://api.example.test/v1",
-            model="test-model",
-            channel="email",
-            call_to_action="Talk?",
-            context=context,
-        ))
+        _generate(context={**CONTEXT, "verified_facts": []})
 
 
-def test_generate_ai_outreach_rejects_invalid_provider_json(monkeypatch):
-    FakeAsyncClient.response = FakeResponse(payload={
-        "choices": [{"message": {"content": "not-json"}}]
-    })
-    monkeypatch.setattr("app.services.ai_outreach.httpx.AsyncClient", FakeAsyncClient)
+def test_generate_ai_outreach_recovers_from_retired_model_using_live_groq_list():
+    FakeAsyncClient.responses = [
+        FakeResponse(status_code=404, payload={"error": {"code": "model_not_found"}}),
+        FakeResponse(),
+    ]
+    result = _generate(model="retired/model")
+    assert [item["json"]["model"] for item in FakeAsyncClient.captured] == [
+        "openai/gpt-oss-120b", "openai/gpt-oss-20b"
+    ]
+    assert result["subject"] == "A practical analytics question"
 
+
+def test_generate_ai_outreach_does_not_switch_models_for_rate_limit():
+    FakeAsyncClient.responses = [FakeResponse(status_code=429, payload={"error": {"message": "rate limit"}})]
     with pytest.raises(AIOutreachUnavailable, match="ai_provider_unavailable"):
-        asyncio.run(generate_ai_outreach(
-            api_key="test-key",
-            base_url="https://api.example.test/v1",
-            model="test-model",
-            channel="email",
-            call_to_action="Talk?",
-            context=CONTEXT,
-        ))
+        _generate()
+    assert len(FakeAsyncClient.captured) == 1
 
 
-def test_generate_ai_outreach_requires_email_subject_and_nonempty_body(monkeypatch):
-    FakeAsyncClient.response = FakeResponse(payload={
+def test_generate_ai_outreach_rejects_invalid_provider_json():
+    FakeAsyncClient.responses = [FakeResponse(payload={
+        "choices": [{"message": {"content": "not-json"}}]
+    })]
+    with pytest.raises(AIOutreachUnavailable, match="ai_provider_unavailable"):
+        _generate()
+
+
+def test_generate_ai_outreach_requires_email_subject_and_nonempty_body():
+    FakeAsyncClient.responses = [FakeResponse(payload={
         "choices": [{"message": {"content": json.dumps({"subject": "", "body": "Hello"})}}]
-    })
-    monkeypatch.setattr("app.services.ai_outreach.httpx.AsyncClient", FakeAsyncClient)
-
+    })]
     with pytest.raises(AIOutreachUnavailable, match="ai_response_invalid"):
-        asyncio.run(generate_ai_outreach(
-            api_key="test-key",
-            base_url="https://api.example.test/v1",
-            model="test-model",
-            channel="email",
-            call_to_action="Talk?",
-            context=CONTEXT,
-        ))
+        _generate()
 
 
-def test_generate_ai_outreach_whatsapp_does_not_require_subject(monkeypatch):
-    FakeAsyncClient.response = FakeResponse(payload={
+def test_generate_ai_outreach_whatsapp_does_not_require_subject():
+    FakeAsyncClient.responses = [FakeResponse(payload={
         "choices": [{"message": {"content": json.dumps({"subject": "", "body": "Hello"})}}]
-    })
-    monkeypatch.setattr("app.services.ai_outreach.httpx.AsyncClient", FakeAsyncClient)
-
-    result = asyncio.run(generate_ai_outreach(
-        api_key="test-key",
-        base_url="https://api.example.test/v1",
-        model="test-model",
-        channel="whatsapp",
-        call_to_action="Talk?",
-        context=CONTEXT,
-    ))
+    })]
+    result = _generate(channel="whatsapp")
     assert result == {"subject": "", "body": "Hello"}
