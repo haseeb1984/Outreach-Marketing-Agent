@@ -1,8 +1,14 @@
 name: Generate and verify frontend lockfile
 
-# Manual only: avoid consuming Actions runners during normal development.
+# Run only when frontend dependencies or this workflow change; also keep manual dispatch.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/package.json"
+      - ".github/workflows/generate-frontend-lockfile.yml"
 
 permissions:
   contents: write
