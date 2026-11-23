@@ -71,6 +71,10 @@ test.describe("account and authenticated browser journeys", () => {
       }
     });
 
+    await page.route("https://sandbox-checkout.paddle.com/**", async route => {
+      await route.fulfill({ status: 200, contentType: "text/html", body: "<title>Sandbox checkout</title>" });
+    });
+
     await page.goto("/login");
     await page.getByLabel("Email address").fill("verified@example.test");
     await page.getByLabel("Password").fill("correct-password");
@@ -260,6 +264,30 @@ test.describe("account and authenticated browser journeys", () => {
           contentType: "application/json",
           body: JSON.stringify({ items: [{ id: "owner-customer-workspace", name: "Owner test workspace", role: "owner" }] }),
         });
+      } else if (url.pathname === "/api/v1/billing/paddle/plans" && method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ configured: true, items: [{
+            id: "starter",
+            name: "Starter",
+            description: "Customer workspace starter plan",
+            display_price: "$19",
+            currency: "USD",
+            billing_interval: "month",
+            checkout_available: true,
+          }] }),
+        });
+      } else if (url.pathname === "/api/v1/billing/paddle/checkout" && method === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            checkout_url: "https://sandbox-checkout.paddle.com/checkout/owner-test",
+            transaction_id: "txn_owner_test",
+            plan_id: "starter",
+          }),
+        });
       } else if (url.pathname === "/api/v1/integrations/email-accounts" && method === "GET") {
         await route.fulfill({
           status: 200,
@@ -327,6 +355,12 @@ test.describe("account and authenticated browser journeys", () => {
     const testCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts/owner-smtp-account/test");
     expect(createCall?.csrf).toBe(csrfToken);
     expect(testCall?.csrf).toBe(csrfToken);
+
+    await expect(page.getByRole("button", { name: "Continue to secure checkout" })).toBeVisible();
+    await page.getByRole("button", { name: "Continue to secure checkout" }).click();
+    await expect(page).toHaveURL(/sandbox-checkout\.paddle\.com\/checkout\/owner-test$/);
+    const checkoutCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/billing/paddle/checkout");
+    expect(checkoutCall?.csrf).toBe(csrfToken);
     expect(calls.some(call => call.path.startsWith("/api/v1/platform-admin/smtp/"))).toBe(false);
   });
 
