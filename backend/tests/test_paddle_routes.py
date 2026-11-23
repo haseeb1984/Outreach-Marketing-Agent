@@ -734,7 +734,7 @@ def test_customer_portal_endpoint_uses_authorized_workspace_customer_and_csrf(mo
     class Connection:
         async def fetchval(self, query, workspace_id):
             calls["workspace_query"] = workspace_id
-            return "ctm_workspace_customer"
+            return "ctm_workspacecustomer"
 
     class Acquire:
         async def __aenter__(self):
@@ -797,7 +797,7 @@ def test_customer_portal_endpoint_uses_authorized_workspace_customer_and_csrf(mo
     }
     assert calls["workspace_query"] == "workspace-owner"
     assert calls["provider_url"] == (
-        "https://sandbox-api.paddle.com/customers/ctm_workspace_customer/portal-sessions"
+        "https://sandbox-api.paddle.com/customers/ctm_workspacecustomer/portal-sessions"
     )
     assert calls["provider_headers"]["Authorization"] == "Bearer sandbox-api-key"
     assert calls["provider_json"] == {}
@@ -866,7 +866,7 @@ def test_customer_portal_endpoint_rejects_untrusted_provider_redirect(monkeypatc
 
     class Connection:
         async def fetchval(self, query, workspace_id):
-            return "ctm_workspace_customer"
+            return "ctm_workspacecustomer"
 
     class Acquire:
         async def __aenter__(self):
