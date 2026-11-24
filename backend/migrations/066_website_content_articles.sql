@@ -7,5 +7,10 @@ ALTER TABLE website_content_briefs
     ADD COLUMN IF NOT EXISTS internal_link_suggestions JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS article_body TEXT NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS article_status TEXT NOT NULL DEFAULT 'not_generated'
-        CHECK (article_status IN ('not_generated','draft','in_review','approved','rejected')),
+        CHECK (article_status IN ('not_generated','generating','draft','in_review','approved','rejected')),
     ADD COLUMN IF NOT EXISTS article_generated_at TIMESTAMPTZ;
+
+ALTER TABLE website_content_briefs
+    ADD COLUMN IF NOT EXISTS article_review_note TEXT,
+    ADD COLUMN IF NOT EXISTS article_reviewed_by UUID REFERENCES app_users(id) ON DELETE RESTRICT,
+    ADD COLUMN IF NOT EXISTS article_reviewed_at TIMESTAMPTZ;
