@@ -50,7 +50,7 @@ async def _exercise_email_verification_http(monkeypatch):
         )
         assert created is not None
         monkeypatch.setattr(
-            "app.api.auth_routes.settings.public_base_url",
+            "app.api.auth_routes.settings.frontend_origins",
             "https://app.example.test",
         )
         app.state.auth_store = store
@@ -123,7 +123,7 @@ async def _exercise_password_reset_http(monkeypatch):
         assert reset is not None
 
         monkeypatch.setattr(
-            "app.api.auth_routes.settings.public_base_url",
+            "app.api.auth_routes.settings.frontend_origins",
             "https://app.example.test",
         )
         app.state.auth_store = store
