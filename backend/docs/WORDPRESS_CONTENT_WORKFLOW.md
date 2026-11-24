@@ -1,6 +1,6 @@
 # WordPress content workflow
 
-The WordPress connector is workspace-scoped and uses WordPress Application Passwords over HTTPS.
+The WordPress connector supports project-scoped connections with an optional workspace-level fallback and uses WordPress Application Passwords over HTTPS.
 
 ## Setup
 
@@ -8,7 +8,7 @@ The WordPress connector is workspace-scoped and uses WordPress Application Passw
 2. Grant that user permission to edit and publish posts. Publishing permission is required for connection verification because the product supports an explicit publish action.
 3. Open **Users → Profile → Application Passwords**, create an application password, and copy it once.
 4. In the Outreach Marketing Agent dashboard, open **Editorial content workflow → WordPress connection**.
-5. Enter the HTTPS site URL, WordPress username, and application password, then save and verify.
+5. Choose **Workspace default site** or a specific client project in the scope selector. Enter the HTTPS site URL, WordPress username, and application password, then save and verify. Project-specific connections take priority for new article transfers; the workspace default is used when a project has no verified site connection.
 6. The application password is encrypted at rest with the configured provider credential encryption key. It is never returned by the API.
 
 ## Article lifecycle
@@ -26,9 +26,11 @@ The integration uses a stable post slug derived from the content brief ID so a r
 
 - Only HTTPS sites on public host addresses are accepted; redirects are not followed and proxy environment settings are ignored.
 - The configured site host is DNS-checked for public addresses before requests.
-- Workspace authorization is enforced on every endpoint. Connection management and CMS actions require workspace admin/owner access.
+- Workspace authorization is enforced on every endpoint. Connection management and CMS actions require workspace admin/owner access. Project IDs are validated against the active workspace before a connection can be read, saved, verified or disconnected.
+- Migration `068_project_scoped_wordpress_connections.sql` adds one connection per project plus one optional workspace-default connection. Existing workspace connections are preserved as the fallback during upgrade.
+- Once an article is linked to a WordPress connection, retries and publication remain pinned to that exact connection even if another project or workspace-default connection is later added.
 - Application passwords are encrypted using AES-GCM with workspace and connection identifiers as authenticated additional data.
 - Article Markdown is converted using an escaped, limited HTML subset. Raw HTML from article text is not passed through.
 - The article's meta description is sent as the WordPress excerpt. SEO-plugin-specific metadata (Yoast, Rank Math, or other plugin fields) is not automatically written; plugin-specific integration remains separate work.
-- Disconnecting revokes the saved encrypted credential and does not delete posts already created on WordPress. Changing the connected site URL is blocked once this workspace has linked WordPress post IDs, preventing an old post ID from being accidentally updated or published on a different site. Use a separate workspace for a different WordPress site.
+- Disconnecting revokes the saved encrypted credential and does not delete posts already created on WordPress. Changing a connection's site URL is blocked once it has linked WordPress post IDs, preventing an old post ID from being accidentally updated or published on a different site. Configure another project connection when a workspace manages multiple websites.
 - WordPress provider actions are external side effects. A timeout can occur after WordPress has accepted a request; stable draft slugs allow the next draft attempt to find the existing draft.
