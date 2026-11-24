@@ -39,7 +39,7 @@ export function SiteHeader() {
 export function SiteFooter() {
   return <footer className="site-footer"><div className="wrap">
     <div className="footer-columns">
-      <div className="footer-about"><BrandLockup footer/><p>Smarter research. More thoughtful outreach. Better-informed growth.</p><div className="footer-social" aria-label="Social links"><span>in</span><span>𝕏</span><span>▶</span><span>⌘</span></div></div>
+      <div className="footer-about"><BrandLockup footer/><p>Smarter research. More thoughtful outreach. Better-informed growth.</p></div>
       <div><strong>Explore</strong><nav className="footer-links">{primary.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
       <div><strong>Legal & support</strong><nav className="footer-links">{legal.map(([href,label])=><Link href={href} key={href}>{label}</Link>)}</nav></div>
       <div><strong>Get started</strong><p>Bring your prospect research and outreach workflow together.</p><Link className="footer-start" href="/register">Create a workspace →</Link><Link href="https://juncsys.com" target="_blank" rel="noopener noreferrer">Junction Systems ↗</Link></div>
