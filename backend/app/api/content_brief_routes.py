@@ -350,7 +350,9 @@ async def update_content_article(brief_id: UUID, payload: ArticleUpdate, request
             row = await conn.fetchrow(
                 """UPDATE website_content_briefs
                    SET article_title=$3,meta_title=$4,meta_description=$5,
-                       article_body=$6,article_status=$7,updated_at=now()
+                       article_body=$6,article_status=$7,
+                       cms_status=CASE WHEN cms_status='draft_created' THEN 'not_sent' ELSE cms_status END,
+                       updated_at=now()
                    WHERE id=$1 AND workspace_id=$2
                      AND status='approved' AND cms_status NOT IN ('published','sending','publishing')
                      AND article_status IN ('draft','rejected','approved')
