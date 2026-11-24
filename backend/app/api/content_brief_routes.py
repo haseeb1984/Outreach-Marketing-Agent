@@ -69,6 +69,44 @@ class BriefUpdate(BaseModel):
         return value.strip()
 
 
+
+class ArticleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    article_title: str = Field(min_length=1, max_length=300)
+    meta_title: str = Field(min_length=1, max_length=70)
+    meta_description: str = Field(min_length=1, max_length=180)
+    article_body: str = Field(min_length=500, max_length=40000)
+    status: str = "in_review"
+
+    @field_validator("status")
+    @classmethod
+    def valid_article_status(cls, value: str) -> str:
+        if value not in {"draft", "in_review"}:
+            raise ValueError("invalid_article_status")
+        return value
+
+    @field_validator("article_title", "meta_title", "meta_description", "article_body")
+    @classmethod
+    def clean_article_fields(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("article_field_required")
+        return value.strip()
+
+
+class ArticleReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str = Field(min_length=1, max_length=200)
+    decision: str
+    note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("decision")
+    @classmethod
+    def valid_article_decision(cls, value: str) -> str:
+        if value not in {"approved", "rejected"}:
+            raise ValueError("invalid_article_review_decision")
+        return value
+
 class BriefReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
@@ -282,3 +320,56 @@ async def generate_content_brief_article(brief_id: UUID, request: Request):
             code = str(exc)[:100]
             raise HTTPException(status_code=503, detail=code) from None
         raise HTTPException(status_code=503, detail="content_article_generation_unavailable") from None
+
+@router.patch("/{brief_id}/article")
+async def update_content_article(brief_id: UUID, payload: ArticleUpdate, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "member", session)
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """UPDATE website_content_briefs
+                   SET article_title=$3,meta_title=$4,meta_description=$5,
+                       article_body=$6,article_status=$7,updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2
+                     AND status='approved' AND article_status IN ('draft','rejected')
+                   RETURNING id,article_title,meta_title,meta_description,
+                             article_body,article_status""",
+                brief_id,payload.workspace_id,payload.article_title,payload.meta_title,
+                payload.meta_description,payload.article_body,payload.status,
+            )
+        if row is None:
+            raise HTTPException(status_code=409, detail="content_article_not_editable")
+        result=dict(row); result["id"]=str(result["id"])
+        return result
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="content_article_update_unavailable") from None
+
+
+@router.post("/{brief_id}/article/review")
+async def review_content_article(brief_id: UUID, payload: ArticleReview, request: Request):
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    await _authorize(request, payload.workspace_id, "admin", session)
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """UPDATE website_content_briefs SET article_status=$3,
+                          review_note=$4,reviewed_by=$5,reviewed_at=now(),updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status='approved'
+                     AND article_status='in_review'
+                   RETURNING id,article_status""",
+                brief_id,payload.workspace_id,payload.decision,payload.note,
+                UUID(str(session["user_id"])),
+            )
+        if row is None:
+            raise HTTPException(status_code=409, detail="content_article_not_pending_review")
+        return {"id":str(row["id"]),"article_status":row["article_status"]}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="content_article_review_unavailable") from None
+
