@@ -24,6 +24,7 @@ async def discover_and_build_growth_report(
     business_type: str,
     target_market: str,
     target_queries: list[str],
+    competitor_sources: list[str] | None = None,
     workspace_id: str,
     verified_domains: list[dict[str, Any]],
     competitor_gaps: list[dict[str, Any]] | None = None,
@@ -89,6 +90,7 @@ async def discover_and_build_growth_report(
         "pages_analyzed": 0,
     }
     effective_gaps = list(competitor_gaps or [])
+    supplied_competitors = list(dict.fromkeys(item.strip() for item in (competitor_sources or []) if isinstance(item, str) and item.strip()))[:20]
 
     # Competitor intelligence is part of the actual growth workflow, not a
     # separate dormant service. Search candidates remain explicitly unconfirmed;
@@ -104,7 +106,26 @@ async def discover_and_build_growth_report(
             api_key=settings.brave_search_api_key,
             max_candidates=12,
         )
-        candidates = competitor_discovery.get("items", [])
+
+        candidates = list(competitor_discovery.get("items", []))
+        # Explicit HTTPS URLs saved on the project are compared alongside search candidates.
+        from urllib.parse import urlsplit
+        own_host = (urlsplit(start_url).hostname or "").lower().rstrip(".")
+        for source in supplied_competitors:
+            parsed = urlsplit(source)
+            if (parsed.scheme.lower() == "https" and parsed.hostname
+                    and parsed.username is None and parsed.password is None
+                    and parsed.port in (None, 443)):
+                host = parsed.hostname.lower().rstrip(".")
+                if host != own_host and not host.endswith("." + own_host):
+                    candidates.insert(0, {
+                        "domain": host, "title": "Customer-supplied competitor source",
+                        "url": source, "description": "", "matched_queries": [],
+                        "relevance_score": 100.0, "evidence_type": "customer_supplied_source",
+                        "competitor_status": "candidate_requires_human_review",
+                        "requires_human_review": True,
+                    })
+
         if competitor_discovery.get("status") == "completed" and candidates:
             competitor_analysis = await analyze_competitor_pages(
                 candidates=candidates,
@@ -146,12 +167,13 @@ async def discover_and_build_growth_report(
         "sitemap_documents": discovery.get("sitemap_documents", []),
         "sitemap_seed_urls_discovered": discovery.get("sitemap_seed_urls_discovered", 0),
     }
+    competitor_discovery["customer_supplied_hints"] = supplied_competitors
     report["competitor_discovery"] = competitor_discovery
     report["competitor_analysis"] = competitor_analysis
     report["limitations"] = list(dict.fromkeys([
         *report.get("limitations", []),
         *discovery.get("limitations", []),
-        "Competitor candidates are search-derived leads, not confirmed competitors.",
+        "Competitor candidates, including customer-supplied sources, are unconfirmed leads and require human review.",
         "Competitor comparisons cover at most three public pages and the bounded client crawl; gaps require human review.",
     ]))
     return report
