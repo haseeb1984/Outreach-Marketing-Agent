@@ -252,11 +252,19 @@ async def get_connection(request: Request, workspace_id: str = Query(min_length=
                    FROM workspace_wordpress_connections
                    WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2""", workspace_id, project_id
             )
+            inherited = False
+            if row is None and project_id is not None:
+                row = await conn.fetchrow(
+                    """SELECT id,project_id,site_url,username,status,verified_at,created_at,updated_at
+                       FROM workspace_wordpress_connections
+                       WHERE workspace_id=$1 AND project_id IS NULL""", workspace_id
+                )
+                inherited = row is not None
         if row is None:
             return {"connected": False}
         item = dict(row)
         item["id"] = str(item["id"])
-        return {"connected": True, "connection": item}
+        return {"connected": True, "inherited_from_workspace": inherited, "connection": item}
     except HTTPException:
         raise
     except Exception:
