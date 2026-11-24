@@ -32,7 +32,7 @@ async def _authorize(request: Request, workspace_id: str, role: str, session: di
 
 
 def _serialize(row: dict) -> dict:
-    for key in ("id", "project_id", "report_id", "created_by", "reviewed_by"):
+    for key in ("id", "project_id", "report_id", "created_by", "reviewed_by", "article_reviewed_by", "cms_connection_id"):
         if row.get(key) is not None:
             row[key] = str(row[key])
     return row
@@ -134,7 +134,7 @@ async def list_content_briefs(
             rows = await conn.fetch(
                 """SELECT id,workspace_id,project_id,report_id,action_id,title,brief,
                           target_keyword,evidence_url,status,created_by,reviewed_by,
-                          review_note,created_at,updated_at,reviewed_at,article_title,meta_title,meta_description,article_outline,internal_link_suggestions,article_body,article_status,article_generated_at
+                          review_note,created_at,updated_at,reviewed_at,article_title,meta_title,meta_description,article_outline,internal_link_suggestions,article_body,article_status,article_generated_at,article_review_note,article_reviewed_by,article_reviewed_at,cms_connection_id,cms_post_id,cms_post_url,cms_status,cms_last_error,cms_synced_at
                    FROM website_content_briefs WHERE workspace_id=$1
                    ORDER BY updated_at DESC,id DESC LIMIT $2""",
                 workspace_id, limit,
