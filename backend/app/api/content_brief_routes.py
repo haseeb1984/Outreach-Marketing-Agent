@@ -278,8 +278,18 @@ async def generate_content_brief_article(brief_id: UUID, request: Request):
             raise HTTPException(status_code=404, detail="content_brief_not_found")
         if row["status"] != "approved":
             raise HTTPException(status_code=409, detail="content_brief_approval_required")
-        if row["article_status"] == "draft" and row.get("article_body"):
+        if row["article_status"] in {"generating", "draft", "in_review", "approved"}:
             raise HTTPException(status_code=409, detail="content_article_already_generated")
+        async with _pool(request).acquire() as conn:
+            claimed = await conn.fetchval(
+                """UPDATE website_content_briefs SET article_status='generating',updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status='approved'
+                     AND article_status IN ('not_generated','rejected')
+                   RETURNING id""",
+                brief_id, workspace_id,
+            )
+        if claimed is None:
+            raise HTTPException(status_code=409, detail="content_article_generation_in_progress")
         report = row["report"]
         if isinstance(report, str):
             report = json.loads(report)
@@ -315,6 +325,15 @@ async def generate_content_brief_article(brief_id: UUID, request: Request):
     except HTTPException:
         raise
     except Exception as exc:
+        try:
+            async with _pool(request).acquire() as conn:
+                await conn.execute(
+                    """UPDATE website_content_briefs SET article_status='not_generated',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND article_status='generating'""",
+                    brief_id, workspace_id,
+                )
+        except Exception:
+            pass
         from app.services.ai_outreach import AIOutreachUnavailable
         if isinstance(exc, AIOutreachUnavailable):
             code = str(exc)[:100]
@@ -358,7 +377,7 @@ async def review_content_article(brief_id: UUID, payload: ArticleReview, request
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
                 """UPDATE website_content_briefs SET article_status=$3,
-                          review_note=$4,reviewed_by=$5,reviewed_at=now(),updated_at=now()
+                          article_review_note=$4,article_reviewed_by=$5,article_reviewed_at=now(),updated_at=now()
                    WHERE id=$1 AND workspace_id=$2 AND status='approved'
                      AND article_status='in_review'
                    RETURNING id,article_status""",
