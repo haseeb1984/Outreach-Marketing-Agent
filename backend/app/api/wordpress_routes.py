@@ -461,6 +461,12 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
             raise HTTPException(status_code=502, detail="wordpress_publish_failed")
         data = response.json()
         if not isinstance(data,dict) or data.get("status") != "publish":
+            async with _pool(request).acquire() as conn:
+                await conn.execute(
+                    """UPDATE website_content_briefs SET cms_status='draft_created',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
+                    brief_id,payload.workspace_id,
+                )
             raise HTTPException(status_code=502, detail="wordpress_publish_unconfirmed")
         async with _pool(request).acquire() as conn:
             await conn.execute(
