@@ -4,7 +4,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-24
 
-- Current implementation source on `main`: `0c97bb51f9913de97bffc955ec7b6cfa992623cd`. This is a source-control reference, not a CI or deployment claim.
+- Current implementation source on `main`: `ede5b00702b8340743f7f96eab2a29bf45dcef5c`. This is a source-control reference, not a CI or deployment claim.
 - Added a persistent editorial pipeline from website-growth recommendations to workspace content briefs, editorial review, AI-generated SEO article drafts, editable metadata/body, and article approval.
 - Added project-workflow dashboard loading so saved briefs survive refreshes and workspace switches.
 - Added project-scoped WordPress Application Password storage (with a workspace-default fallback) encrypted with AES-GCM, HTTPS/public-DNS checks, connection verification, and permission checks for authoring/publishing.
@@ -15,7 +15,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 - Completed customer self-service account privacy controls in the dashboard: download a bounded JSON export (including saved editorial articles and non-secret WordPress connection metadata) and request irreversible account deletion with explicit confirmation, session revocation, identity pseudonymization, and shared-workspace ownership safeguards.
 - Added migrations `065`–`068`, backend routes/services, dashboard controls and WordPress operations documentation.
 - WordPress connections can now be scoped to individual client projects, with an optional workspace-default fallback. New article transfers prefer the project connection; an existing but unverified project connection blocks delivery rather than silently falling back. The saved CMS connection ID pins retries and publishing to the original site. Existing workspace connections remain intact as the fallback.
-- Project settings now display the inherited workspace-default connection as read-only when no project-specific connection exists; project scope cannot accidentally disconnect the workspace fallback. Article delivery buttons no longer depend on whichever connection scope happens to be selected in settings: the backend resolves the correct connection from each saved article's project and enforces fail-closed behavior. Concurrent connection setup for the same scope is serialized.
+- Project settings now display the inherited workspace-default connection as read-only when no project-specific connection exists; project scope cannot accidentally disconnect the workspace fallback. Article delivery buttons no longer depend on whichever connection scope happens to be selected in settings: the backend resolves the correct connection from each saved article's project and enforces fail-closed behavior. Concurrent connection setup for the same scope is serialized. An unpinned project-specific override can be removed to restore workspace fallback; if articles are already pinned to it, disconnect retains a disabled record and keeps delivery fail-closed.
 - **Not yet verified:** these latest editorial/CMS changes have not been built or tested, migrations have not been confirmed applied to a live database, WordPress staging credentials/provider acceptance have not been exercised, and no Hostinger frontend ZIP/upload or production deployment has occurred.
 - Earlier CI and deployment records below apply only to the commits they explicitly identify; they do not validate this newer implementation.
 
