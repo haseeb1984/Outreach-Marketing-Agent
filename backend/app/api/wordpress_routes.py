@@ -73,11 +73,12 @@ def _site_url(value: str) -> str:
     try:
         parsed = urlsplit(value)
         port = parsed.port
-        address = ipaddress.ip_address(parsed.hostname or "")
+        try:
+            address = ipaddress.ip_address(parsed.hostname or "")
+        except ValueError:
+            address = None
     except ValueError:
-        parsed = urlsplit(value)
-        port = parsed.port
-        address = None
+        raise ValueError("wordpress_site_url_invalid") from None
     host = (parsed.hostname or "").lower()
     if (parsed.scheme != "https" or not host or parsed.username or parsed.password
             or port not in (None, 443) or parsed.query or parsed.fragment
@@ -339,13 +340,28 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
             )
         if claimed is None:
             raise HTTPException(status_code=409, detail="wordpress_article_delivery_in_progress")
-        response = await _request(row["site_url"],row["username"],password,"POST","posts",json={
-            "title": row["article_title"],
-            "content": _html_from_markdown(row["article_body"]),
-            "status": "draft",
-            "excerpt": row["meta_description"],
-        })
-        if response.status_code not in (200,201):
+        stable_slug = "oma-content-" + brief_id.hex
+        existing = await _request(row["site_url"],row["username"],password,"GET","posts",
+                                  params={"slug":stable_slug,"status":"draft","context":"edit"})
+        if existing.status_code != 200:
+            raise HTTPException(status_code=502, detail="wordpress_draft_lookup_failed")
+        existing_items = existing.json()
+        if not isinstance(existing_items,list):
+            raise HTTPException(status_code=502, detail="wordpress_draft_lookup_invalid")
+        if existing_items:
+            data = existing_items[0]
+            response_status_ok = isinstance(data,dict) and isinstance(data.get("id"),int)
+        else:
+            response = await _request(row["site_url"],row["username"],password,"POST","posts",json={
+                "title": row["article_title"],
+                "slug": stable_slug,
+                "content": _html_from_markdown(row["article_body"]),
+                "status": "draft",
+                "excerpt": row["meta_description"],
+            })
+            response_status_ok = response.status_code in (200,201)
+            data = response.json() if response_status_ok else {}
+        if not response_status_ok:
             async with _pool(request).acquire() as conn:
                 await conn.execute(
                     """UPDATE website_content_briefs SET cms_status='failed',
