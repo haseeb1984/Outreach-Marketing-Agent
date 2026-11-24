@@ -4,7 +4,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-24
 
-- Current implementation source on `main`: `a16b6856c789689ab06f2ab072fcff97f41f05da`. This is a source-control reference, not a CI or deployment claim.
+- Current implementation source on `main`: `a146e0ba47c9a0b1749810175767f35c07e8065d`. This is a source-control reference, not a CI or deployment claim.
 - Added a persistent editorial pipeline from website-growth recommendations to workspace content briefs, editorial review, AI-generated SEO article drafts, editable metadata/body, and article approval.
 - Added project-workflow dashboard loading so saved briefs survive refreshes and workspace switches.
 - Added workspace-scoped WordPress Application Password storage encrypted with AES-GCM, HTTPS/public-DNS checks, connection verification, and permission checks for authoring/publishing.
