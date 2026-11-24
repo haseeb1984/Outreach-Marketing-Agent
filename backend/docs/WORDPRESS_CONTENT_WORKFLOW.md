@@ -8,7 +8,7 @@ The WordPress connector supports project-scoped connections with an optional wor
 2. Grant that user permission to edit and publish posts. Publishing permission is required for connection verification because the product supports an explicit publish action.
 3. Open **Users → Profile → Application Passwords**, create an application password, and copy it once.
 4. In the Outreach Marketing Agent dashboard, open **Editorial content workflow → WordPress connection**.
-5. Choose **Workspace default site** or a specific client project in the scope selector. Enter the HTTPS site URL, WordPress username, and application password, then save and verify. Project-specific connections take priority for new article transfers; the workspace default is used only when no project-specific connection record exists. If a project-specific connection is present but not verified, transfers fail closed instead of silently using another site.
+5. Choose **Workspace default site** or a specific client project in the scope selector. Enter the HTTPS site URL, WordPress username, and application password, then save and verify. Project-specific connections take priority for each article transfer; the workspace default is used only when no project-specific connection record exists. If a project-specific connection is present but not verified, transfers fail closed instead of silently using another site. When a project has no exact connection, its settings view shows the inherited workspace-default connection as read-only; it cannot be disconnected from project scope. The selector manages connection settings, while article delivery resolves the correct project connection from the saved brief.
 6. The application password is encrypted at rest with the configured provider credential encryption key. It is never returned by the API.
 
 ## Article lifecycle
@@ -26,7 +26,7 @@ The integration uses a stable post slug derived from the content brief ID so a r
 
 - Only HTTPS sites on public host addresses are accepted; redirects are not followed and proxy environment settings are ignored.
 - The configured site host is DNS-checked for public addresses before requests.
-- Workspace authorization is enforced on every endpoint. Connection management and CMS actions require workspace admin/owner access. Project IDs are validated against the active workspace before a connection can be read, saved, verified or disconnected.
+- Workspace authorization is enforced on every endpoint. Connection management and CMS actions require workspace admin/owner access. Project IDs are validated against the active workspace before a connection can be read, saved, verified or disconnected. Concurrent connection setup for the same workspace/project scope is serialized in PostgreSQL.
 - Migration `068_project_scoped_wordpress_connections.sql` adds one connection per project plus one optional workspace-default connection. Existing workspace connections are preserved as the fallback during upgrade.
 - Once an article is linked to a WordPress connection, retries and publication remain pinned to that exact connection even if another project or workspace-default connection is later added.
 - Application passwords are encrypted using AES-GCM with workspace and connection identifiers as authenticated additional data.
