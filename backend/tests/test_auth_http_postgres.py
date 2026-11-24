@@ -53,9 +53,11 @@ async def _exercise_email_verification_http(monkeypatch):
             "app.api.auth_routes.settings.frontend_origins",
             "https://app.example.test",
         )
-        app.state.auth_store = store
-        app.state.auth_rate_limiter = AllowLimiter()
         with TestClient(app, base_url="https://app.example.test") as client:
+            # The application lifespan initializes/reset state on entry, so inject
+            # the disposable PostgreSQL-backed services after startup.
+            app.state.auth_store = store
+            app.state.auth_rate_limiter = AllowLimiter()
             response = client.post(
                 "/api/v1/auth/verify-email",
                 headers={"Origin": "https://app.example.test"},
@@ -126,9 +128,11 @@ async def _exercise_password_reset_http(monkeypatch):
             "app.api.auth_routes.settings.frontend_origins",
             "https://app.example.test",
         )
-        app.state.auth_store = store
-        app.state.auth_rate_limiter = AllowLimiter()
         with TestClient(app, base_url="https://app.example.test") as client:
+            # The application lifespan initializes/reset state on entry, so inject
+            # the disposable PostgreSQL-backed services after startup.
+            app.state.auth_store = store
+            app.state.auth_rate_limiter = AllowLimiter()
             response = client.post(
                 "/api/v1/auth/password-reset/confirm",
                 headers={"Origin": "https://app.example.test"},
