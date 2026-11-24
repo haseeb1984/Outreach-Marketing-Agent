@@ -2,9 +2,22 @@
 
 Percentages represent verified implementation scope, not launch readiness. A phase is complete only after its acceptance checks pass. See [Implementation status and release blockers](IMPLEMENTATION_STATUS.md) for the current evidence-based matrix.
 
-## Current verified update — 2026-11-24
+## Current implementation update — 2026-11-24
 
-- Current `main` HEAD: `dd9a499baaf8989cbf4d11531f6882d54ba1cd16`.
+- Current implementation source on `main`: `6b751bc1afc783522f2ea0ce6773b9e521db5e50`. This is a source-control reference, not a CI or deployment claim.
+- Added a persistent editorial pipeline from website-growth recommendations to workspace content briefs, editorial review, AI-generated SEO article drafts, editable metadata/body, and article approval.
+- Added project-workflow dashboard loading so saved briefs survive refreshes and workspace switches.
+- Added workspace-scoped WordPress Application Password storage encrypted with AES-GCM, HTTPS/public-DNS checks, connection verification, and permission checks for authoring/publishing.
+- Approved articles can be transferred to WordPress as drafts. Draft retries recover/update the same post; article revisions can be resubmitted and synchronized to an existing WordPress draft.
+- Public publishing is a separate admin-only action with explicit browser confirmation and server-side confirmation. No automatic CMS publishing occurs.
+- WordPress disconnection revokes the stored encrypted credential while preserving the connection record and linked post history.
+- Added migrations `065`–`067`, backend routes/services, dashboard controls and WordPress operations documentation.
+- **Not yet verified:** these latest editorial/CMS changes have not been built or tested, migrations have not been confirmed applied to a live database, WordPress staging credentials/provider acceptance have not been exercised, and no Hostinger frontend ZIP/upload or production deployment has occurred.
+- Earlier CI and deployment records below apply only to the commits they explicitly identify; they do not validate this newer implementation.
+
+## Earlier verified baseline — 2026-11-24
+
+- Historical application CI baseline: `dd9a499baaf8989cbf4d11531f6882d54ba1cd16`.
 - Backend CI passed on this exact SHA: [run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702).
 - Hostinger Frontend CI passed on this exact SHA: [run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678), including type-check, production build, smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.
 - Vercel production deployment record is READY on this exact SHA. It is the FastAPI backend deployment and does not establish that the separately hosted Hostinger frontend has been uploaded.
