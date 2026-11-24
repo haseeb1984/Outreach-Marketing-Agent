@@ -434,44 +434,54 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
     delivery_claimed = False
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """SELECT b.article_title,b.meta_title,b.meta_description,b.article_body,
-                          b.article_status,b.cms_status,b.cms_post_id,c.id AS connection_id,
-                          c.site_url,c.username,c.encrypted_application_password
-                   FROM website_content_briefs b
-                   JOIN LATERAL (
-                       SELECT candidate.* FROM workspace_wordpress_connections candidate
-                       WHERE candidate.workspace_id=b.workspace_id
-                         AND (
-                           (b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id)
-                           OR
-                           (b.cms_connection_id IS NULL AND
-                             (candidate.project_id=b.project_id OR candidate.project_id IS NULL))
-                         )
-                       ORDER BY CASE WHEN b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id THEN 0
-                                     WHEN candidate.project_id=b.project_id THEN 1 ELSE 2 END
-                       LIMIT 1
-                   ) c ON c.status='verified'
-                   WHERE b.id=$1 AND b.workspace_id=$2""", brief_id, workspace_id
-            )
-        if row is None:
-            raise HTTPException(status_code=404, detail="wordpress_article_or_connection_not_found")
-        if row["article_status"] != "approved":
-            raise HTTPException(status_code=409, detail="article_editorial_approval_required")
-        if row["cms_status"] == "published":
-            raise HTTPException(status_code=409, detail="wordpress_article_already_published")
-        connection_id = row["connection_id"]
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """SELECT b.article_title,b.meta_title,b.meta_description,b.article_body,
+                              b.article_status,b.cms_status,b.cms_post_id,c.id AS connection_id
+                       FROM website_content_briefs b
+                       JOIN LATERAL (
+                           SELECT candidate.id FROM workspace_wordpress_connections candidate
+                           WHERE candidate.workspace_id=b.workspace_id
+                             AND (
+                               (b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id)
+                               OR
+                               (b.cms_connection_id IS NULL AND
+                                 (candidate.project_id=b.project_id OR candidate.project_id IS NULL))
+                             )
+                           ORDER BY CASE WHEN b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id THEN 0
+                                         WHEN candidate.project_id=b.project_id THEN 1 ELSE 2 END
+                           LIMIT 1
+                       ) selected ON TRUE
+                       JOIN workspace_wordpress_connections c ON c.id=selected.id AND c.status='verified'
+                       WHERE b.id=$1 AND b.workspace_id=$2""", brief_id, workspace_id
+                )
+                if row is None:
+                    raise HTTPException(status_code=404, detail="wordpress_article_or_connection_not_found")
+                connection_id = row["connection_id"]
+                connection = await conn.fetchrow(
+                    """SELECT site_url,username,encrypted_application_password
+                       FROM workspace_wordpress_connections
+                       WHERE id=$1 AND status='verified' FOR UPDATE""",
+                    connection_id,
+                )
+                if connection is None:
+                    raise HTTPException(status_code=409, detail="wordpress_connection_not_verified")
+                row = dict(row)
+                row.update(dict(connection))
+                if row["article_status"] != "approved":
+                    raise HTTPException(status_code=409, detail="article_editorial_approval_required")
+                if row["cms_status"] == "published":
+                    raise HTTPException(status_code=409, detail="wordpress_article_already_published")
+                claimed = await conn.fetchval(
+                    """UPDATE website_content_briefs SET cms_status='sending',cms_last_error=NULL,
+                              cms_connection_id=$3,updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND cms_status IN ('not_sent','failed','draft_created')
+                         AND article_status='approved' RETURNING id""",
+                    brief_id,workspace_id,connection_id,
+                )
+                if claimed is None:
+                    raise HTTPException(status_code=409, detail="wordpress_article_delivery_in_progress")
         password = _decrypt(row["encrypted_application_password"],workspace_id,connection_id)
-        async with _pool(request).acquire() as conn:
-            claimed = await conn.fetchval(
-                """UPDATE website_content_briefs SET cms_status='sending',cms_last_error=NULL,
-                          cms_connection_id=$3,updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND cms_status IN ('not_sent','failed','draft_created')
-                     AND article_status='approved' RETURNING id""",
-                brief_id,workspace_id,connection_id,
-            )
-        if claimed is None:
-            raise HTTPException(status_code=409, detail="wordpress_article_delivery_in_progress")
         delivery_claimed = True
         post_payload = {
             "title": row["article_title"],
