@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from urllib.parse import urlsplit, urlunsplit
+from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -51,6 +52,7 @@ def _normalize_start_url(value: str) -> str:
 class WebsiteGrowthScanRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
+    project_id: UUID | None = None
     start_url: str = Field(min_length=9, max_length=2048)
     business_type: str = Field(min_length=1, max_length=160)
     target_market: str = Field(min_length=1, max_length=160)
@@ -105,6 +107,32 @@ async def enqueue_website_growth_scan(
     except Exception:
         raise HTTPException(status_code=503, detail="domain_authorization_unavailable") from None
 
+
+    competitor_sources: list[str] = []
+    if payload.project_id is not None:
+        try:
+            async with _pool(request).acquire() as conn:
+                project = await conn.fetchrow(
+                    """SELECT competitors, website_url FROM workspace_projects
+                       WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL""",
+                    payload.project_id, payload.workspace_id,
+                )
+            if project is None:
+                raise HTTPException(status_code=404, detail="project_not_found")
+            if project["website_url"] and _normalize_start_url(project["website_url"]) != payload.start_url:
+                raise HTTPException(status_code=422, detail="project_website_mismatch")
+            raw_competitors = project["competitors"]
+            if isinstance(raw_competitors, str):
+                import json
+                raw_competitors = json.loads(raw_competitors)
+            if isinstance(raw_competitors, list):
+                competitor_sources = [item.strip() for item in raw_competitors
+                                       if isinstance(item, str) and item.strip()][:20]
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=503, detail="project_competitors_unavailable") from None
+
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
         raise HTTPException(status_code=503, detail="billing_service_not_configured")
@@ -132,6 +160,7 @@ async def enqueue_website_growth_scan(
                 "business_type": payload.business_type,
                 "target_market": payload.target_market,
                 "target_queries": payload.target_queries,
+                "competitor_sources": competitor_sources,
                 "requested_by": str(session["user_id"]),
                 "usage_reservation_id": str(reservation_id),
                 "max_pages": payload.max_pages,
