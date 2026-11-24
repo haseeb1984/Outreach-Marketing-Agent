@@ -2295,6 +2295,7 @@ export default function DashboardPage() {
         headers: { "Idempotency-Key": "dashboard-scan-" + window.crypto.randomUUID() },
         body: JSON.stringify({
           workspace_id: requestedWorkspaceId,
+          project_id: projects.find(project => project.website_url?.replace(/\/$/, "") === scheduleStartUrl.trim().replace(/\/$/, ""))?.id ?? null,
           start_url: scheduleStartUrl.trim(),
           business_type: scheduleBusinessType.trim(),
           target_market: scheduleTargetMarket.trim(),
