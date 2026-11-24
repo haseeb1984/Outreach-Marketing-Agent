@@ -95,6 +95,21 @@ def _site_url(value: str) -> str:
     return value
 
 
+def _safe_post_link(site_url: str, candidate: object) -> str | None:
+    if not isinstance(candidate, str) or len(candidate) > 4096:
+        return None
+    try:
+        base = urlsplit(site_url)
+        link = urlsplit(candidate)
+        if (link.scheme != "https" or link.hostname != base.hostname
+                or link.port not in (None, 443) or link.username or link.password
+                or not link.path.startswith("/")):
+            return None
+    except ValueError:
+        return None
+    return candidate
+
+
 def _html_from_markdown(markdown: str) -> str:
     """Small safe Markdown subset; all text is escaped and raw HTML is never passed through."""
     output: list[str] = []
@@ -405,9 +420,7 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
         data = response.json()
         if not isinstance(data,dict) or not isinstance(data.get("id"),int):
             raise HTTPException(status_code=502, detail="wordpress_post_response_invalid")
-        post_url = data.get("link")
-        if not isinstance(post_url,str) or not post_url.startswith(row["site_url"]):
-            post_url = None
+        post_url = _safe_post_link(row["site_url"], data.get("link"))
         async with _pool(request).acquire() as conn:
             await conn.execute(
                 """UPDATE website_content_briefs SET cms_status='draft_created',
@@ -505,10 +518,11 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
                 """UPDATE website_content_briefs SET cms_status='published',
                           cms_post_url=$3,cms_synced_at=now(),updated_at=now()
                    WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
-                brief_id,payload.workspace_id,data.get("link"),
+                brief_id,payload.workspace_id,published_url,
             )
         publish_claimed = False
-        return {"published":True,"post_url":data.get("link"),"status":"published"}
+        published_url = _safe_post_link(row["site_url"], data.get("link"))
+        return {"published":True,"post_url":published_url,"status":"published"}
     except HTTPException:
         if publish_claimed:
             try:
