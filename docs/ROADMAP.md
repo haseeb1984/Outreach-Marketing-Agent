@@ -4,7 +4,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-24
 
-- Current implementation source on `main`: `059e5f96fbc688f12f4ded0a6e9997fad80da5c5`. This is a source-control reference, not a CI or deployment claim.
+- Current implementation source on `main`: `a16b6856c789689ab06f2ab072fcff97f41f05da`. This is a source-control reference, not a CI or deployment claim.
 - Added a persistent editorial pipeline from website-growth recommendations to workspace content briefs, editorial review, AI-generated SEO article drafts, editable metadata/body, and article approval.
 - Added project-workflow dashboard loading so saved briefs survive refreshes and workspace switches.
 - Added workspace-scoped WordPress Application Password storage encrypted with AES-GCM, HTTPS/public-DNS checks, connection verification, and permission checks for authoring/publishing.
@@ -12,6 +12,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 - Public publishing is a separate admin-only action with explicit browser confirmation and server-side confirmation. No automatic CMS publishing occurs.
 - WordPress disconnection revokes the stored encrypted credential while preserving the connection record and linked post history.
 - Added the missing CORS PUT allowance required by the dashboard's WordPress connection-save endpoint. Editing an article that already has a WordPress draft now marks the CMS copy out-of-sync and blocks publishing until the updated article is resynchronized.
+- Completed customer self-service account privacy controls in the dashboard: download a bounded JSON export (including saved editorial articles and non-secret WordPress connection metadata) and request irreversible account deletion with explicit confirmation, session revocation, identity pseudonymization, and shared-workspace ownership safeguards.
 - Added migrations `065`–`067`, backend routes/services, dashboard controls and WordPress operations documentation.
 - **Not yet verified:** these latest editorial/CMS changes have not been built or tested, migrations have not been confirmed applied to a live database, WordPress staging credentials/provider acceptance have not been exercised, and no Hostinger frontend ZIP/upload or production deployment has occurred.
 - Earlier CI and deployment records below apply only to the commits they explicitly identify; they do not validate this newer implementation.
