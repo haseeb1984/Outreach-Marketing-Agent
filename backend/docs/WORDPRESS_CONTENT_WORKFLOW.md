@@ -25,7 +25,7 @@ The integration uses a stable post slug derived from the content brief ID so a r
 ## Security and limitations
 
 - Only HTTPS sites on public host addresses are accepted; redirects are not followed and proxy environment settings are ignored.
-- The configured site host is DNS-checked for public addresses before requests.
+- Every request resolves all A/AAAA records, rejects any non-public answer, then connects directly to a validated IP literal while preserving the original Host header and TLS SNI/certificate hostname. This prevents a second DNS lookup from rebinding the connection to a private address.
 - Workspace authorization is enforced on every endpoint. Connection management and CMS actions require workspace admin/owner access. Project IDs are validated against the active workspace before a connection can be read, saved, verified or disconnected. Concurrent connection setup for the same workspace/project scope is serialized in PostgreSQL.
 - Migration `068_project_scoped_wordpress_connections.sql` adds one connection per project plus one optional workspace-default connection. Existing workspace connections are preserved as the fallback during upgrade.
 - Once an article is linked to a WordPress connection, retries and publication remain pinned to that exact connection even if another project or workspace-default connection is later added.
