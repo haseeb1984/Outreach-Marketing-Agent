@@ -558,31 +558,40 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
     publish_claimed = False
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """SELECT b.cms_post_id,b.cms_status,b.article_status,c.site_url,c.username,
-                          c.encrypted_application_password,c.id AS connection_id
-                   FROM website_content_briefs b
-                   JOIN workspace_wordpress_connections c
-                     ON c.id=b.cms_connection_id AND c.workspace_id=b.workspace_id
-                   WHERE b.id=$1 AND b.workspace_id=$2 AND c.status='verified'""",
-                brief_id,payload.workspace_id,
-            )
-        if row is None:
-            raise HTTPException(status_code=404, detail="wordpress_article_or_connection_not_found")
-        if row["article_status"] != "approved":
-            raise HTTPException(status_code=409, detail="article_editorial_approval_required")
-        if row["cms_status"] != "draft_created" or not row["cms_post_id"]:
-            raise HTTPException(status_code=409, detail="wordpress_draft_required_before_publish")
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """SELECT b.cms_post_id,b.cms_status,b.article_status,c.id AS connection_id
+                       FROM website_content_briefs b
+                       JOIN workspace_wordpress_connections c
+                         ON c.id=b.cms_connection_id AND c.workspace_id=b.workspace_id
+                       WHERE b.id=$1 AND b.workspace_id=$2 AND c.status='verified'""",
+                    brief_id,payload.workspace_id,
+                )
+                if row is None:
+                    raise HTTPException(status_code=404, detail="wordpress_article_or_connection_not_found")
+                connection = await conn.fetchrow(
+                    """SELECT site_url,username,encrypted_application_password
+                       FROM workspace_wordpress_connections
+                       WHERE id=$1 AND status='verified' FOR UPDATE""",
+                    row["connection_id"],
+                )
+                if connection is None:
+                    raise HTTPException(status_code=409, detail="wordpress_connection_not_verified")
+                row = dict(row)
+                row.update(dict(connection))
+                if row["article_status"] != "approved":
+                    raise HTTPException(status_code=409, detail="article_editorial_approval_required")
+                if row["cms_status"] != "draft_created" or not row["cms_post_id"]:
+                    raise HTTPException(status_code=409, detail="wordpress_draft_required_before_publish")
+                claimed = await conn.fetchval(
+                    """UPDATE website_content_briefs SET cms_status='publishing',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND cms_status='draft_created'
+                         AND article_status='approved' RETURNING id""",
+                    brief_id,payload.workspace_id,
+                )
+                if claimed is None:
+                    raise HTTPException(status_code=409, detail="wordpress_publish_in_progress")
         password = _decrypt(row["encrypted_application_password"],payload.workspace_id,row["connection_id"])
-        async with _pool(request).acquire() as conn:
-            claimed = await conn.fetchval(
-                """UPDATE website_content_briefs SET cms_status='publishing',updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND cms_status='draft_created'
-                     AND article_status='approved' RETURNING id""",
-                brief_id,payload.workspace_id,
-            )
-        if claimed is None:
-            raise HTTPException(status_code=409, detail="wordpress_publish_in_progress")
         publish_claimed = True
         response = await _request(row["site_url"],row["username"],password,"POST",
                                   "posts/" + str(row["cms_post_id"]),json={"status":"publish"})
