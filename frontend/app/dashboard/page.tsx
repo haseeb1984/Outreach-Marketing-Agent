@@ -94,6 +94,7 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       wordpress_authentication_failed: "WordPress rejected the application password. Check the username and create a new Application Password.",
       wordpress_user_lacks_post_capabilities: "The WordPress user needs permission to edit and publish posts.",
       wordpress_connection_not_pending: "Update the WordPress credentials before verifying this connection.",
+      wordpress_article_or_connection_not_found: "No verified WordPress connection is available for this article's project. Verify its project site or configure the workspace default.",
       wordpress_site_change_blocked_by_existing_posts: "This WordPress connection already has linked posts. Keep the same site URL or use a separate project connection for another website.",
       article_editorial_approval_required: "Approve the article in the editorial workflow before sending it to WordPress.",
       explicit_publish_confirmation_required: "Confirm the public publishing action before continuing.",
