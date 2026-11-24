@@ -96,7 +96,7 @@ async def list_content_briefs(
             rows = await conn.fetch(
                 """SELECT id,workspace_id,project_id,report_id,action_id,title,brief,
                           target_keyword,evidence_url,status,created_by,reviewed_by,
-                          review_note,created_at,updated_at,reviewed_at
+                          review_note,created_at,updated_at,reviewed_at,article_title,meta_title,meta_description,article_outline,internal_link_suggestions,article_body,article_status,article_generated_at
                    FROM website_content_briefs WHERE workspace_id=$1
                    ORDER BY updated_at DESC,id DESC LIMIT $2""",
                 workspace_id, limit,
@@ -225,7 +225,7 @@ async def generate_content_brief_article(brief_id: UUID, request: Request):
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
                 """SELECT b.id,b.workspace_id,b.project_id,b.report_id,b.brief,
-                          b.target_keyword,b.status,b.article_status,r.report,
+                          b.target_keyword,b.status,b.article_status,b.article_body,r.report,
                           p.name AS project_name,p.website_url,p.business_model,
                           p.target_market,p.brand_voice,p.audience,p.offer
                    FROM website_content_briefs b
