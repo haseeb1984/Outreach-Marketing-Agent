@@ -440,9 +440,24 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
         if row["cms_status"] != "draft_created" or not row["cms_post_id"]:
             raise HTTPException(status_code=409, detail="wordpress_draft_required_before_publish")
         password = _decrypt(row["encrypted_application_password"],payload.workspace_id,row["connection_id"])
+        async with _pool(request).acquire() as conn:
+            claimed = await conn.fetchval(
+                """UPDATE website_content_briefs SET cms_status='publishing',updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND cms_status='draft_created'
+                     AND article_status='approved' RETURNING id""",
+                brief_id,payload.workspace_id,
+            )
+        if claimed is None:
+            raise HTTPException(status_code=409, detail="wordpress_publish_in_progress")
         response = await _request(row["site_url"],row["username"],password,"POST",
                                   "posts/" + str(row["cms_post_id"]),json={"status":"publish"})
         if response.status_code not in (200,201):
+            async with _pool(request).acquire() as conn:
+                await conn.execute(
+                    """UPDATE website_content_briefs SET cms_status='draft_created',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
+                    brief_id,payload.workspace_id,
+                )
             raise HTTPException(status_code=502, detail="wordpress_publish_failed")
         data = response.json()
         if not isinstance(data,dict) or data.get("status") != "publish":
@@ -451,11 +466,20 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
             await conn.execute(
                 """UPDATE website_content_briefs SET cms_status='published',
                           cms_post_url=$3,cms_synced_at=now(),updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND cms_status='draft_created'""",
+                   WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
                 brief_id,payload.workspace_id,data.get("link"),
             )
         return {"published":True,"post_url":data.get("link"),"status":"published"}
     except HTTPException:
         raise
     except Exception:
+        try:
+            async with _pool(request).acquire() as conn:
+                await conn.execute(
+                    """UPDATE website_content_briefs SET cms_status='draft_created',updated_at=now()
+                       WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
+                    brief_id,payload.workspace_id,
+                )
+        except Exception:
+            pass
         raise HTTPException(status_code=503, detail="wordpress_publish_unavailable") from None
