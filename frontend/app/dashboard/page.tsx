@@ -97,6 +97,7 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       explicit_publish_confirmation_required: "Confirm the public publishing action before continuing.",
       wordpress_draft_already_created: "This article already has a WordPress draft.",
       wordpress_draft_required_before_publish: "Send the article to WordPress as a draft before publishing it.",
+      transfer_workspace_ownership_before_account_deletion: "Transfer ownership of shared workspaces before deleting this account.",
 
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
@@ -705,6 +706,18 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Account export could not be prepared.");
     } finally { setBusy(false); }
+  }
+
+  async function deleteAccount() {
+    if (!csrf || !window.confirm("Permanently deactivate this account, revoke all sessions, and pseudonymize its identity? Sole-member owned workspaces and their data will also be deleted. This cannot be undone.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/account", csrf, { method: "DELETE" });
+      router.replace("/login?account_deleted=1");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Account deletion could not be completed.");
+      setBusy(false);
+    }
   }
 
   async function saveWorkspaceName(event: FormEvent<HTMLFormElement>) {
@@ -2660,7 +2673,7 @@ export default function DashboardPage() {
           <form onSubmit={createWorkspace}><div className="field"><label htmlFor="new-workspace-name">Create another workspace</label><input id="new-workspace-name" required maxLength={160} value={newWorkspaceName} onChange={e=>setNewWorkspaceName(e.target.value)} placeholder="Client or business workspace name" /></div><button className="button secondary" type="submit" disabled={busy || !csrf}>Create workspace</button></form>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
-          <div className="actions"><button className="button secondary" type="button" onClick={downloadAccountExport} disabled={busy || !csrf}>Download my account data</button><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || refreshing || !workspaceId}>{refreshing ? "Refreshing workspace…" : "Refresh workspace"}</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
+          <div className="actions"><button className="button secondary" type="button" onClick={downloadAccountExport} disabled={busy || !csrf}>Download my account data</button><button className="button secondary" type="button" onClick={deleteAccount} disabled={busy || !csrf}>Delete my account</button><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || refreshing || !workspaceId}>{refreshing ? "Refreshing workspace…" : "Refresh workspace"}</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
         </section>
         <section className="section" aria-labelledby="email-accounts-title"><h2 id="email-accounts-title">Connected email accounts</h2>
           <p className="fine">SMTP credentials are encrypted at rest. Only supported TLS submission hosts on port 587 are accepted. Connection tests authenticate only and do not send a message.</p>
