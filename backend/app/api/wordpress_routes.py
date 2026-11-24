@@ -264,12 +264,22 @@ async def save_connection(payload: WordPressConnect, request: Request):
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
-                existing = await conn.fetchval(
-                    "SELECT id FROM workspace_wordpress_connections WHERE workspace_id=$1 FOR UPDATE",
+                existing = await conn.fetchrow(
+                    "SELECT id,site_url FROM workspace_wordpress_connections WHERE workspace_id=$1 FOR UPDATE",
                     payload.workspace_id,
                 )
                 if existing:
-                    connection_id = existing
+                    connection_id = existing["id"]
+                    if existing["site_url"] != payload.site_url:
+                        linked_posts = await conn.fetchval(
+                            """SELECT EXISTS(
+                                 SELECT 1 FROM website_content_briefs
+                                 WHERE workspace_id=$1 AND cms_connection_id=$2 AND cms_post_id IS NOT NULL
+                               )""",
+                            payload.workspace_id, connection_id,
+                        )
+                        if linked_posts:
+                            raise HTTPException(status_code=409, detail="wordpress_site_change_blocked_by_existing_posts")
                     encrypted = _encrypt(payload.application_password, payload.workspace_id, connection_id)
                     await conn.execute(
                         """UPDATE workspace_wordpress_connections SET site_url=$2,username=$3,
