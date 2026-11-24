@@ -301,11 +301,13 @@ async def verify_connection(request: Request, workspace_id: str = Query(min_leng
     try:
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT id,site_url,username,encrypted_application_password
+                """SELECT id,site_url,username,encrypted_application_password,status
                    FROM workspace_wordpress_connections WHERE workspace_id=$1""", workspace_id
             )
         if row is None:
             raise HTTPException(status_code=404, detail="wordpress_connection_not_found")
+        if row["status"] == "disabled" or row["encrypted_application_password"] is None:
+            raise HTTPException(status_code=409, detail="wordpress_connection_credentials_revoked")
         connection_id = row["id"]
         password = _decrypt(row["encrypted_application_password"], workspace_id, connection_id)
         response = await _request(row["site_url"], row["username"], password, "GET", "users/me",
