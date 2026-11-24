@@ -513,6 +513,7 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
                     brief_id,payload.workspace_id,
                 )
             raise HTTPException(status_code=502, detail="wordpress_publish_unconfirmed")
+        published_url = _safe_post_link(row["site_url"], data.get("link"))
         async with _pool(request).acquire() as conn:
             await conn.execute(
                 """UPDATE website_content_briefs SET cms_status='published',
@@ -521,7 +522,6 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
                 brief_id,payload.workspace_id,published_url,
             )
         publish_claimed = False
-        published_url = _safe_post_link(row["site_url"], data.get("link"))
         return {"published":True,"post_url":published_url,"status":"published"}
     except HTTPException:
         if publish_claimed:
