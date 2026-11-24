@@ -87,6 +87,17 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       growth_schedule_service_not_configured: "Recurring scan scheduling is not available until the database migration is applied.",
       workspace_job_service_not_configured: "Website-growth jobs are not available until the database migration is applied.",
       domain_authorization_not_configured: "Verify the website domain service configuration before scheduling a scan.",
+      wordpress_site_must_be_public_https: "Use a public HTTPS WordPress site URL without credentials, query parameters, or a custom port.",
+      wordpress_site_must_resolve_to_public_addresses: "The WordPress hostname must resolve only to public IP addresses.",
+      wordpress_site_dns_unavailable: "The WordPress hostname could not be safely resolved. Check DNS and try again.",
+      wordpress_authentication_failed: "WordPress rejected the application password. Check the username and create a new Application Password.",
+      wordpress_user_lacks_post_capabilities: "The WordPress user needs permission to edit and publish posts.",
+      wordpress_connection_not_pending: "Update the WordPress credentials before verifying this connection.",
+      article_editorial_approval_required: "Approve the article in the editorial workflow before sending it to WordPress.",
+      explicit_publish_confirmation_required: "Confirm the public publishing action before continuing.",
+      wordpress_draft_already_created: "This article already has a WordPress draft.",
+      wordpress_draft_required_before_publish: "Send the article to WordPress as a draft before publishing it.",
+
     };
     throw new Error(messages[detail] || "Request could not be completed (" + (detail || response.status) + ").");
   }
