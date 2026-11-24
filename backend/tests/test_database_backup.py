@@ -149,3 +149,45 @@ def test_prune_ignores_symlinked_backup_files(tmp_path):
     database_backup.prune(tmp_path, older_than_days=5, keep_at_least=1, apply=True)
     assert source.exists()
     assert link.is_symlink()
+
+
+def test_backup_writes_private_archive_and_checksum_atomically(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://backup-user:backup-pass@db.example:5432/outreach")
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    calls = []
+
+    def fake_run(command, environment):
+        calls.append((command, environment))
+        output_index = command.index("--file") + 1
+        Path(command[output_index]).write_bytes(b"verified backup archive")
+
+    monkeypatch.setattr(database_backup, "_run", fake_run)
+    result = database_backup.backup()
+
+    assert result.parent == tmp_path
+    assert result.name.startswith("outreach-db-") and result.suffix == ".dump"
+    assert result.read_bytes() == b"verified backup archive"
+    checksum_file = result.with_suffix(".dump.sha256")
+    expected = hashlib.sha256(b"verified backup archive").hexdigest()
+    assert checksum_file.read_text(encoding="utf-8") == f"{expected}  {result.name}\\n"
+    assert result.stat().st_mode & 0o777 == 0o600
+    assert checksum_file.stat().st_mode & 0o777 == 0o600
+    assert len(calls) == 1
+    assert calls[0][0][:3] == ["pg_dump", "--format=custom", "--no-owner"]
+    assert calls[0][1]["PGPASSWORD"] == "backup-pass"
+    assert sorted(path.name for path in tmp_path.iterdir()) == sorted([result.name, checksum_file.name])
+
+
+def test_backup_failure_removes_temporary_archive(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://backup-user:backup-pass@db.example:5432/outreach")
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+
+    def failed_dump(command, environment):
+        Path(command[command.index("--file") + 1]).write_bytes(b"partial")
+        raise RuntimeError("simulated pg_dump failure")
+
+    monkeypatch.setattr(database_backup, "_run", failed_dump)
+    with pytest.raises(RuntimeError, match="simulated pg_dump failure"):
+        database_backup.backup()
+
+    assert list(tmp_path.iterdir()) == []
