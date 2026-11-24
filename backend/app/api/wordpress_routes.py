@@ -379,8 +379,6 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
             raise HTTPException(status_code=404, detail="wordpress_article_or_connection_not_found")
         if row["article_status"] != "approved":
             raise HTTPException(status_code=409, detail="article_editorial_approval_required")
-        if row["cms_status"] == "draft_created":
-            raise HTTPException(status_code=409, detail="wordpress_draft_already_created")
         if row["cms_status"] == "published":
             raise HTTPException(status_code=409, detail="wordpress_article_already_published")
         connection_id = row["connection_id"]
@@ -389,41 +387,47 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
             claimed = await conn.fetchval(
                 """UPDATE website_content_briefs SET cms_status='sending',cms_last_error=NULL,
                           cms_connection_id=$3,updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND cms_status IN ('not_sent','failed')
+                   WHERE id=$1 AND workspace_id=$2 AND cms_status IN ('not_sent','failed','draft_created')
                      AND article_status='approved' RETURNING id""",
                 brief_id,workspace_id,connection_id,
             )
         if claimed is None:
             raise HTTPException(status_code=409, detail="wordpress_article_delivery_in_progress")
         delivery_claimed = True
-        stable_slug = "oma-content-" + brief_id.hex
-        existing = await _request(row["site_url"],row["username"],password,"GET","posts",
-                                  params={"slug":stable_slug,"status":"draft","context":"edit"})
-        if existing.status_code != 200:
-            raise HTTPException(status_code=502, detail="wordpress_draft_lookup_failed")
-        existing_items = existing.json()
-        if not isinstance(existing_items,list):
-            raise HTTPException(status_code=502, detail="wordpress_draft_lookup_invalid")
-        if existing_items:
-            data = existing_items[0]
-            response_status_ok = isinstance(data,dict) and isinstance(data.get("id"),int)
+        post_payload = {
+            "title": row["article_title"],
+            "content": _html_from_markdown(row["article_body"]),
+            "status": "draft",
+            "excerpt": row["meta_description"],
+        }
+        if row["cms_post_id"]:
+            response = await _request(row["site_url"],row["username"],password,"POST",
+                                      "posts/" + str(row["cms_post_id"]),json=post_payload)
         else:
-            response = await _request(row["site_url"],row["username"],password,"POST","posts",json={
-                "title": row["article_title"],
-                "slug": stable_slug,
-                "content": _html_from_markdown(row["article_body"]),
-                "status": "draft",
-                "excerpt": row["meta_description"],
-            })
-            response_status_ok = response.status_code in (200,201)
-            data = response.json() if response_status_ok else {}
-        if not response_status_ok:
+            stable_slug = "oma-content-" + brief_id.hex
+            existing = await _request(row["site_url"],row["username"],password,"GET","posts",
+                                      params={"slug":stable_slug,"status":"draft","context":"edit"})
+            if existing.status_code != 200:
+                raise HTTPException(status_code=502, detail="wordpress_draft_lookup_failed")
+            existing_items = existing.json()
+            if not isinstance(existing_items,list):
+                raise HTTPException(status_code=502, detail="wordpress_draft_lookup_invalid")
+            if existing_items:
+                existing_post = existing_items[0]
+                if not isinstance(existing_post,dict) or not isinstance(existing_post.get("id"),int):
+                    raise HTTPException(status_code=502, detail="wordpress_draft_lookup_invalid")
+                response = await _request(row["site_url"],row["username"],password,"POST",
+                                          "posts/" + str(existing_post["id"]),json=post_payload)
+            else:
+                post_payload["slug"] = stable_slug
+                response = await _request(row["site_url"],row["username"],password,"POST","posts",json=post_payload)
+        if response.status_code not in (200,201):
             async with _pool(request).acquire() as conn:
                 await conn.execute(
                     """UPDATE website_content_briefs SET cms_status='failed',
-                              cms_last_error=$3,updated_at=now()
+                              cms_last_error='wordpress_draft_creation_failed',updated_at=now()
                        WHERE id=$1 AND workspace_id=$2 AND cms_status='sending'""",
-                    brief_id,workspace_id,"wordpress_http_" + str(response.status_code),
+                    brief_id,workspace_id,
                 )
             raise HTTPException(status_code=502, detail="wordpress_draft_creation_failed")
         data = response.json()
