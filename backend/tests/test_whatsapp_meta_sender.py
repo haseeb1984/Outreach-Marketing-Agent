@@ -142,3 +142,31 @@ def test_payload_builders_normalize_formatted_phone_numbers():
 def test_payload_builders_reject_malformed_phone_numbers(recipient):
     with pytest.raises(ValueError, match="whatsapp_recipient_invalid"):
         build_text_payload(recipient=recipient, body="Hello")
+
+
+@pytest.mark.parametrize("status_code", [408, 425, 429, 500, 502, 503])
+def test_sender_classifies_retryable_or_server_statuses_as_uncertain(status_code):
+    async def scenario():
+        transport = httpx.MockTransport(lambda request: httpx.Response(status_code, json={"error": {"message": "private"}}))
+        async with httpx.AsyncClient(transport=transport) as client:
+            with pytest.raises(MetaSendUncertain, match="meta_provider_outcome_uncertain"):
+                await MetaWhatsAppSender(client).send(
+                    version="v23.0", phone_number_id="123456789", access_token="secret-token",
+                    recipient="14155550123", body="Hello",
+                )
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("body", [b"not-json", b"null", b'{"messages":null}', b'{"messages":[{}]}'])
+def test_sender_treats_unusable_success_response_as_uncertain(body):
+    async def scenario():
+        transport = httpx.MockTransport(lambda request: httpx.Response(
+            200, content=body, headers={"content-type": "application/json"},
+        ))
+        async with httpx.AsyncClient(transport=transport) as client:
+            with pytest.raises(MetaSendUncertain):
+                await MetaWhatsAppSender(client).send(
+                    version="v23.0", phone_number_id="123456789", access_token="secret-token",
+                    recipient="14155550123", body="Hello",
+                )
+    asyncio.run(scenario())
