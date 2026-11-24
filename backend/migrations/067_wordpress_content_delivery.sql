@@ -19,7 +19,7 @@ ALTER TABLE website_content_briefs
     ADD COLUMN IF NOT EXISTS cms_post_id BIGINT,
     ADD COLUMN IF NOT EXISTS cms_post_url TEXT,
     ADD COLUMN IF NOT EXISTS cms_status TEXT NOT NULL DEFAULT 'not_sent'
-        CHECK (cms_status IN ('not_sent','sending','draft_created','published','failed')),
+        CHECK (cms_status IN ('not_sent','sending','draft_created','publishing','published','failed')),
     ADD COLUMN IF NOT EXISTS cms_last_error TEXT,
     ADD COLUMN IF NOT EXISTS cms_synced_at TIMESTAMPTZ;
 
