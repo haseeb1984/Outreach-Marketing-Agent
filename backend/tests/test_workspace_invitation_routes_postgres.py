@@ -87,7 +87,7 @@ async def _exercise_invitation_lifecycle(monkeypatch) -> None:
             await connection.executemany(
                 """INSERT INTO workspace_invitations
                    (workspace_id,invited_email,role,token_sha256,status,invited_by,created_at,expires_at,revoked_at)
-                   VALUES ($1,$2,'member',$3,$4,$5,$6,$7,CASE WHEN $4='revoked' THEN $6 ELSE NULL END)""",
+                   VALUES ($1,$2,'member',$3,$4,$5,$6,$7,$8)""",
                 [
                     (
                         workspace_id,
@@ -97,6 +97,7 @@ async def _exercise_invitation_lifecycle(monkeypatch) -> None:
                         owner_id,
                         now,
                         now + timedelta(days=2),
+                        None,
                     ),
                     (
                         workspace_id,
@@ -106,6 +107,7 @@ async def _exercise_invitation_lifecycle(monkeypatch) -> None:
                         owner_id,
                         now - timedelta(days=9),
                         now - timedelta(days=1),
+                        None,
                     ),
                     (
                         workspace_id,
@@ -115,6 +117,7 @@ async def _exercise_invitation_lifecycle(monkeypatch) -> None:
                         owner_id,
                         now - timedelta(days=1),
                         now + timedelta(days=2),
+                        now,
                     ),
                 ],
             )
