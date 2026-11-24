@@ -40,7 +40,7 @@ type DomainChallenge = { domain: string; expires_at: string; dns_record: { recor
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
 type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
 type GrowthReviewReport = { report_type?: string; project_id?: string; project_name?: string; start_url: string; status?: string; crawl_summary?: { pages_crawled?: number }; competitor_discovery?: { status: string; notice?: string; count?: number; items?: Array<{ domain: string; title: string; url: string; description: string; matched_queries: string[]; relevance_score: number; competitor_status: string }> }; competitor_analysis?: { status: string; notice?: string; pages_checked?: number; pages_analyzed?: number; potential_gaps?: Array<{ query: string; classification: string; priority_score: number; confidence: string; client_coverage: number; competitor_coverage: number; competitor_evidence_url: string; client_evidence_urls: string[]; requires_human_review: boolean }> }; strategy?: { actions?: Array<{ id: string; title: string; priority: string; priority_score: number; recommended_action: string; evidence_url: string; confidence: string }>; measurement_plan?: string[] }; limitations?: string[]; review_required?: boolean };
-type ContentBrief = { id: string; title: string; brief: string; target_keyword: string; status: string; evidence_url: string };
+type ContentBrief = { id: string; title: string; brief: string; target_keyword: string; status: string; evidence_url: string; article_title?: string; meta_title?: string; meta_description?: string; article_body?: string; article_status?: string; article_outline?: string[]; internal_link_suggestions?: Array<{url:string;reason:string}> };
 type GrowthReviewResult = { report_id: string; workspace_id: string; project_id: string; project_name: string; report: GrowthReviewReport; created_at: string; notice: string };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
@@ -286,9 +286,10 @@ export default function DashboardPage() {
       api<ApiResult<Draft>>("/api/v1/drafts?workspace_id=" + encodeURIComponent(selectedId) + "&status=all&limit=50", token),
       api<{ counts: Counts }>("/api/v1/analytics/summary?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + periodRef.current, token),
       api<ApiResult<Delivery>>("/api/v1/deliveries?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
+      api<{ items: ContentBrief[] }>("/api/v1/content-briefs?workspace_id=" + encodeURIComponent(selectedId), token),
     ]);
     if (!isCurrentLoad()) return;
-    const [prospectResult, campaignResult, draftResult, analyticsResult, deliveryResult] = primaryResults;
+    const [prospectResult, campaignResult, draftResult, analyticsResult, deliveryResult, contentBriefResult] = primaryResults;
     const p = prospectResult.status === "fulfilled" ? prospectResult.value : { items: [] as Prospect[] };
     const c = campaignResult.status === "fulfilled" ? campaignResult.value : { items: [] as Campaign[] };
     const d = draftResult.status === "fulfilled" ? draftResult.value : { items: [] as Draft[] };
@@ -298,8 +299,9 @@ export default function DashboardPage() {
     setCampaigns(c.items || []);
     setDrafts(d.items || []);
     setDeliveries(deliveryData.items || []);
+    setContentBriefs(contentBriefResult.status === "fulfilled" ? (contentBriefResult.value.items || []) : []);
     setCounts(a.counts || {});
-    const primaryFailureNames = ["prospects", "campaigns", "drafts", "analytics", "deliveries"].filter((_, index) => primaryResults[index].status === "rejected");
+    const primaryFailureNames = ["prospects", "campaigns", "drafts", "analytics", "deliveries", "editorial briefs"].filter((_, index) => primaryResults[index].status === "rejected");
     const followupResult = await Promise.allSettled([api<{ items: FollowupSequence[] }>("/api/v1/follow-up-sequences?workspace_id=" + encodeURIComponent(selectedId), token)]);
     if (!isCurrentLoad()) return;
     setFollowupSequences(followupResult[0].status === "fulfilled" ? (followupResult[0].value.items || []) : []);
