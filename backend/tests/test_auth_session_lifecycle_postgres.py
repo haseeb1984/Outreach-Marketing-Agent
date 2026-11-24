@@ -63,7 +63,7 @@ async def _exercise_session_lifecycle() -> None:
         # A user cannot revoke a session belonging to another account.
         assert await store.revoke_session_by_id(
             user_id=owner_id,
-            session_id=_session_id_for_token(outsider["token"], pool),
+            session_id=await _session_id_for_token(outsider["token"], pool),
         ) is False
         assert await store.authenticate_session(outsider["token"]) is not None
 
@@ -77,7 +77,7 @@ async def _exercise_session_lifecycle() -> None:
         assert await store.authenticate_session(expire_target["token"]) is None
         assert await store.revoke_session_by_id(
             user_id=owner_id,
-            session_id=_session_id_for_token(expire_target["token"], pool),
+            session_id=await _session_id_for_token(expire_target["token"], pool),
         ) is False
 
         # Revoke one specific session, leaving the current replacement intact.
