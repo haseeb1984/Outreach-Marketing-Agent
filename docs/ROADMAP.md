@@ -4,15 +4,18 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current verified update — 2026-11-24
 
-- Current `main` HEAD: `85b9ce0b93040722fbeb13de0c9d2020bf6af592`.
-- Backend CI passed on that exact HEAD: [run 45251520483](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45251520483), with Python 3.11/3.12/3.13 jobs.
-- Frontend CI last verified on `91febc4af4f6d278fa7e8f49afafe48ad3b11622`: [run 45114987413](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45114987413). Type-check, production build, smoke tests and browser acceptance passed there; this is not a frontend pass for current HEAD.
-- Authenticated Playwright coverage includes account registration/login/recovery, workspace selection and creation with CSRF, session expiry, email verification and influencer discovery/review. These tests stub API responses and do not establish production account or external-provider acceptance.
-- **Billing:** Paddle checkout/customer-portal and webhook/lifecycle foundations are present in code. Sandbox checkout, portal, webhook delivery, subscription lifecycle and reconciliation still require end-to-end acceptance. Do not label billing production-ready.
-- **WhatsApp:** Meta inbound webhook/account/conversation foundations plus consent and outbound-queue policy foundations are present. The outbound dispatcher and live sending are not accepted; Meta onboarding, live webhook delivery, templates/consent enforcement and staging tests remain gates. Live sends stay disabled.
-- **Email:** durable outbound queue and SMTP adapter foundations are present. Authenticated staging SMTP and actual inbox delivery remain unverified.
-- **Dashboard:** core authenticated workspace, CRM, campaign/review and delivery workflows exist. Workspace/project settings, invitations, connected-provider management, full billing UX, export/deletion UX and complete onboarding remain incomplete.
-- **Current release gates:** frontend CI on current HEAD, live authenticated production journey, provider sandbox/staging acceptance, tenant-isolation/security review, accessibility/performance checks, monitoring/incident runbook and backup/restore drill.
+- Current `main` HEAD: `dd9a499baaf8989cbf4d11531f6882d54ba1cd16`.
+- Backend CI passed on this exact SHA: [run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702).
+- Hostinger Frontend CI passed on this exact SHA: [run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678), including type-check, production build, smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.
+- Vercel production deployment record is READY on this exact SHA. It is the FastAPI backend deployment and does not establish that the separately hosted Hostinger frontend has been uploaded.
+- Dashboard controls and endpoint wiring include projects, workspace settings/members, invitations, account export, domain verification, read-only website audits, prospect research review, analytics, integration status, SMTP connection test and delivery-provider event history. The dashboard's current static route test checks rendered UI and wiring; each workflow still needs authenticated database/provider acceptance.
+- Account export/deletion and workspace ownership-transfer APIs exist in source; lifecycle and authorization acceptance remain required.
+- Project API has an optional disposable-PostgreSQL lifecycle test for create/list/update/archive and cross-workspace denial. It runs only when `OMA_TEST_DATABASE_URL` is configured; do not infer that it ran from the general CI success badge.
+- **Billing:** Paddle checkout, customer portal and webhook/lifecycle foundations exist; sandbox checkout, portal, signed webhook delivery, subscription reconciliation and entitlements acceptance remain pending.
+- **WhatsApp:** Meta inbound webhook/account/conversation, consent and outbound-queue policy foundations exist; the outbound dispatcher and live sending remain unaccepted and disabled.
+- **Email:** durable outbound queue and SMTP adapter foundations exist; staging SMTP inbox delivery and deliverability monitoring remain unverified.
+- **Current release gates:** live authenticated customer journey; database-backed lifecycle and tenant-isolation acceptance; SMTP staging delivery; Paddle sandbox lifecycle; Meta staging acceptance and outbound dispatcher; backup restore drill; accessibility/performance; and monitoring/incident readiness.
+
 
 > The older phase descriptions below are historical snapshots. Where they say billing or WhatsApp has not been implemented at all, use the dated status above: foundations have since been added, but external acceptance and release readiness remain pending.
 
