@@ -1,7 +1,7 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current repository HEAD checked:** `c8b00b4b9a017dbac85e4f3b3391907cf33dfa1b` (2026-11-24; documentation-only follow-up commits after application commit `dd9a499`)  
+**Current implementation source checked:** `6b751bc1afc783522f2ea0ce6773b9e521db5e50` on `main` (2026-11-24). The current editorial/WordPress source has not yet completed CI or deployment acceptance.  
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
@@ -37,6 +37,16 @@
 - Backend and frontend CI passed for the delivery-recovery dashboard commit `b47a229` (runs [40079787425](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079787425) and [40079787418](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079787418)).
 - Backend and frontend CI passed for the workspace-scoped webhook processor and admin dashboard trigger on commit `85f5790` (runs [40079930971](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079930971) and [40079930977](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/40079930977)).
 - Remaining gates: live Meta webhook/account acceptance, SMTP inbox delivery, Paddle sandbox/lifecycle acceptance, production DB migration verification, Hostinger upload, authenticated browser journey, and accessibility/performance/backup/incident checks. These must not be counted as completed merely because CI passes.
+
+## Implementation update — 2026-11-24 (editorial and WordPress source; acceptance pending)
+
+- Persistent workspace content briefs now link growth-report recommendations to an editable editorial brief and admin review.
+- Approved briefs can generate SEO article drafts through the configured Groq provider. The saved output includes article title, SEO meta title/description, outline, internal-link suggestions constrained to crawled same-site URLs, and editable Markdown body. Generation is not publication.
+- Article editing and a second editorial approval gate are implemented. Approved articles can be reopened for revision before publication.
+- WordPress connection records are workspace-scoped. Application Passwords are AES-GCM encrypted with workspace/connection AAD; plaintext credentials are never returned. HTTPS URL validation, public DNS checks, no-redirect/no-proxy HTTP requests, and WordPress authoring-capability checks are included.
+- Admins can send an approved article to WordPress as a draft, update an existing draft after revision, and separately publish it after explicit browser confirmation and server-side confirmation. CMS state is persisted; concurrent send/publish operations use atomic status transitions. Disconnect revokes the credential while retaining linked post records.
+- Added migrations 065, 066, and 067; registered API routes; added dashboard UI; updated backend readiness checks; and documented setup/limitations in backend/docs/WORDPRESS_CONTENT_WORKFLOW.md.
+- **Acceptance still pending:** no tests/build/CI have been run for this source batch; migrations have not been confirmed applied to a deployed database; no WordPress staging account has been connected or exercised; SEO-plugin-specific meta fields are not written automatically (the description is mapped to the WordPress excerpt); no Hostinger ZIP/upload or production deployment has occurred. Do not mark this work release-ready until these checks are completed.
 
 ## Evidence-based phase matrix
 
