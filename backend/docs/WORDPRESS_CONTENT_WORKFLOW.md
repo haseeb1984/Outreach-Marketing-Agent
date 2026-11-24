@@ -8,7 +8,7 @@ The WordPress connector supports project-scoped connections with an optional wor
 2. Grant that user permission to edit and publish posts. Publishing permission is required for connection verification because the product supports an explicit publish action.
 3. Open **Users → Profile → Application Passwords**, create an application password, and copy it once.
 4. In the Outreach Marketing Agent dashboard, open **Editorial content workflow → WordPress connection**.
-5. Choose **Workspace default site** or a specific client project in the scope selector. Enter the HTTPS site URL, WordPress username, and application password, then save and verify. Project-specific connections take priority for new article transfers; the workspace default is used when a project has no verified site connection.
+5. Choose **Workspace default site** or a specific client project in the scope selector. Enter the HTTPS site URL, WordPress username, and application password, then save and verify. Project-specific connections take priority for new article transfers; the workspace default is used only when no project-specific connection record exists. If a project-specific connection is present but not verified, transfers fail closed instead of silently using another site.
 6. The application password is encrypted at rest with the configured provider credential encryption key. It is never returned by the API.
 
 ## Article lifecycle
