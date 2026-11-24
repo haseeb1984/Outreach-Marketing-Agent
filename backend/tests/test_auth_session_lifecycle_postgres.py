@@ -61,9 +61,10 @@ async def _exercise_session_lifecycle() -> None:
         assert await store.authenticate_session(replacement["token"]) is not None
 
         # A user cannot revoke a session belonging to another account.
+        outsider_session_id = await _session_id_for_token(outsider["token"], pool)
         assert await store.revoke_session_by_id(
             user_id=owner_id,
-            session_id=await _session_id_for_token(outsider["token"], pool),
+            session_id=outsider_session_id,
         ) is False
         assert await store.authenticate_session(outsider["token"]) is not None
 
@@ -78,9 +79,10 @@ async def _exercise_session_lifecycle() -> None:
                 _digest(expire_target["token"]),
             )
         assert await store.authenticate_session(expire_target["token"]) is None
+        expired_session_id = await _session_id_for_token(expire_target["token"], pool)
         assert await store.revoke_session_by_id(
             user_id=owner_id,
-            session_id=await _session_id_for_token(expire_target["token"], pool),
+            session_id=expired_session_id,
         ) is False
 
         # Revoke one specific session, leaving the current replacement intact.
@@ -91,9 +93,10 @@ async def _exercise_session_lifecycle() -> None:
         assert await store.authenticate_session(replacement["token"]) is not None
 
         # Revoke all remaining sessions except the current one.
+        replacement_session_id = await _session_id_for_token(replacement["token"], pool)
         count = await store.revoke_other_sessions(
             user_id=owner_id,
-            current_session_id=await _session_id_for_token(replacement["token"], pool),
+            current_session_id=replacement_session_id,
         )
         assert count == 1  # rotate_target remains live; current replacement is preserved.
         assert await store.authenticate_session(rotate_target["token"]) is None
@@ -101,7 +104,7 @@ async def _exercise_session_lifecycle() -> None:
 
         listed = await store.list_sessions(
             user_id=owner_id,
-            current_session_id=await _session_id_for_token(replacement["token"], pool),
+            current_session_id=replacement_session_id,
         )
         assert len(listed) == 1
         assert listed[0]["is_current"] is True
