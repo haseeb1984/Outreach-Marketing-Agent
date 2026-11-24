@@ -63,7 +63,7 @@ async def _exercise_email_verification_http(monkeypatch):
                 headers={"Origin": "https://app.example.test"},
                 json={"token": created["verification_token"]},
             )
-            assert response.status_code == 200
+            assert response.status_code == 200, response.text
             assert response.json()["message"] == "Email verified. You can now sign in."
 
             replay = client.post(
@@ -141,7 +141,7 @@ async def _exercise_password_reset_http(monkeypatch):
                     "new_password": "reset-http-new-password-456",
                 },
             )
-            assert response.status_code == 200
+            assert response.status_code == 200, response.text
             assert response.json()["message"] == (
                 "Password updated. Sign in again with your new password."
             )
