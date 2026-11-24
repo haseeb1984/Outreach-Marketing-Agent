@@ -306,8 +306,8 @@ async def verify_connection(request: Request, workspace_id: str = Query(min_leng
             )
         if row is None:
             raise HTTPException(status_code=404, detail="wordpress_connection_not_found")
-        if row["status"] == "disabled" or row["encrypted_application_password"] is None:
-            raise HTTPException(status_code=409, detail="wordpress_connection_credentials_revoked")
+        if row["status"] != "pending" or row["encrypted_application_password"] is None:
+            raise HTTPException(status_code=409, detail="wordpress_connection_not_pending")
         connection_id = row["id"]
         password = _decrypt(row["encrypted_application_password"], workspace_id, connection_id)
         response = await _request(row["site_url"], row["username"], password, "GET", "users/me",
@@ -321,12 +321,15 @@ async def verify_connection(request: Request, workspace_id: str = Query(min_leng
         if capabilities.get("edit_posts") is not True or capabilities.get("publish_posts") is not True:
             raise HTTPException(status_code=422, detail="wordpress_user_lacks_post_capabilities")
         async with _pool(request).acquire() as conn:
-            await conn.execute(
+            activated = await conn.fetchval(
                 """UPDATE workspace_wordpress_connections SET status='verified',
                           verified_at=now(),updated_at=now()
-                   WHERE id=$1 AND workspace_id=$2 AND encrypted_application_password=$3""",
+                   WHERE id=$1 AND workspace_id=$2 AND status='pending'
+                     AND encrypted_application_password=$3 RETURNING id""",
                 connection_id,workspace_id,row["encrypted_application_password"],
             )
+        if activated is None:
+            raise HTTPException(status_code=409, detail="wordpress_connection_changed_during_verification")
         return {"verified": True, "username": str(data.get("slug") or row["username"]),
                 "status": "verified"}
     except HTTPException:
