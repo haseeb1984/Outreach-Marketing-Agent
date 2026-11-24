@@ -284,6 +284,10 @@ async def readiness() -> Response:
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_deliveries' AND column_name='scheduled_at')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_contact_controls' AND column_name='email_suppression_reason')
                      AND to_regclass('public.website_audit_reports') IS NOT NULL
+                     AND to_regclass('public.website_content_briefs') IS NOT NULL
+                     AND to_regclass('public.workspace_wordpress_connections') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='website_content_briefs' AND column_name='cms_status')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='website_content_briefs' AND column_name='article_status')
                      AND to_regclass('public.domain_verification_challenges') IS NOT NULL
                      AND to_regclass('public.workspace_jobs') IS NOT NULL
                      AND to_regclass('public.workspace_growth_schedules') IS NOT NULL
