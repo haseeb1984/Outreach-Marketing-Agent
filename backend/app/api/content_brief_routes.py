@@ -114,6 +114,12 @@ async def create_content_brief(payload: BriefCreate, request: Request):
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
+                project_row = await conn.fetchrow(
+                    "SELECT id FROM workspace_projects WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL",
+                    payload.project_id, payload.workspace_id,
+                )
+                if project_row is None:
+                    raise HTTPException(status_code=404, detail="project_not_found")
                 report_row = await conn.fetchrow(
                     """SELECT report FROM website_audit_reports
                        WHERE id=$1 AND workspace_id=$2""",
