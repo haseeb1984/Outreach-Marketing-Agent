@@ -309,6 +309,7 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
     await _authorize(request, workspace_id, "admin", session)
+    delivery_claimed = False
     try:
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
@@ -340,6 +341,7 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
             )
         if claimed is None:
             raise HTTPException(status_code=409, detail="wordpress_article_delivery_in_progress")
+        delivery_claimed = True
         stable_slug = "oma-content-" + brief_id.hex
         existing = await _request(row["site_url"],row["username"],password,"GET","posts",
                                   params={"slug":stable_slug,"status":"draft","context":"edit"})
@@ -383,9 +385,21 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
                    WHERE id=$1 AND workspace_id=$2 AND cms_status='sending'""",
                 brief_id,workspace_id,data["id"],post_url,
             )
+        delivery_claimed = False
         return {"sent_as_draft": True,"post_id":data["id"],"post_url":post_url,
                 "status":"draft_created","notice":"WordPress post saved as draft only; it is not public."}
     except HTTPException:
+        if delivery_claimed:
+            try:
+                async with _pool(request).acquire() as conn:
+                    await conn.execute(
+                        """UPDATE website_content_briefs SET cms_status='failed',
+                                  cms_last_error='wordpress_draft_delivery_failed',updated_at=now()
+                           WHERE id=$1 AND workspace_id=$2 AND cms_status='sending'""",
+                        brief_id,workspace_id,
+                    )
+            except Exception:
+                pass
         raise
     except Exception:
         try:
