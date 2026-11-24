@@ -10,15 +10,13 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
-import dns.asyncresolver
-import dns.exception
-import dns.resolver
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
+from app.services.website_fetch import _pinned_request_target, resolve_public_addresses
 
 router = APIRouter(prefix="/api/v1/integrations/wordpress", tags=["WordPress"])
 _LOCAL_SUFFIXES = (".localhost", ".local", ".internal", ".test")
@@ -161,38 +159,28 @@ def _html_from_markdown(markdown: str) -> str:
     return "\n".join(output)
 
 
-async def _ensure_public_dns(host: str) -> None:
-    try:
-        ip = ipaddress.ip_address(host)
-        if not ip.is_global:
-            raise HTTPException(status_code=422, detail="wordpress_site_must_be_public_https")
-        return
-    except ValueError:
-        pass
-    resolver = dns.asyncresolver.Resolver()
-    addresses: list[str] = []
-    for record_type in ("A", "AAAA"):
-        try:
-            answer = await resolver.resolve(host, record_type, lifetime=3.0)
-            addresses.extend(item.address for item in answer)
-        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-            continue
-        except dns.exception.DNSException:
-            raise HTTPException(status_code=502, detail="wordpress_site_dns_unavailable") from None
-    if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
-        raise HTTPException(status_code=422, detail="wordpress_site_must_resolve_to_public_addresses")
-
-
 async def _request(site_url: str, username: str, password: str, method: str, path: str, **kwargs):
-    host = urlsplit(site_url).hostname or ""
-    await _ensure_public_dns(host)
     url = site_url + "/wp-json/wp/v2/" + path.lstrip("/")
+    parsed = urlsplit(url)
+    host = parsed.hostname or ""
+    port = parsed.port or 443
+    try:
+        addresses = await resolve_public_addresses(host, port)
+    except ValueError as exc:
+        if "could not be resolved" in str(exc).lower():
+            raise HTTPException(status_code=502, detail="wordpress_site_dns_unavailable") from None
+        raise HTTPException(status_code=422, detail="wordpress_site_must_resolve_to_public_addresses") from None
+    # Connect to the exact public IP that was validated while retaining the original
+    # hostname for HTTP Host, TLS SNI, and certificate verification.
+    pinned_url, pinned_headers, extensions = _pinned_request_target(url, addresses[0])
     try:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0), follow_redirects=False,
             trust_env=False, auth=(username, password),
         ) as client:
-            response = await client.request(method, url, **kwargs)
+            response = await client.request(
+                method, pinned_url, headers=pinned_headers, extensions=extensions, **kwargs
+            )
         return response
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="wordpress_provider_unavailable") from None
