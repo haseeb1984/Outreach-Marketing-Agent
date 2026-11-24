@@ -36,7 +36,7 @@ def validate_scan_payload(payload: Any) -> dict[str, Any]:
         "start_url", "business_type", "target_market", "target_queries", "max_pages", "max_depth",
         # The enqueue API attaches trusted operational metadata alongside the scan input.
         # Validate its shape, then deliberately omit it from the runner input below.
-        "requested_by", "usage_reservation_id",
+        "requested_by", "usage_reservation_id", "competitor_sources",
     }
     if set(payload) - allowed:
         raise ValueError("payload_has_unsupported_fields")
@@ -70,6 +70,9 @@ def validate_scan_payload(payload: Any) -> dict[str, Any]:
         raise ValueError("invalid_target_queries")
     if any(not isinstance(q, str) or not q.strip() or len(q) > 200 for q in queries):
         raise ValueError("invalid_target_queries")
+    sources = payload.get("competitor_sources", [])
+    if not isinstance(sources, list) or len(sources) > 20 or any(not isinstance(x, str) or not x.strip() or len(x) > 500 for x in sources):
+        raise ValueError("invalid_competitor_sources")
     max_pages = payload.get("max_pages", MAX_PAGES)
     max_depth = payload.get("max_depth", MAX_DEPTH)
     if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= MAX_PAGES:
@@ -81,6 +84,7 @@ def validate_scan_payload(payload: Any) -> dict[str, Any]:
         "business_type": business_type.strip(),
         "target_market": target_market.strip(),
         "target_queries": [q.strip() for q in queries],
+        "competitor_sources": list(dict.fromkeys(x.strip() for x in sources)),
         "max_pages": max_pages,
         "max_depth": max_depth,
     }
@@ -175,6 +179,7 @@ async def process_claimed_job(
             business_type=payload["business_type"],
             target_market=payload["target_market"],
             target_queries=payload["target_queries"],
+            competitor_sources=payload["competitor_sources"],
             max_pages=payload["max_pages"],
             max_depth=payload["max_depth"],
         ))
