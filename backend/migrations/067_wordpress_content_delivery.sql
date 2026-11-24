@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS workspace_wordpress_connections (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     site_url TEXT NOT NULL,
     username TEXT NOT NULL,
-    encrypted_application_password BYTEA NOT NULL,
+    encrypted_application_password BYTEA,
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending','verified','disabled')),
     verified_at TIMESTAMPTZ,
