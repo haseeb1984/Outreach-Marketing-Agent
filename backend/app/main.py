@@ -141,6 +141,7 @@ from app.api.integration_routes import router as integration_router
 from app.api.research_routes import router as research_router
 from app.api.website_audit_routes import router as website_audit_router
 from app.api.content_brief_routes import router as content_brief_router
+from app.api.wordpress_routes import router as wordpress_router
 from app.api.domain_routes import router as domain_router
 from app.api.project_routes import router as project_router
 from app.api.workspace_job_routes import router as workspace_job_router
@@ -172,6 +173,7 @@ app.include_router(integration_router)
 app.include_router(research_router)
 app.include_router(website_audit_router)
 app.include_router(content_brief_router)
+app.include_router(wordpress_router)
 app.include_router(domain_router)
 app.include_router(project_router)
 app.include_router(workspace_job_router)
