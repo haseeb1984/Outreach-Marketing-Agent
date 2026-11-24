@@ -687,6 +687,26 @@ export default function DashboardPage() {
     } finally { setBusy(false); }
   }
 
+  async function downloadAccountExport() {
+    if (!csrf) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await api<Record<string, unknown>>("/api/v1/account/export", csrf);
+      const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "outreach-marketing-agent-account-export.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setNotice("Your account data export has been prepared and downloaded.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Account export could not be prepared.");
+    } finally { setBusy(false); }
+  }
+
   async function saveWorkspaceName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
@@ -2640,7 +2660,7 @@ export default function DashboardPage() {
           <form onSubmit={createWorkspace}><div className="field"><label htmlFor="new-workspace-name">Create another workspace</label><input id="new-workspace-name" required maxLength={160} value={newWorkspaceName} onChange={e=>setNewWorkspaceName(e.target.value)} placeholder="Client or business workspace name" /></div><button className="button secondary" type="submit" disabled={busy || !csrf}>Create workspace</button></form>
           {!workspaces.length && <p className="fine">No active workspace membership was returned for this account. Complete account/workspace onboarding before using campaign features.</p>}
           {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <form onSubmit={saveWorkspaceName}><div className="field"><label htmlFor="workspace-name">Workspace name</label><input id="workspace-name" required maxLength={160} value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} /></div><button className="button secondary" type="submit" disabled={busy || !workspaceId || !csrf}>Save workspace settings</button></form>}
-          <div className="actions"><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || refreshing || !workspaceId}>{refreshing ? "Refreshing workspace…" : "Refresh workspace"}</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
+          <div className="actions"><button className="button secondary" type="button" onClick={downloadAccountExport} disabled={busy || !csrf}>Download my account data</button><button className="button secondary" type="button" onClick={() => refresh()} disabled={busy || refreshing || !workspaceId}>{refreshing ? "Refreshing workspace…" : "Refresh workspace"}</button><label className="fine" htmlFor="period">Analytics period</label><select id="period" value={period} onChange={async e => { setPeriod(e.target.value); }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></div>
         </section>
         <section className="section" aria-labelledby="email-accounts-title"><h2 id="email-accounts-title">Connected email accounts</h2>
           <p className="fine">SMTP credentials are encrypted at rest. Only supported TLS submission hosts on port 587 are accepted. Connection tests authenticate only and do not send a message.</p>
