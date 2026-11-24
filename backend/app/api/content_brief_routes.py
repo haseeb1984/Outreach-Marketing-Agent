@@ -211,3 +211,74 @@ async def review_content_brief(brief_id: UUID, payload: BriefReview, request: Re
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="content_brief_review_unavailable") from None
+
+@router.post("/{brief_id}/generate-article")
+async def generate_content_brief_article(brief_id: UUID, request: Request):
+    """Generate an editable SEO draft only after the workspace has approved its brief."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    workspace_id = request.query_params.get("workspace_id", "").strip()
+    if not workspace_id or len(workspace_id) > 200:
+        raise HTTPException(status_code=422, detail="workspace_id_required")
+    await _authorize(request, workspace_id, "member", session)
+    try:
+        async with _pool(request).acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT b.id,b.workspace_id,b.project_id,b.report_id,b.brief,
+                          b.target_keyword,b.status,b.article_status,r.report,
+                          p.name AS project_name,p.website_url,p.business_model,
+                          p.target_market,p.brand_voice,p.audience,p.offer
+                   FROM website_content_briefs b
+                   JOIN website_audit_reports r
+                     ON r.id=b.report_id AND r.workspace_id=b.workspace_id
+                   JOIN workspace_projects p
+                     ON p.id=b.project_id AND p.workspace_id=b.workspace_id
+                   WHERE b.id=$1 AND b.workspace_id=$2""",
+                brief_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="content_brief_not_found")
+        if row["status"] != "approved":
+            raise HTTPException(status_code=409, detail="content_brief_approval_required")
+        if row["article_status"] == "draft" and row.get("article_body"):
+            raise HTTPException(status_code=409, detail="content_article_already_generated")
+        report = row["report"]
+        if isinstance(report, str):
+            report = json.loads(report)
+        project = {key: row[key] for key in (
+            "project_name", "website_url", "business_model", "target_market",
+            "brand_voice", "audience", "offer",
+        )}
+        from app.services.ai_content_generation import generate_seo_article, AIOutreachUnavailable
+        article = await generate_seo_article(
+            brief=row["brief"], target_keyword=row["target_keyword"],
+            project=project, report=report if isinstance(report, dict) else {},
+        )
+        async with _pool(request).acquire() as conn:
+            saved = await conn.fetchrow(
+                """UPDATE website_content_briefs
+                   SET article_title=$3,meta_title=$4,meta_description=$5,
+                       article_outline=$6::jsonb,internal_link_suggestions=$7::jsonb,
+                       article_body=$8,article_status='draft',
+                       article_generated_at=now(),updated_at=now()
+                   WHERE id=$1 AND workspace_id=$2 AND status='approved'
+                   RETURNING id,article_title,meta_title,meta_description,
+                             article_outline,internal_link_suggestions,article_body,
+                             article_status,article_generated_at""",
+                brief_id, workspace_id, article["article_title"], article["meta_title"],
+                article["meta_description"], json.dumps(article["outline"]),
+                json.dumps(article["internal_link_suggestions"]), article["article_body"],
+            )
+        if saved is None:
+            raise HTTPException(status_code=409, detail="content_brief_approval_changed")
+        result = dict(saved)
+        result["id"] = str(result["id"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        from app.services.ai_outreach import AIOutreachUnavailable
+        if isinstance(exc, AIOutreachUnavailable):
+            code = str(exc)[:100]
+            raise HTTPException(status_code=503, detail=code) from None
+        raise HTTPException(status_code=503, detail="content_article_generation_unavailable") from None
