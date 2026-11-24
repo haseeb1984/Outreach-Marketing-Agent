@@ -69,6 +69,8 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "invitations": [],
                     "email_accounts": [],
                     "website_audits": [],
+                    "content_briefs": [],
+                    "wordpress_connections": [],
                     "workspace_growth_schedules": [],
                     "workspace_jobs": [],
                     "followup_sequences": [],
@@ -93,7 +95,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                         "max_rows_per_collection": _MAX_EXPORT_ROWS,
                         "truncated_collections": [],
                         "not_included_collections": [],
-                        "note": "This export includes the listed account, CRM, campaign, delivery, billing, website-growth, follow-up, email-provider and WhatsApp workspace records, subject to the per-collection and workspace limits. Passwords, sessions, provider credentials, worker lease internals and raw payment details are excluded; this is not a complete system backup.",
+                        "note": "This export includes the listed account, CRM, campaign, delivery, billing, website-growth, editorial content, WordPress connection metadata, follow-up, email-provider and WhatsApp workspace records, subject to the per-collection and workspace limits. Passwords, sessions, provider credentials, worker lease internals and raw payment details are excluded; this is not a complete system backup.",
                     },
                 }
                 if export_memberships_truncated:
@@ -119,7 +121,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                             language,audience,offer,conversion_goal,brand_voice,competitors,status,created_at,updated_at
                             FROM workspace_projects WHERE workspace_id=ANY($1::text[])
                             ORDER BY created_at,id LIMIT $2""",
-                        "prospects": """SELECT id,workspace_id,name,company,role,contact_email,website_url,
+                        "content_briefs": """SELECT id,workspace_id,project_id,report_id,action_id,title,brief,target_keyword,\n                            evidence_url,status,review_note,created_by,reviewed_by,created_at,updated_at,reviewed_at,\n                            article_title,meta_title,meta_description,article_outline,internal_link_suggestions,\n                            article_body,article_status,article_generated_at,article_review_note,article_reviewed_by,\n                            article_reviewed_at,cms_connection_id,cms_post_id,cms_post_url,cms_status,cms_last_error,cms_synced_at\n                            FROM website_content_briefs WHERE workspace_id=ANY($1::text[])\n                            ORDER BY created_at,id LIMIT $2""",\n                        "prospects": """SELECT id,workspace_id,name,company,role,contact_email,website_url,
                             evidence_url,evidence_observed_at,fit_reason,verified_facts,stage,notes,created_at,updated_at,archived_at
                             FROM crm_prospects WHERE workspace_id=ANY($1::text[])
                             ORDER BY created_at,id LIMIT $2""",
@@ -214,6 +216,18 @@ async def export_account_data(request: Request) -> JSONResponse:
                         if truncated:
                             export["limits"]["truncated_collections"].append(collection)
                         export[collection] = [dict(row) for row in rows]
+                    wordpress_connection_rows = await conn.fetch(
+                        """SELECT id,workspace_id,site_url,username,status,verified_at,created_at,updated_at
+                           FROM workspace_wordpress_connections WHERE workspace_id=ANY($1::text[])
+                           ORDER BY created_at,id LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
+                    )
+                    wordpress_connection_rows, truncated = _bounded_export_rows(
+                        wordpress_connection_rows, limit=_MAX_EXPORT_ROWS
+                    )
+                    if truncated:
+                        export["limits"]["truncated_collections"].append("wordpress_connections")
+                    export["wordpress_connections"] = [dict(row) for row in wordpress_connection_rows]
                     email_event_rows = await conn.fetch(
                         """SELECT e.id,e.provider,e.provider_event_id,e.delivery_id,e.event_type,e.occurred_at,e.received_at
                            FROM email_provider_events e JOIN outreach_deliveries d ON d.id=e.delivery_id
