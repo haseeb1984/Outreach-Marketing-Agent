@@ -422,6 +422,7 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
     await _authorize(request, payload.workspace_id, "admin", session)
     if payload.confirm_publish is not True:
         raise HTTPException(status_code=422, detail="explicit_publish_confirmation_required")
+    publish_claimed = False
     try:
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
@@ -449,6 +450,7 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
             )
         if claimed is None:
             raise HTTPException(status_code=409, detail="wordpress_publish_in_progress")
+        publish_claimed = True
         response = await _request(row["site_url"],row["username"],password,"POST",
                                   "posts/" + str(row["cms_post_id"]),json={"status":"publish"})
         if response.status_code not in (200,201):
@@ -475,8 +477,19 @@ async def publish_wordpress_article(brief_id: UUID, payload: WordPressPublish, r
                    WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
                 brief_id,payload.workspace_id,data.get("link"),
             )
+        publish_claimed = False
         return {"published":True,"post_url":data.get("link"),"status":"published"}
     except HTTPException:
+        if publish_claimed:
+            try:
+                async with _pool(request).acquire() as conn:
+                    await conn.execute(
+                        """UPDATE website_content_briefs SET cms_status='draft_created',updated_at=now()
+                           WHERE id=$1 AND workspace_id=$2 AND cms_status='publishing'""",
+                        brief_id,payload.workspace_id,
+                    )
+            except Exception:
+                pass
         raise
     except Exception:
         try:
