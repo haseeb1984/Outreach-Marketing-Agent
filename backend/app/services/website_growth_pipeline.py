@@ -1,12 +1,17 @@
-"""End-to-end read-only website discovery and growth-report composition.
+"""End-to-end read-only website discovery and evidence-led growth reporting.
 
-This orchestration does not expose a public endpoint, mutate client websites,
-send outreach, or guarantee search-ranking outcomes.
+This orchestration authorizes the customer's domain, crawls its public pages,
+discovers public competitor candidates, compares bounded page evidence, and
+composes a reviewable SEO plan. It never changes the customer's website or
+sends outreach.
 """
 from __future__ import annotations
 
 from typing import Any
 
+from app.core.config import settings
+from app.services.competitor_page_analysis import analyze_competitor_pages
+from app.services.competitor_research import discover_competitor_candidates
 from app.services.website_discovery import discover_and_crawl
 from app.services.website_growth_report import build_website_growth_report
 from app.services.website_fetch import FetchLimits, Resolver
@@ -68,12 +73,67 @@ async def discover_and_build_growth_report(
             ],
         }
 
+    crawl_report = discovery["crawl"]
+    competitor_discovery: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "target_queries_not_configured",
+        "items": [],
+        "count": 0,
+    }
+    competitor_analysis: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "target_queries_not_configured",
+        "items": [],
+        "potential_gaps": [],
+        "pages_checked": 0,
+        "pages_analyzed": 0,
+    }
+    effective_gaps = list(competitor_gaps or [])
+
+    # Competitor intelligence is part of the actual growth workflow, not a
+    # separate dormant service. Search candidates remain explicitly unconfirmed;
+    # comparison is limited to three public pages and the pages crawled above.
+    queries = list(dict.fromkeys(
+        query.strip() for query in target_queries
+        if isinstance(query, str) and query.strip()
+    ))[:3]
+    if queries:
+        competitor_discovery = await discover_competitor_candidates(
+            website_url=start_url,
+            target_queries=queries,
+            api_key=settings.brave_search_api_key,
+            max_candidates=12,
+        )
+        candidates = competitor_discovery.get("items", [])
+        if competitor_discovery.get("status") == "completed" and candidates:
+            competitor_analysis = await analyze_competitor_pages(
+                candidates=candidates,
+                target_queries=queries,
+                client_pages=crawl_report.get("pages", []),
+                resolver=resolver,
+                max_candidates=3,
+            )
+            effective_gaps.extend(
+                item for item in competitor_analysis.get("potential_gaps", [])
+                if isinstance(item, dict)
+            )
+        elif competitor_discovery.get("status") != "completed":
+            competitor_analysis = {
+                "status": "unavailable",
+                "reason": competitor_discovery.get("reason", "competitor_discovery_unavailable"),
+                "items": [],
+                "potential_gaps": [],
+                "pages_checked": 0,
+                "pages_analyzed": 0,
+                "notice": "Competitor page comparison was skipped because candidate discovery was unavailable.",
+            }
+
     report = build_website_growth_report(
-        crawl_report=discovery["crawl"],
+        crawl_report=crawl_report,
         business_type=business_type,
         target_market=target_market,
-        target_queries=target_queries,
-        competitor_gaps=competitor_gaps,
+        target_queries=queries,
+        competitor_gaps=effective_gaps,
     )
     report["status"] = "report_ready_for_human_review"
     report["domain_authorization"] = {
@@ -86,8 +146,12 @@ async def discover_and_build_growth_report(
         "sitemap_documents": discovery.get("sitemap_documents", []),
         "sitemap_seed_urls_discovered": discovery.get("sitemap_seed_urls_discovered", 0),
     }
+    report["competitor_discovery"] = competitor_discovery
+    report["competitor_analysis"] = competitor_analysis
     report["limitations"] = list(dict.fromkeys([
         *report.get("limitations", []),
         *discovery.get("limitations", []),
+        "Competitor candidates are search-derived leads, not confirmed competitors.",
+        "Competitor comparisons cover at most three public pages and the bounded client crawl; gaps require human review.",
     ]))
     return report
