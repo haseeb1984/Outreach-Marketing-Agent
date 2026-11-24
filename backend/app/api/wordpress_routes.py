@@ -201,6 +201,7 @@ async def _request(site_url: str, username: str, password: str, method: str, pat
 class WordPressConnect(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workspace_id: str = Field(min_length=1, max_length=200)
+    project_id: UUID | None = None
     site_url: str = Field(min_length=10, max_length=2048)
     username: str = Field(min_length=1, max_length=200)
     application_password: str = Field(min_length=8, max_length=512)
@@ -234,14 +235,22 @@ class WordPressPublish(BaseModel):
 
 
 @router.get("/connection")
-async def get_connection(request: Request, workspace_id: str = Query(min_length=1, max_length=200)):
+async def get_connection(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
+                        project_id: UUID | None = Query(default=None)):
     _, _, session = await _authenticated(request)
     await _authorize(request, workspace_id, "viewer", session)
     try:
         async with _pool(request).acquire() as conn:
+            if project_id is not None:
+                project_exists = await conn.fetchval(
+                    "SELECT EXISTS(SELECT 1 FROM workspace_projects WHERE id=$1 AND workspace_id=$2)", project_id, workspace_id
+                )
+                if not project_exists:
+                    raise HTTPException(status_code=404, detail="project_not_found")
             row = await conn.fetchrow(
-                """SELECT id,site_url,username,status,verified_at,created_at,updated_at
-                   FROM workspace_wordpress_connections WHERE workspace_id=$1""", workspace_id
+                """SELECT id,project_id,site_url,username,status,verified_at,created_at,updated_at
+                   FROM workspace_wordpress_connections
+                   WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2""", workspace_id, project_id
             )
         if row is None:
             return {"connected": False}
@@ -264,9 +273,17 @@ async def save_connection(payload: WordPressConnect, request: Request):
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
+                if payload.project_id is not None:
+                    project_exists = await conn.fetchval(
+                        "SELECT EXISTS(SELECT 1 FROM workspace_projects WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL)",
+                        payload.project_id, payload.workspace_id,
+                    )
+                    if not project_exists:
+                        raise HTTPException(status_code=404, detail="project_not_found")
                 existing = await conn.fetchrow(
-                    "SELECT id,site_url FROM workspace_wordpress_connections WHERE workspace_id=$1 FOR UPDATE",
-                    payload.workspace_id,
+                    """SELECT id,site_url FROM workspace_wordpress_connections
+                       WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2 FOR UPDATE""",
+                    payload.workspace_id, payload.project_id,
                 )
                 if existing:
                     connection_id = existing["id"]
@@ -290,9 +307,9 @@ async def save_connection(payload: WordPressConnect, request: Request):
                 else:
                     await conn.execute(
                         """INSERT INTO workspace_wordpress_connections
-                           (id,workspace_id,site_url,username,encrypted_application_password,created_by)
-                           VALUES ($1,$2,$3,$4,$5,$6)""",
-                        connection_id,payload.workspace_id,payload.site_url,payload.username,
+                           (id,workspace_id,project_id,site_url,username,encrypted_application_password,created_by)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+                        connection_id,payload.workspace_id,payload.project_id,payload.site_url,payload.username,
                         encrypted,UUID(str(session["user_id"])),
                     )
         return {"saved": True, "connection_id": str(connection_id),
@@ -304,15 +321,23 @@ async def save_connection(payload: WordPressConnect, request: Request):
 
 
 @router.post("/connection/verify")
-async def verify_connection(request: Request, workspace_id: str = Query(min_length=1, max_length=200)):
+async def verify_connection(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
+                            project_id: UUID | None = Query(default=None)):
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
     await _authorize(request, workspace_id, "admin", session)
     try:
         async with _pool(request).acquire() as conn:
+            if project_id is not None:
+                project_exists = await conn.fetchval(
+                    "SELECT EXISTS(SELECT 1 FROM workspace_projects WHERE id=$1 AND workspace_id=$2)", project_id, workspace_id
+                )
+                if not project_exists:
+                    raise HTTPException(status_code=404, detail="project_not_found")
             row = await conn.fetchrow(
                 """SELECT id,site_url,username,encrypted_application_password,status
-                   FROM workspace_wordpress_connections WHERE workspace_id=$1""", workspace_id
+                   FROM workspace_wordpress_connections
+                   WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2""", workspace_id, project_id
             )
         if row is None:
             raise HTTPException(status_code=404, detail="wordpress_connection_not_found")
@@ -349,7 +374,8 @@ async def verify_connection(request: Request, workspace_id: str = Query(min_leng
 
 
 @router.delete("/connection")
-async def disconnect(request: Request, workspace_id: str = Query(min_length=1, max_length=200)):
+async def disconnect(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
+                     project_id: UUID | None = Query(default=None)):
     _, _, session = await _authenticated(request)
     _check_csrf(request, session)
     await _authorize(request, workspace_id, "admin", session)
@@ -359,9 +385,9 @@ async def disconnect(request: Request, workspace_id: str = Query(min_length=1, m
                 """UPDATE workspace_wordpress_connections
                    SET status='disabled',encrypted_application_password=NULL,
                        verified_at=NULL,updated_at=now()
-                   WHERE workspace_id=$1 AND status <> 'disabled'
+                   WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND status <> 'disabled'
                    RETURNING id""",
-                workspace_id,
+                workspace_id, project_id,
             )
         return {"disconnected": row is not None, "credentials_revoked": row is not None}
     except Exception:
@@ -381,8 +407,19 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
                           b.article_status,b.cms_status,b.cms_post_id,c.id AS connection_id,
                           c.site_url,c.username,c.encrypted_application_password
                    FROM website_content_briefs b
-                   JOIN workspace_wordpress_connections c
-                     ON c.workspace_id=b.workspace_id AND c.status='verified'
+                   JOIN LATERAL (
+                       SELECT candidate.* FROM workspace_wordpress_connections candidate
+                       WHERE candidate.workspace_id=b.workspace_id AND candidate.status='verified'
+                         AND (
+                           (b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id)
+                           OR
+                           (b.cms_connection_id IS NULL AND
+                             (candidate.project_id=b.project_id OR candidate.project_id IS NULL))
+                         )
+                       ORDER BY CASE WHEN candidate.id=b.cms_connection_id THEN 0
+                                     WHEN candidate.project_id=b.project_id THEN 1 ELSE 2 END
+                       LIMIT 1
+                   ) c ON TRUE
                    WHERE b.id=$1 AND b.workspace_id=$2""", brief_id, workspace_id
             )
         if row is None:
