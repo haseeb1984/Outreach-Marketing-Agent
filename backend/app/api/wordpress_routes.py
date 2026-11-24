@@ -304,7 +304,7 @@ async def save_connection(payload: WordPressConnect, request: Request):
                         linked_posts = await conn.fetchval(
                             """SELECT EXISTS(
                                  SELECT 1 FROM website_content_briefs
-                                 WHERE workspace_id=$1 AND cms_connection_id=$2 AND cms_post_id IS NOT NULL
+                                 WHERE workspace_id=$1 AND cms_connection_id=$2
                                )""",
                             payload.workspace_id, connection_id,
                         )
