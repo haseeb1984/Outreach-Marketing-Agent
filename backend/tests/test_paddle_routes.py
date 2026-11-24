@@ -913,3 +913,30 @@ def test_customer_portal_endpoint_rejects_untrusted_provider_redirect(monkeypatc
 
     assert response.status_code == 502
     assert response.json()["detail"] == "paddle_portal_url_unavailable"
+
+
+def test_paddle_signature_rejects_duplicate_timestamp_fields():
+    body = b'{"event_type":"subscription.updated"}'
+    signature = _signed(body, "test-webhook-secret")
+    timestamp, digest = signature.split(";")
+    assert not _verify_signature(
+        body, f"{timestamp};{timestamp};{digest}", "test-webhook-secret"
+    )
+
+
+def test_paddle_signature_rejects_future_timestamp_outside_tolerance():
+    body = b'{"event_type":"subscription.updated"}'
+    future_timestamp = int(time.time()) + 301
+    assert not _verify_signature(
+        body, _signed(body, "test-webhook-secret", future_timestamp), "test-webhook-secret"
+    )
+
+
+def test_paddle_signature_accepts_any_valid_h1_during_secret_rotation():
+    body = b'{"event_type":"subscription.updated"}'
+    current = _signed(body, "test-webhook-secret").split(";")[1]
+    stale = _signed(body, "previous-secret").split(";")[1]
+    timestamp = _signed(body, "test-webhook-secret").split(";")[0]
+    assert _verify_signature(
+        body, f"{timestamp};{stale};{current}", "test-webhook-secret"
+    )
