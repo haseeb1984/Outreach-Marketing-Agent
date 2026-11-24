@@ -352,9 +352,8 @@ async def update_content_article(brief_id: UUID, payload: ArticleUpdate, request
                    SET article_title=$3,meta_title=$4,meta_description=$5,
                        article_body=$6,article_status=$7,updated_at=now()
                    WHERE id=$1 AND workspace_id=$2
-                     AND status='approved' AND cms_status <> 'published'
-                     AND (article_status IN ('draft','rejected')
-                          OR (article_status='approved' AND cms_status='draft_created'))
+                     AND status='approved' AND cms_status NOT IN ('published','sending','publishing')
+                     AND article_status IN ('draft','rejected','approved')
                    RETURNING id,article_title,meta_title,meta_description,
                              article_body,article_status""",
                 brief_id,payload.workspace_id,payload.article_title,payload.meta_title,
