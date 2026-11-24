@@ -30,5 +30,5 @@ The integration uses a stable post slug derived from the content brief ID so a r
 - Application passwords are encrypted using AES-GCM with workspace and connection identifiers as authenticated additional data.
 - Article Markdown is converted using an escaped, limited HTML subset. Raw HTML from article text is not passed through.
 - The article's meta description is sent as the WordPress excerpt. SEO-plugin-specific metadata (Yoast, Rank Math, or other plugin fields) is not automatically written; plugin-specific integration remains separate work.
-- Disconnecting removes the saved encrypted credential and does not delete posts already created on WordPress.
+- Disconnecting revokes the saved encrypted credential and does not delete posts already created on WordPress. Changing the connected site URL is blocked once this workspace has linked WordPress post IDs, preventing an old post ID from being accidentally updated or published on a different site. Use a separate workspace for a different WordPress site.
 - WordPress provider actions are external side effects. A timeout can occur after WordPress has accepted a request; stable draft slugs allow the next draft attempt to find the existing draft.
