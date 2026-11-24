@@ -573,6 +573,7 @@ export default function DashboardPage() {
     setUnifiedReplyThreads([]); setSelectedReplyProspectId(""); setUnifiedReplyMessages([]); setUnifiedReplyBusy(false);
     setReplyDraftBody(""); setReplyDraftSubject(""); resetWhatsAppInboxOperations();
     setProspectName(""); setProspectCompany(""); setProspectEmail(""); setProspectPhone(""); setProspectWebsite(""); setEvidenceUrl(""); setFitReason("");
+    setWordPressProjectId(""); setWordPressConnection(null); setWordPressEditing(false);
     setError(""); setNotice(""); setBusy(false); setIntegrationBusy(false); setRefreshing(false);
   }
 
