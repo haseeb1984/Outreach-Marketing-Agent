@@ -80,7 +80,7 @@ async def _exercise_registration_verification_and_session() -> None:
         session = await store.create_session(user_id=user_id, lifetime_hours=1)
         authenticated = await store.authenticate_session(session["token"])
         assert authenticated is not None
-        assert authenticated["user_id"] == user_id
+        assert str(authenticated["user_id"]) == user_id
 
         # A fresh verification token cannot be issued for an already active account.
         assert await store.issue_verification_email(email=email) is None
