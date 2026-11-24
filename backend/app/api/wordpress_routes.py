@@ -341,10 +341,14 @@ async def disconnect(request: Request, workspace_id: str = Query(min_length=1, m
     try:
         async with _pool(request).acquire() as conn:
             row = await conn.fetchrow(
-                """DELETE FROM workspace_wordpress_connections WHERE workspace_id=$1 RETURNING id""",
+                """UPDATE workspace_wordpress_connections
+                   SET status='disabled',encrypted_application_password=NULL,
+                       verified_at=NULL,updated_at=now()
+                   WHERE workspace_id=$1 AND status <> 'disabled'
+                   RETURNING id""",
                 workspace_id,
             )
-        return {"disconnected": row is not None}
+        return {"disconnected": row is not None, "credentials_revoked": row is not None}
     except Exception:
         raise HTTPException(status_code=503, detail="wordpress_disconnect_unavailable") from None
 
