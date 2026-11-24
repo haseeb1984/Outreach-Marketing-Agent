@@ -53,6 +53,28 @@ async def _exercise_email_verification_http(monkeypatch):
             "app.api.auth_routes.settings.frontend_origins",
             "https://app.example.test",
         )
+        store_errors = []
+        original_verify_email = store.verify_email
+
+        async def capture_verify_email(token):
+            try:
+                return await original_verify_email(token)
+            except Exception as exc:
+                store_errors.append(repr(exc))
+                raise
+
+        monkeypatch.setattr(store, "verify_email", capture_verify_email)
+        store_errors = []
+        original_reset_password = store.reset_password
+
+        async def capture_reset_password(*, token, new_password):
+            try:
+                return await original_reset_password(token=token, new_password=new_password)
+            except Exception as exc:
+                store_errors.append(repr(exc))
+                raise
+
+        monkeypatch.setattr(store, "reset_password", capture_reset_password)
         with TestClient(app, base_url="https://app.example.test") as client:
             # The application lifespan initializes/reset state on entry, so inject
             # the disposable PostgreSQL-backed services after startup.
@@ -63,7 +85,7 @@ async def _exercise_email_verification_http(monkeypatch):
                 headers={"Origin": "https://app.example.test"},
                 json={"token": created["verification_token"]},
             )
-            assert response.status_code == 200, response.text
+            assert response.status_code == 200, f"{response.text}; store_errors={store_errors!r}"
             assert response.json()["message"] == "Email verified. You can now sign in."
 
             replay = client.post(
@@ -141,7 +163,7 @@ async def _exercise_password_reset_http(monkeypatch):
                     "new_password": "reset-http-new-password-456",
                 },
             )
-            assert response.status_code == 200, response.text
+            assert response.status_code == 200, f"{response.text}; store_errors={store_errors!r}"
             assert response.json()["message"] == (
                 "Password updated. Sign in again with your new password."
             )
