@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
+import dns.asyncresolver
+import dns.resolver
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -143,7 +145,31 @@ def _html_from_markdown(markdown: str) -> str:
     return "\n".join(output)
 
 
+async def _ensure_public_dns(host: str) -> None:
+    try:
+        ip = ipaddress.ip_address(host)
+        if not ip.is_global:
+            raise HTTPException(status_code=422, detail="wordpress_site_must_be_public_https")
+        return
+    except ValueError:
+        pass
+    resolver = dns.asyncresolver.Resolver()
+    addresses: list[str] = []
+    for record_type in ("A", "AAAA"):
+        try:
+            answer = await resolver.resolve(host, record_type, lifetime=3.0)
+            addresses.extend(item.address for item in answer)
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            continue
+        except dns.exception.DNSException:
+            raise HTTPException(status_code=502, detail="wordpress_site_dns_unavailable") from None
+    if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
+        raise HTTPException(status_code=422, detail="wordpress_site_must_resolve_to_public_addresses")
+
+
 async def _request(site_url: str, username: str, password: str, method: str, path: str, **kwargs):
+    host = urlsplit(site_url).hostname or ""
+    await _ensure_public_dns(host)
     url = site_url + "/wp-json/wp/v2/" + path.lstrip("/")
     try:
         async with httpx.AsyncClient(
@@ -273,6 +299,9 @@ async def verify_connection(request: Request, workspace_id: str = Query(min_leng
         data = response.json()
         if not isinstance(data, dict) or not isinstance(data.get("id"), int):
             raise HTTPException(status_code=502, detail="wordpress_identity_response_invalid")
+        capabilities = data.get("capabilities") if isinstance(data.get("capabilities"), dict) else {}
+        if capabilities.get("edit_posts") is not True or capabilities.get("publish_posts") is not True:
+            raise HTTPException(status_code=422, detail="wordpress_user_lacks_post_capabilities")
         async with _pool(request).acquire() as conn:
             await conn.execute(
                 """UPDATE workspace_wordpress_connections SET status='verified',
