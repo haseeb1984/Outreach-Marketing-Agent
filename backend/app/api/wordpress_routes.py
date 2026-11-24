@@ -281,6 +281,11 @@ async def save_connection(payload: WordPressConnect, request: Request):
     try:
         async with _pool(request).acquire() as conn:
             async with conn.transaction():
+                scope_lock = payload.workspace_id + ":" + (str(payload.project_id) if payload.project_id else "workspace-default")
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    scope_lock,
+                )
                 if payload.project_id is not None:
                     project_exists = await conn.fetchval(
                         "SELECT EXISTS(SELECT 1 FROM workspace_projects WHERE id=$1 AND workspace_id=$2 AND archived_at IS NULL)",
