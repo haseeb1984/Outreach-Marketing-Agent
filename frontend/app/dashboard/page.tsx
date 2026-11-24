@@ -1776,9 +1776,13 @@ export default function DashboardPage() {
     if (!workspaceId || !csrf || !window.confirm("Disconnect WordPress and permanently remove the saved application password?")) return;
     setWordPressBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/integrations/wordpress/connection?workspace_id="+encodeURIComponent(workspaceId)+(wordpressProjectId ? "&project_id="+encodeURIComponent(wordpressProjectId) : ""),csrf,{method:"DELETE"});
+      const result = await api<{disconnected:boolean;fallback_restored?:boolean;pinned_articles?:boolean}>("/api/v1/integrations/wordpress/connection?workspace_id="+encodeURIComponent(workspaceId)+(wordpressProjectId ? "&project_id="+encodeURIComponent(wordpressProjectId) : ""),csrf,{method:"DELETE"});
       setWordPressConnection({connected:false});
-      setNotice("WordPress connection removed. Existing WordPress posts are unchanged.");
+      setNotice(result.pinned_articles
+        ? "WordPress credentials revoked. Existing articles remain pinned to this project site; reconnect it before transferring more articles."
+        : result.fallback_restored
+          ? "Project-specific WordPress override removed. New articles can use the workspace default site where configured."
+          : "WordPress connection removed. Existing WordPress posts are unchanged.");
     } catch (err) { setError(err instanceof Error ? err.message : "WordPress disconnect failed."); }
     finally { setWordPressBusy(false); }
   }
