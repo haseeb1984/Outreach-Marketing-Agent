@@ -13,6 +13,7 @@ import pytest
 from app.api import account_routes
 from app.db.migrations import apply_migrations
 from app.main import app
+from app.services.auth_store import AuthStore
 
 
 @pytest.mark.skipif(
@@ -65,12 +66,8 @@ async def _exercise_account_deletion(monkeypatch) -> None:
                           ($4,$2,'owner','active')""",
                 shared_workspace, user_id, other_user_id, sole_workspace,
             )
-            await connection.execute(
-                """INSERT INTO auth_sessions
-                   (user_id,token_sha256,csrf_token_sha256,expires_at)
-                   VALUES ($1,$2,$3,now()+interval '1 day')""",
-                user_id, "d" * 64, "c" * 64,
-            )
+        auth_store = AuthStore(pool)
+        live_session = await auth_store.create_session(user_id=user_id, lifetime_hours=1)
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -114,6 +111,7 @@ async def _exercise_account_deletion(monkeypatch) -> None:
                 user_id,
             )
             assert revoked_sessions == 1
+            assert await auth_store.authenticate_session(live_session["token"]) is None
 
             shared_owner = await connection.fetchval(
                 """SELECT user_id FROM workspace_memberships
