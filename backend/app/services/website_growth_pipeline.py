@@ -8,6 +8,7 @@ sends outreach.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlunsplit
 
 from app.core.config import settings
 from app.services.competitor_page_analysis import analyze_competitor_pages
@@ -120,13 +121,13 @@ async def discover_and_build_growth_report(
                 if host != own_host and not host.endswith("." + own_host):
                     candidates.insert(0, {
                         "domain": host, "title": "Customer-supplied competitor source",
-                        "url": source, "description": "", "matched_queries": [],
+                        "url": urlunsplit(("https", parsed.netloc, parsed.path or "/", "", "")), "description": "", "matched_queries": [],
                         "relevance_score": 100.0, "evidence_type": "customer_supplied_source",
                         "competitor_status": "candidate_requires_human_review",
                         "requires_human_review": True,
                     })
 
-        if competitor_discovery.get("status") == "completed" and candidates:
+        if candidates:
             competitor_analysis = await analyze_competitor_pages(
                 candidates=candidates,
                 target_queries=queries,
