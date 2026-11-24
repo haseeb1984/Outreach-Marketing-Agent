@@ -394,15 +394,34 @@ async def disconnect(request: Request, workspace_id: str = Query(min_length=1, m
     await _authorize(request, workspace_id, "admin", session)
     try:
         async with _pool(request).acquire() as conn:
-            row = await conn.fetchrow(
-                """UPDATE workspace_wordpress_connections
-                   SET status='disabled',encrypted_application_password=NULL,
-                       verified_at=NULL,updated_at=now()
-                   WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND status <> 'disabled'
-                   RETURNING id""",
-                workspace_id, project_id,
-            )
-        return {"disconnected": row is not None, "credentials_revoked": row is not None}
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """SELECT id FROM workspace_wordpress_connections
+                       WHERE workspace_id=$1 AND project_id IS NOT DISTINCT FROM $2 FOR UPDATE""",
+                    workspace_id, project_id,
+                )
+                if row is None:
+                    return {"disconnected": False, "credentials_revoked": False,
+                            "fallback_restored": False, "pinned_articles": False}
+                pinned = await conn.fetchval(
+                    """SELECT EXISTS(SELECT 1 FROM website_content_briefs
+                       WHERE workspace_id=$1 AND cms_connection_id=$2)""",
+                    workspace_id, row["id"],
+                )
+                if pinned:
+                    await conn.execute(
+                        """UPDATE workspace_wordpress_connections
+                           SET status='disabled',encrypted_application_password=NULL,
+                               verified_at=NULL,updated_at=now() WHERE id=$1""",
+                        row["id"],
+                    )
+                else:
+                    await conn.execute(
+                        "DELETE FROM workspace_wordpress_connections WHERE id=$1", row["id"]
+                    )
+        return {"disconnected": True, "credentials_revoked": True,
+                "fallback_restored": bool(project_id is not None and not pinned),
+                "pinned_articles": bool(pinned)}
     except Exception:
         raise HTTPException(status_code=503, detail="wordpress_disconnect_unavailable") from None
 
