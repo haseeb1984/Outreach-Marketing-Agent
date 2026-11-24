@@ -409,17 +409,17 @@ async def send_article_as_draft(brief_id: UUID, request: Request, workspace_id: 
                    FROM website_content_briefs b
                    JOIN LATERAL (
                        SELECT candidate.* FROM workspace_wordpress_connections candidate
-                       WHERE candidate.workspace_id=b.workspace_id AND candidate.status='verified'
+                       WHERE candidate.workspace_id=b.workspace_id
                          AND (
                            (b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id)
                            OR
                            (b.cms_connection_id IS NULL AND
                              (candidate.project_id=b.project_id OR candidate.project_id IS NULL))
                          )
-                       ORDER BY CASE WHEN candidate.id=b.cms_connection_id THEN 0
+                       ORDER BY CASE WHEN b.cms_connection_id IS NOT NULL AND candidate.id=b.cms_connection_id THEN 0
                                      WHEN candidate.project_id=b.project_id THEN 1 ELSE 2 END
                        LIMIT 1
-                   ) c ON TRUE
+                   ) c ON c.status='verified'
                    WHERE b.id=$1 AND b.workspace_id=$2""", brief_id, workspace_id
             )
         if row is None:
