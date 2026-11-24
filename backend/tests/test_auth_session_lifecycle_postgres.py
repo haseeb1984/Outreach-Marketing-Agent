@@ -71,7 +71,7 @@ async def _exercise_session_lifecycle() -> None:
         async with pool.acquire() as connection:
             await connection.execute(
                 """UPDATE auth_sessions SET expires_at=now()-interval '1 minute'
-                   WHERE token_sha256=decode($1,'hex')""",
+                   WHERE token_sha256=$1""",
                 _digest(expire_target["token"]),
             )
         assert await store.authenticate_session(expire_target["token"]) is None
@@ -137,7 +137,7 @@ async def _session_id_for_token(token: str, pool: asyncpg.Pool):
     async with pool.acquire() as connection:
         value = await connection.fetchval(
             "SELECT id FROM auth_sessions WHERE token_sha256=$1",
-            bytes.fromhex(token_digest(token)),
+            token_digest(token),
         )
     assert value is not None
     return value
