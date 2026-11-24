@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const publicRoutes = [
-  ["/", "Your smart outreach partner"],
+  ["/", "Make every business conversation count."],
   ["/features", "Platform capabilities"],
   ["/faq", "Frequently asked questions"],
   ["/login", "Sign in to your workspace"],
@@ -75,7 +75,7 @@ test.describe("public website browser acceptance", () => {
   test("homepage remains usable at mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
-    await expect(page.locator("body")).toContainText("Your smart outreach partner");
+    await expect(page.locator("body")).toContainText("Make every business conversation count.");
     const dimensions = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
       content: document.documentElement.scrollWidth,

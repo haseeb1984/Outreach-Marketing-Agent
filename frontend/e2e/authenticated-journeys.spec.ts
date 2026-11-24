@@ -92,6 +92,86 @@ test.describe("account and authenticated browser journeys", () => {
     expect(mutationHeaders?.["x-csrf-token"]).toBe(csrfToken);
   });
 
+
+  test("workspace owner completes the project profile create, edit and archive lifecycle", async ({ page }) => {
+    const csrfToken = "project-lifecycle-csrf-token-0123456789abcdef";
+    const workspaceId = "project-lifecycle-workspace";
+    const projectId = "00000000-0000-0000-0000-000000000099";
+    const calls: Array<{ method: string; path: string; csrf: string; body: Record<string, unknown> | undefined }> = [];
+    let projects: Array<Record<string, unknown>> = [];
+
+    await page.route("**/api/v1/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const method = request.method();
+      const path = url.pathname;
+      const body = method === "POST" || method === "PATCH" ? request.postDataJSON() as Record<string, unknown> : undefined;
+      calls.push({ method, path: path + url.search, csrf: request.headers()["x-csrf-token"] || "", body });
+
+      if (path === "/api/v1/auth/login") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { user_id: "project-owner", email: "project-owner@example.test" }, csrf_token: csrfToken }) });
+      } else if (path === "/api/v1/auth/me") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { user_id: "project-owner", email: "project-owner@example.test" }, csrf_token: csrfToken }) });
+      } else if (path === "/api/v1/workspaces" && method === "GET") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [{ id: workspaceId, name: "Project lifecycle workspace", role: "owner" }] }) });
+      } else if (path === "/api/v1/projects" && method === "GET") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: projects }) });
+      } else if (path === "/api/v1/projects" && method === "POST") {
+        projects = [{
+          id: projectId, workspace_id: workspaceId, name: String(body?.name || ""), website_url: body?.website_url || null,
+          business_model: body?.business_model || "", target_market: body?.target_market || "", language: body?.language || "",
+          audience: body?.audience || "", offer: body?.offer || "", conversion_goal: body?.conversion_goal || "",
+          brand_voice: body?.brand_voice || "", competitors: body?.competitors || [], status: "active",
+        }];
+        await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(projects[0]) });
+      } else if (path === "/api/v1/projects/" + projectId && method === "PATCH") {
+        projects = projects.map(project => ({ ...project, ...body }));
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(projects[0]) });
+      } else if (path === "/api/v1/projects/" + projectId && method === "DELETE") {
+        projects = [];
+        await route.fulfill({ status: 204, body: "" });
+      } else if (path === "/api/v1/auth/sessions") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+      } else {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+      }
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Email address").fill("project-owner@example.test");
+    await page.getByLabel("Password").fill("correct-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "Create project profile" })).toBeVisible();
+
+    await page.getByLabel("Project name").fill("Northstar Client");
+    await page.getByLabel("Website URL (optional)").fill("https://northstar.example");
+    await page.getByLabel("Business model").fill("B2B SaaS");
+    await page.getByRole("region", { name: "Client projects and websites" }).getByLabel("Target market").fill("United Kingdom");
+    await page.getByRole("button", { name: "Save project profile" }).click();
+    await expect(page.getByRole("heading", { name: "Northstar Client" })).toBeVisible();
+    await expect(page.getByText("Project profile saved. Website ownership verification is a separate step.")).toBeVisible();
+
+    await page.getByText("Edit project settings").click();
+    await page.locator('input[name="name"]').fill("Northstar Client Updated");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("heading", { name: "Northstar Client Updated" })).toBeVisible();
+    await expect(page.getByText("Project settings updated.")).toBeVisible();
+
+    page.once("dialog", dialog => dialog.accept());
+    await page.getByRole("button", { name: "Archive project" }).click();
+    await expect(page.getByText("No project profiles yet. Create one for each website or client business.")).toBeVisible();
+    await expect(page.getByText("Project archived. Its historical campaign and CRM records remain in the workspace.")).toBeVisible();
+
+    const mutations = calls.filter(call => call.path.startsWith("/api/v1/projects") && call.method !== "GET");
+    expect(mutations.map(call => call.method)).toEqual(["POST", "PATCH", "DELETE"]);
+    expect(mutations.every(call => call.csrf === csrfToken)).toBe(true);
+    expect(mutations.filter(call => call.method !== "DELETE").every(call => call.body?.workspace_id === workspaceId)).toBe(true);
+    expect(mutations.find(call => call.method === "DELETE")?.path).toContain("workspace_id=" + workspaceId);
+    expect(mutations[0].body?.name).toBe("Northstar Client");
+    expect(mutations[1].body?.name).toBe("Northstar Client Updated");
+  });
+
   test("login rejects invalid credentials without exposing backend details", async ({ page }) => {
     await page.route("**/api/v1/auth/login", async (route) => {
       await route.fulfill({
@@ -248,7 +328,7 @@ test.describe("account and authenticated browser journeys", () => {
       const method = request.method();
       calls.push({
         method,
-        path: url.pathname,
+        path: url.pathname + url.search,
         csrf: request.headers()["x-csrf-token"] || "",
       });
 
@@ -314,7 +394,7 @@ test.describe("account and authenticated browser journeys", () => {
           contentType: "application/json",
           body: JSON.stringify({ item: emailAccounts[0] }),
         });
-      } else if (url.pathname === "/api/v1/integrations/email-accounts/owner-smtp-account/test" && method === "POST") {
+      } else if (url.pathname === "/api/v1/integrations/email-accounts/owner-smtp-account/test" && url.searchParams.get("workspace_id") === "owner-customer-workspace" && method === "POST") {
         emailAccounts = emailAccounts.map(account => ({ ...account, status: "active" }));
         await route.fulfill({
           status: 200,
@@ -352,7 +432,7 @@ test.describe("account and authenticated browser journeys", () => {
     await expect(page.getByText(/SMTP connection test succeeded/)).toBeVisible();
 
     const createCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts");
-    const testCall = calls.find(call => call.method === "POST" && call.path === "/api/v1/integrations/email-accounts/owner-smtp-account/test");
+    const testCall = calls.find(call => call.method === "POST" && call.path.startsWith("/api/v1/integrations/email-accounts/owner-smtp-account/test?workspace_id="));
     expect(createCall?.csrf).toBe(csrfToken);
     expect(testCall?.csrf).toBe(csrfToken);
 
