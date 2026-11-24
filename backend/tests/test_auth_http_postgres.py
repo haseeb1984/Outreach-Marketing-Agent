@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import asyncpg
 import pytest
-from fastapi.testclient import TestClient
+import httpx
 
 from app.db.migrations import apply_migrations
 from app.main import app
@@ -64,36 +64,27 @@ async def _exercise_email_verification_http(monkeypatch):
                 raise
 
         monkeypatch.setattr(store, "verify_email", capture_verify_email)
-        store_errors = []
-        original_reset_password = store.reset_password
-
-        async def capture_reset_password(*, token, new_password):
-            try:
-                return await original_reset_password(token=token, new_password=new_password)
-            except Exception as exc:
-                store_errors.append(repr(exc))
-                raise
-
-        monkeypatch.setattr(store, "reset_password", capture_reset_password)
-        with TestClient(app, base_url="https://app.example.test") as client:
-            # The application lifespan initializes/reset state on entry, so inject
-            # the disposable PostgreSQL-backed services after startup.
+        async with app.router.lifespan_context(app):
             app.state.auth_store = store
             app.state.auth_rate_limiter = AllowLimiter()
-            response = client.post(
-                "/api/v1/auth/verify-email",
-                headers={"Origin": "https://app.example.test"},
-                json={"token": created["verification_token"]},
-            )
-            assert response.status_code == 200, f"{response.text}; store_errors={store_errors!r}"
-            assert response.json()["message"] == "Email verified. You can now sign in."
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="https://app.example.test"
+            ) as client:
+                response = await client.post(
+                    "/api/v1/auth/verify-email",
+                    headers={"Origin": "https://app.example.test"},
+                    json={"token": created["verification_token"]},
+                )
+                assert response.status_code == 200, f"{response.text}; store_errors={store_errors!r}"
+                assert response.json()["message"] == "Email verified. You can now sign in."
 
-            replay = client.post(
-                "/api/v1/auth/verify-email",
-                headers={"Origin": "https://app.example.test"},
-                json={"token": created["verification_token"]},
-            )
-            assert replay.status_code == 400
+                replay = await client.post(
+                    "/api/v1/auth/verify-email",
+                    headers={"Origin": "https://app.example.test"},
+                    json={"token": created["verification_token"]},
+                )
+                assert replay.status_code == 400
 
         async with pool.acquire() as connection:
             state = await connection.fetchrow(
@@ -150,33 +141,47 @@ async def _exercise_password_reset_http(monkeypatch):
             "app.api.auth_routes.settings.frontend_origins",
             "https://app.example.test",
         )
-        with TestClient(app, base_url="https://app.example.test") as client:
-            # The application lifespan initializes/reset state on entry, so inject
-            # the disposable PostgreSQL-backed services after startup.
+        store_errors = []
+        original_reset_password = store.reset_password
+
+        async def capture_reset_password(*, token, new_password):
+            try:
+                return await original_reset_password(token=token, new_password=new_password)
+            except Exception as exc:
+                store_errors.append(repr(exc))
+                raise
+
+        monkeypatch.setattr(store, "reset_password", capture_reset_password)
+        async with app.router.lifespan_context(app):
             app.state.auth_store = store
             app.state.auth_rate_limiter = AllowLimiter()
-            response = client.post(
-                "/api/v1/auth/password-reset/confirm",
-                headers={"Origin": "https://app.example.test"},
-                json={
-                    "token": reset["reset_token"],
-                    "new_password": "reset-http-new-password-456",
-                },
-            )
-            assert response.status_code == 200, f"{response.text}; store_errors={store_errors!r}"
-            assert response.json()["message"] == (
-                "Password updated. Sign in again with your new password."
-            )
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="https://app.example.test"
+            ) as client:
+                response = await client.post(
+                    "/api/v1/auth/password-reset/confirm",
+                    headers={"Origin": "https://app.example.test"},
+                    json={
+                        "token": reset["reset_token"],
+                        "new_password": "reset-http-new-password-456",
+                    },
+                )
+                assert response.status_code == 200, f"{response.text}; store_errors={store_errors!r}"
+                assert response.json()["message"] == (
+                    "Password updated. Sign in again with your new password."
+                )
 
-            replay = client.post(
-                "/api/v1/auth/password-reset/confirm",
-                headers={"Origin": "https://app.example.test"},
-                json={
-                    "token": reset["reset_token"],
-                    "new_password": "reset-http-another-password-789",
-                },
-            )
-            assert replay.status_code == 400
+                replay = await client.post(
+                    "/api/v1/auth/password-reset/confirm",
+                    headers={"Origin": "https://app.example.test"},
+                    json={
+                        "token": reset["reset_token"],
+                        "new_password": "reset-http-another-password-789",
+                    },
+                )
+                assert replay.status_code == 400
+
 
         assert await store.authenticate_password(
             email=email, password="reset-http-original-password-123"
