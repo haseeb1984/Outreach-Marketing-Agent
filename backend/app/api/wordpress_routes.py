@@ -1,6 +1,7 @@
 """Workspace-scoped WordPress connection and human-gated article delivery."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import ipaddress
 import os
@@ -165,7 +166,10 @@ async def _request(site_url: str, username: str, password: str, method: str, pat
     host = parsed.hostname or ""
     port = parsed.port or 443
     try:
-        addresses = await resolve_public_addresses(host, port)
+        async with asyncio.timeout(5.0):
+            addresses = await resolve_public_addresses(host, port)
+    except TimeoutError:
+        raise HTTPException(status_code=502, detail="wordpress_site_dns_unavailable") from None
     except ValueError as exc:
         if "could not be resolved" in str(exc).lower():
             raise HTTPException(status_code=502, detail="wordpress_site_dns_unavailable") from None
