@@ -224,7 +224,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                             export["limits"]["truncated_collections"].append(collection)
                         export[collection] = [dict(row) for row in rows]
                     wordpress_connection_rows = await conn.fetch(
-                        """SELECT id,workspace_id,site_url,username,status,verified_at,created_at,updated_at
+                        """SELECT id,workspace_id,project_id,site_url,username,status,verified_at,created_at,updated_at
                            FROM workspace_wordpress_connections WHERE workspace_id=ANY($1::text[])
                            ORDER BY created_at,id LIMIT $2""",
                         workspace_ids, _MAX_EXPORT_ROWS + 1,
