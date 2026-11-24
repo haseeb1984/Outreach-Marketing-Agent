@@ -70,7 +70,10 @@ async def _exercise_session_lifecycle() -> None:
         # Expired sessions are rejected and cannot be listed/revoked as active.
         async with pool.acquire() as connection:
             await connection.execute(
-                """UPDATE auth_sessions SET expires_at=now()-interval '1 minute'
+                """UPDATE auth_sessions
+                   SET created_at=now()-interval '2 minutes',
+                       last_seen_at=now()-interval '2 minutes',
+                       expires_at=now()-interval '1 minute'
                    WHERE token_sha256=$1""",
                 _digest(expire_target["token"]),
             )
