@@ -128,7 +128,13 @@ async def generate_seo_article(*, brief: str, target_keyword: str, project: dict
                 raw = response.json()["choices"][0]["message"]["content"]
                 if not isinstance(raw, str) or len(raw) > 50000:
                     raise AIOutreachUnavailable("ai_content_response_invalid")
-                return _validate_result(json.loads(raw))
+                result = _validate_result(json.loads(raw))
+                allowed_urls = {item["url"] for item in links}
+                result["internal_link_suggestions"] = [
+                    item for item in result["internal_link_suggestions"]
+                    if item["url"] in allowed_urls
+                ]
+                return result
             raise last_error or AIOutreachUnavailable("groq_no_usable_production_model")
     except AIOutreachUnavailable:
         raise
