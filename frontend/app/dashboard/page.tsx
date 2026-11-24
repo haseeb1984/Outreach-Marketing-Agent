@@ -40,7 +40,7 @@ type DomainChallenge = { domain: string; expires_at: string; dns_record: { recor
 type AuditFinding = { code: string; title: string; severity: string; occurrences: number; evidence_urls: string[] };
 type WebsiteAudit = { report_id?: string; created_at?: string; report: { start_url: string; crawl_skipped: boolean; reason?: string; robots?: { status?: string; url?: string; error?: string }; crawl?: { pages_crawled: number; aggregate_findings: AuditFinding[]; pages: Array<{ final_url: string; title?: string | null; status_code: number; findings: Array<{ code: string; title: string; severity: string }> }> }; limitations?: string[] }; notice?: string };
 type GrowthReviewReport = { report_type?: string; project_id?: string; project_name?: string; start_url: string; status?: string; crawl_summary?: { pages_crawled?: number }; competitor_discovery?: { status: string; notice?: string; count?: number; items?: Array<{ domain: string; title: string; url: string; description: string; matched_queries: string[]; relevance_score: number; competitor_status: string }> }; competitor_analysis?: { status: string; notice?: string; pages_checked?: number; pages_analyzed?: number; potential_gaps?: Array<{ query: string; classification: string; priority_score: number; confidence: string; client_coverage: number; competitor_coverage: number; competitor_evidence_url: string; client_evidence_urls: string[]; requires_human_review: boolean }> }; strategy?: { actions?: Array<{ id: string; title: string; priority: string; priority_score: number; recommended_action: string; evidence_url: string; confidence: string }>; measurement_plan?: string[] }; limitations?: string[]; review_required?: boolean };
-type ContentBrief = { id: string; title: string; brief: string; target_keyword: string; status: string; evidence_url: string; article_title?: string; meta_title?: string; meta_description?: string; article_body?: string; article_status?: string; article_outline?: string[]; internal_link_suggestions?: Array<{url:string;reason:string}> };
+type ContentBrief = { id: string; title: string; brief: string; target_keyword: string; status: string; evidence_url: string; article_title?: string; meta_title?: string; meta_description?: string; article_body?: string; article_status?: string; article_outline?: string[]; internal_link_suggestions?: Array<{url:string;reason:string}>; cms_status?: string; cms_post_url?: string | null };
 type GrowthReviewResult = { report_id: string; workspace_id: string; project_id: string; project_name: string; report: GrowthReviewReport; created_at: string; notice: string };
 type ApiResult<T> = { items: T[]; counts?: Counts; user?: { email: string; user_id: string }; csrf_token?: string | null; period_days?: number };
 
@@ -192,6 +192,8 @@ export default function DashboardPage() {
   const [auditBusy, setAuditBusy] = useState(false);
   const [growthReviewResult, setGrowthReviewResult] = useState<GrowthReviewResult | null>(null);
   const [contentBriefs, setContentBriefs] = useState<ContentBrief[]>([]);
+  const [wordpressConnection, setWordPressConnection] = useState<{connected:boolean;connection?:{id:string;site_url:string;username:string;status:string}} | null>(null);
+  const [wordpressBusy, setWordPressBusy] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [followupSequences, setFollowupSequences] = useState<FollowupSequence[]>([]);
   const [followupEnrollments, setFollowupEnrollments] = useState<Record<string, FollowupEnrollment[]>>({});
@@ -287,9 +289,10 @@ export default function DashboardPage() {
       api<{ counts: Counts }>("/api/v1/analytics/summary?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + periodRef.current, token),
       api<ApiResult<Delivery>>("/api/v1/deliveries?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<{ items: ContentBrief[] }>("/api/v1/content-briefs?workspace_id=" + encodeURIComponent(selectedId), token),
+      api<{ connected:boolean; connection?:{id:string;site_url:string;username:string;status:string} }>("/api/v1/integrations/wordpress/connection?workspace_id=" + encodeURIComponent(selectedId), token),
     ]);
     if (!isCurrentLoad()) return;
-    const [prospectResult, campaignResult, draftResult, analyticsResult, deliveryResult, contentBriefResult] = primaryResults;
+    const [prospectResult, campaignResult, draftResult, analyticsResult, deliveryResult, contentBriefResult, wordpressResult] = primaryResults;
     const p = prospectResult.status === "fulfilled" ? prospectResult.value : { items: [] as Prospect[] };
     const c = campaignResult.status === "fulfilled" ? campaignResult.value : { items: [] as Campaign[] };
     const d = draftResult.status === "fulfilled" ? draftResult.value : { items: [] as Draft[] };
@@ -300,8 +303,9 @@ export default function DashboardPage() {
     setDrafts(d.items || []);
     setDeliveries(deliveryData.items || []);
     setContentBriefs(contentBriefResult.status === "fulfilled" ? (contentBriefResult.value.items || []) : []);
+    setWordPressConnection(wordpressResult.status === "fulfilled" ? wordpressResult.value : null);
     setCounts(a.counts || {});
-    const primaryFailureNames = ["prospects", "campaigns", "drafts", "analytics", "deliveries", "editorial briefs"].filter((_, index) => primaryResults[index].status === "rejected");
+    const primaryFailureNames = ["prospects", "campaigns", "drafts", "analytics", "deliveries", "editorial briefs", "WordPress connection"].filter((_, index) => primaryResults[index].status === "rejected");
     const followupResult = await Promise.allSettled([api<{ items: FollowupSequence[] }>("/api/v1/follow-up-sequences?workspace_id=" + encodeURIComponent(selectedId), token)]);
     if (!isCurrentLoad()) return;
     setFollowupSequences(followupResult[0].status === "fulfilled" ? (followupResult[0].value.items || []) : []);
@@ -1660,6 +1664,70 @@ export default function DashboardPage() {
       setNotice("Article draft submitted for editorial review. It remains unpublished.");
     } catch (err) { setError(err instanceof Error ? err.message : "Article draft could not be saved."); }
     finally { setBusy(false); }
+  }
+
+  async function saveWordPressConnection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !csrf) return;
+    const form = new FormData(event.currentTarget);
+    setWordPressBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/wordpress/connection", csrf, {
+        method: "PUT",
+        body: JSON.stringify({ workspace_id: workspaceId, site_url: String(form.get("site_url") || "").trim(), username: String(form.get("username") || "").trim(), application_password: String(form.get("application_password") || "").trim() }),
+      });
+      const result = await api<{connected:boolean;connection?:{id:string;site_url:string;username:string;status:string}}>("/api/v1/integrations/wordpress/connection?workspace_id="+encodeURIComponent(workspaceId),csrf);
+      setWordPressConnection(result);
+      setNotice("WordPress credentials encrypted and saved. Verify the connection before transferring articles.");
+    } catch (err) { setError(err instanceof Error ? err.message : "WordPress connection could not be saved."); }
+    finally { setWordPressBusy(false); }
+  }
+
+  async function verifyWordPressConnection() {
+    if (!workspaceId || !csrf) return;
+    setWordPressBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/wordpress/connection/verify?workspace_id="+encodeURIComponent(workspaceId),csrf,{method:"POST"});
+      const result = await api<{connected:boolean;connection?:{id:string;site_url:string;username:string;status:string}}>("/api/v1/integrations/wordpress/connection?workspace_id="+encodeURIComponent(workspaceId),csrf);
+      setWordPressConnection(result);
+      setNotice("WordPress authentication verified.");
+    } catch (err) { setError(err instanceof Error ? err.message : "WordPress verification failed."); }
+    finally { setWordPressBusy(false); }
+  }
+
+  async function sendWordPressDraft(item: ContentBrief) {
+    if (!workspaceId || !csrf) return;
+    setWordPressBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/wordpress/articles/"+encodeURIComponent(item.id)+"/send-draft?workspace_id="+encodeURIComponent(workspaceId),csrf,{method:"POST"});
+      const result = await api<{items:ContentBrief[]}>("/api/v1/content-briefs?workspace_id="+encodeURIComponent(workspaceId),csrf);
+      setContentBriefs(result.items || []);
+      setNotice("Article transferred to WordPress as a private draft. It is not public.");
+    } catch (err) { setError(err instanceof Error ? err.message : "WordPress draft transfer failed."); }
+    finally { setWordPressBusy(false); }
+  }
+
+  async function publishWordPressArticle(item: ContentBrief) {
+    if (!workspaceId || !csrf || !window.confirm("Publish this approved article publicly on WordPress? This action makes it visible to site visitors.")) return;
+    setWordPressBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/wordpress/articles/"+encodeURIComponent(item.id)+"/publish",csrf,{method:"POST",body:JSON.stringify({workspace_id:workspaceId,confirm_publish:true})});
+      const result = await api<{items:ContentBrief[]}>("/api/v1/content-briefs?workspace_id="+encodeURIComponent(workspaceId),csrf);
+      setContentBriefs(result.items || []);
+      setNotice("WordPress article published.");
+    } catch (err) { setError(err instanceof Error ? err.message : "WordPress publishing failed."); }
+    finally { setWordPressBusy(false); }
+  }
+
+  async function disconnectWordPress() {
+    if (!workspaceId || !csrf || !window.confirm("Disconnect WordPress and permanently remove the saved application password?")) return;
+    setWordPressBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/wordpress/connection?workspace_id="+encodeURIComponent(workspaceId),csrf,{method:"DELETE"});
+      setWordPressConnection({connected:false});
+      setNotice("WordPress connection removed. Existing WordPress posts are unchanged.");
+    } catch (err) { setError(err instanceof Error ? err.message : "WordPress disconnect failed."); }
+    finally { setWordPressBusy(false); }
   }
 
   async function reviewContentArticle(item: ContentBrief, decision: "approved" | "rejected") {
