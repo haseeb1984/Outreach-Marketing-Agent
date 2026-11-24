@@ -121,7 +121,14 @@ async def export_account_data(request: Request) -> JSONResponse:
                             language,audience,offer,conversion_goal,brand_voice,competitors,status,created_at,updated_at
                             FROM workspace_projects WHERE workspace_id=ANY($1::text[])
                             ORDER BY created_at,id LIMIT $2""",
-                        "content_briefs": """SELECT id,workspace_id,project_id,report_id,action_id,title,brief,target_keyword,\n                            evidence_url,status,review_note,created_by,reviewed_by,created_at,updated_at,reviewed_at,\n                            article_title,meta_title,meta_description,article_outline,internal_link_suggestions,\n                            article_body,article_status,article_generated_at,article_review_note,article_reviewed_by,\n                            article_reviewed_at,cms_connection_id,cms_post_id,cms_post_url,cms_status,cms_last_error,cms_synced_at\n                            FROM website_content_briefs WHERE workspace_id=ANY($1::text[])\n                            ORDER BY created_at,id LIMIT $2""",\n                        "prospects": """SELECT id,workspace_id,name,company,role,contact_email,website_url,
+                        "content_briefs": """SELECT id,workspace_id,project_id,report_id,action_id,title,brief,target_keyword,
+                            evidence_url,status,review_note,created_by,reviewed_by,created_at,updated_at,reviewed_at,
+                            article_title,meta_title,meta_description,article_outline,internal_link_suggestions,
+                            article_body,article_status,article_generated_at,article_review_note,article_reviewed_by,
+                            article_reviewed_at,cms_connection_id,cms_post_id,cms_post_url,cms_status,cms_last_error,cms_synced_at
+                            FROM website_content_briefs WHERE workspace_id=ANY($1::text[])
+                            ORDER BY created_at,id LIMIT $2""",
+                        "prospects": """SELECT id,workspace_id,name,company,role,contact_email,website_url,
                             evidence_url,evidence_observed_at,fit_reason,verified_facts,stage,notes,created_at,updated_at,archived_at
                             FROM crm_prospects WHERE workspace_id=ANY($1::text[])
                             ORDER BY created_at,id LIMIT $2""",
