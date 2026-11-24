@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import dns.asyncresolver
+import dns.exception
 import dns.resolver
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, HTTPException, Query, Request
