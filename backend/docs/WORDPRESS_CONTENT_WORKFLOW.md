@@ -20,7 +20,7 @@ The WordPress connector supports project-scoped connections with an optional wor
 5. **Send to WordPress as draft** creates a WordPress post with status `draft`. It is not publicly visible.
 6. A separate **Publish publicly on WordPress** action requires an explicit browser confirmation and server-side confirmation flag. Only then is the post changed to `publish`.
 
-The integration uses a stable post slug derived from the content brief ID so a retry can recover a draft created before a network timeout. Concurrent send/publish requests are guarded by database status transitions. Draft delivery locks the selected connection while atomically pinning the brief to it, so a simultaneous credential/site update cannot move the connection to another website between selection and the first delivery attempt.
+The integration uses a stable post slug derived from the content brief ID so a retry can recover a draft created before a network timeout. Concurrent send/publish requests are guarded by database status transitions. Draft delivery locks the selected connection while atomically pinning the brief to it, so a simultaneous credential/site update cannot move the connection to another website between selection and the first delivery attempt. Public publishing also locks the pinned connection while claiming the publish operation, so a concurrent disconnect or credential update cannot invalidate the connection between selection and the publish claim.
 
 ## Security and limitations
 
