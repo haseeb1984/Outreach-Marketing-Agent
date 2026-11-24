@@ -56,6 +56,7 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
     if (response.status === 401) throw new Error("Your session has expired. Please sign in again.");
     const messages: Record<string, string> = {
       workspace_not_found: "This workspace is not available to your account.",
+      project_not_found: "This project is not available in the selected workspace.",
       authentication_not_configured: "The account service is not configured.",
       campaign_service_not_configured: "Campaign service is not available yet.",
       prospect_service_not_configured: "Prospect service is not available yet.",
@@ -93,7 +94,7 @@ async function api<T>(path: string, csrf: string | null, options: RequestInit = 
       wordpress_authentication_failed: "WordPress rejected the application password. Check the username and create a new Application Password.",
       wordpress_user_lacks_post_capabilities: "The WordPress user needs permission to edit and publish posts.",
       wordpress_connection_not_pending: "Update the WordPress credentials before verifying this connection.",
-      wordpress_site_change_blocked_by_existing_posts: "This workspace already has WordPress posts linked to its current site. Keep the same site URL or connect a different site in a separate workspace.",
+      wordpress_site_change_blocked_by_existing_posts: "This WordPress connection already has linked posts. Keep the same site URL or use a separate project connection for another website.",
       article_editorial_approval_required: "Approve the article in the editorial workflow before sending it to WordPress.",
       explicit_publish_confirmation_required: "Confirm the public publishing action before continuing.",
       wordpress_draft_already_created: "This article already has a WordPress draft.",
