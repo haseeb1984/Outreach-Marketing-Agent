@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS website_content_briefs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     reviewed_at TIMESTAMPTZ,
-    UNIQUE (workspace_id, report_id, action_id),
+    UNIQUE (workspace_id, report_id, action_id)
 );
 CREATE INDEX IF NOT EXISTS website_content_briefs_workspace_status_idx
     ON website_content_briefs(workspace_id, status, updated_at DESC);
