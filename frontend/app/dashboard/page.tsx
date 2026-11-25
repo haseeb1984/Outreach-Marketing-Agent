@@ -2904,6 +2904,7 @@ export default function DashboardPage() {
               <p className="fine">{item.platform.toUpperCase()} · Topical relevance: {item.relevance_score}/100 · Human review required</p>
               <p>{item.description || "No public search description supplied."}</p>
               <p className="fine">Audience metrics unavailable: follower counts, average views and engagement rate have not been verified. Review the profile and current audience data independently.</p>
+              <button className="button secondary" type="button" disabled={busy || !canWrite} onClick={() => { setProspectName(item.title.slice(0, 200)); setProspectCompany(""); setProspectWebsite(item.profile_url); setProspectEmail(""); setProspectPhone(""); setEvidenceUrl(item.profile_url); setFitReason(((item.description || "Public creator profile discovered through search.") + " Platform: " + item.platform + ". Public-search candidate; verify creator identity, audience fit and current metrics before saving or contacting.").slice(0, 2000)); setNotice("Creator profile copied to the prospect form. Add the creator's company/brand if known, verify the profile and audience fit, then save manually."); document.getElementById("prospect-name")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Prepare creator CRM record for review</button>
             </article>)}</div>}
           </article>
         </section>
