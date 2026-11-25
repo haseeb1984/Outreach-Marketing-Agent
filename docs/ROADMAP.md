@@ -4,7 +4,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-24
 
-- Current application implementation source on `main`: `8540535e1b63900bfd1f26b2a7d9570a1c3e60ba` (WordPress delivery concurrency, site-identity and connection-pinned egress safeguards). This is a source-control reference, not a CI or deployment claim.
+- Current application implementation source on `main`: `3f739dfb94080016671a13d57b2f0bd8db2956a9` (WordPress delivery concurrency, site-identity and connection-pinned egress safeguards). This is a source-control reference, not a CI or deployment claim.
 - Added a persistent editorial pipeline from website-growth recommendations to workspace content briefs, editorial review, AI-generated SEO article drafts, editable metadata/body, and article approval.
 - Added project-workflow dashboard loading so saved briefs survive refreshes and workspace switches.
 - Added project-scoped WordPress Application Password storage (with a workspace-default fallback) encrypted with AES-GCM, HTTPS/public-DNS checks, connection verification, and permission checks for authoring/publishing.
@@ -56,6 +56,8 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 WhatsApp is intentionally **PENDING** while Meta account setup and same-number Coexistence eligibility are unresolved. Do not delete or deregister the existing WhatsApp Business App number. No live WhatsApp sends are enabled.
 
 Still required before connecting Meta: eligible Coexistence onboarding, provider-specific GET verification handshake, raw-body `X-Hub-Signature-256` validation, native payload normalization, workspace/phone asset mapping, durable inbound/status event persistence, idempotency, official outbound adapter, opt-in/template checks, and staging acceptance. Configuration-status output is diagnostic only.
+
+- Creator discovery results now have a direct **Prepare creator CRM record for review** handoff. It pre-fills the profile URL as both the creator's website and source evidence, preserves the platform and search description as review context, and leaves company details for the user to verify; saving remains an explicit manual CRM action.
 
 ## Remaining product and launch work
 
