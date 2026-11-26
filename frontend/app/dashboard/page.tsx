@@ -119,6 +119,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [csrf, setCsrf] = useState<string | null>(null);
+  const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -773,10 +774,14 @@ export default function DashboardPage() {
   }
 
   async function deleteAccount() {
-    if (!csrf || !window.confirm("Permanently deactivate this account, revoke all sessions, and pseudonymize its identity? Sole-member owned workspaces and their data will also be deleted. This cannot be undone.")) return;
+    if (!csrf || !accountDeletionPassword || !window.confirm("Permanently deactivate this account, revoke all sessions, and pseudonymize its identity? Sole-member owned workspaces and their data will also be deleted. This cannot be undone.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await api("/api/v1/account", csrf, { method: "DELETE" });
+      await api("/api/v1/account", csrf, {
+        method: "DELETE",
+        body: JSON.stringify({ password: accountDeletionPassword }),
+      });
+      setAccountDeletionPassword("");
       router.replace("/login?account_deleted=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Account deletion could not be completed.");
@@ -3424,8 +3429,9 @@ export default function DashboardPage() {
           <article className="card">
             <h3>Export or delete your account</h3>
             <p>Your account export is available from the footer. Deletion revokes sessions and pending invitations, consumes outstanding verification/reset tokens, and pseudonymizes your login identity. Sole-member workspaces are removed; shared workspaces are retained for other non-revoked members. Security audit history remains with a pseudonymized identity; local billing rows for a deleted sole-member workspace are removed with that workspace. External provider records and backups follow separate retention controls.</p>
-            <button className="button secondary" type="button" disabled={busy || !csrf} onClick={deleteAccount}>Delete my account</button>
-            <p className="fine">This action is irreversible and requires two explicit confirmations. It does not claim to erase records retained by external providers or legally required operational records.</p>
+            <div className="field"><label htmlFor="account-deletion-password">Confirm your current password to delete this account</label><input id="account-deletion-password" type="password" autoComplete="current-password" maxLength={1024} value={accountDeletionPassword} onChange={event=>setAccountDeletionPassword(event.target.value)} /></div>
+            <button className="button secondary" type="button" disabled={busy || !csrf || !accountDeletionPassword} onClick={deleteAccount}>Delete my account</button>
+            <p className="fine">Deletion requires your current password, a confirmation prompt and server-side rate limiting. It is irreversible and does not erase records retained by external providers or legally required operational records.</p>
           </article>
         </section>
       </>}

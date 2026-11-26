@@ -6,12 +6,19 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from app.api.auth_routes import _authenticated, _check_csrf
+from app.api.auth_routes import _authenticated, _check_csrf, _consume
 
 router = APIRouter(prefix="/api/v1/account", tags=["account privacy"])
+
+
+class AccountDeletionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(min_length=1, max_length=1024)
+
 _MAX_EXPORT_ROWS = 10000
 
 
@@ -330,7 +337,7 @@ async def export_account_data(request: Request) -> JSONResponse:
 
 
 @router.delete("")
-async def delete_account(request: Request) -> JSONResponse:
+async def delete_account(payload: AccountDeletionInput, request: Request) -> JSONResponse:
     """Deactivate and pseudonymize the authenticated account safely.
 
     Sole-member workspaces owned by the account are deleted with their workspace data.
@@ -341,8 +348,23 @@ async def delete_account(request: Request) -> JSONResponse:
     import secrets
     from app.services.auth_security import hash_password
 
-    _, _, session = await _authenticated(request)
+    store, _, session = await _authenticated(request)
     _check_csrf(request, session)
+    await _consume(
+        getattr(request.app.state, "auth_rate_limiter", None),
+        namespace="account-delete",
+        identifier=str(session["user_id"]),
+        limit=3,
+        window=3600,
+    )
+    try:
+        credentials = await store.authenticate_password(
+            email=session["email"], password=payload.password,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="account_deletion_unavailable") from None
+    if credentials is None or str(credentials["user_id"]) != str(session["user_id"]):
+        raise HTTPException(status_code=403, detail="account_deletion_password_incorrect")
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
         raise HTTPException(status_code=503, detail="account_deletion_not_configured")
