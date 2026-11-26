@@ -189,14 +189,26 @@ async def _persist_research_run(request, workspace_id, user_id, research_type, q
         raise HTTPException(status_code=503, detail="research_history_not_configured")
     try:
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """INSERT INTO workspace_research_runs
-                   (workspace_id,created_by,research_type,query,provider,parameters,results,result_count)
-                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8)
-                   RETURNING id,created_at""",
-                workspace_id, user_id, research_type, query, provider,
-                json.dumps(parameters), json.dumps(results), len(results),
-            )
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """INSERT INTO workspace_research_runs
+                       (workspace_id,created_by,research_type,query,provider,parameters,results,result_count)
+                       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8)
+                       RETURNING id,created_at""",
+                    workspace_id, user_id, research_type, query, provider,
+                    json.dumps(parameters), json.dumps(results), len(results),
+                )
+                # Keep a bounded workspace history so successful searches cannot
+                # grow this evidence table without limit. Retain the newest 500.
+                await conn.execute(
+                    """DELETE FROM workspace_research_runs
+                       WHERE workspace_id=$1 AND id NOT IN (
+                           SELECT id FROM workspace_research_runs
+                           WHERE workspace_id=$1
+                           ORDER BY created_at DESC,id DESC LIMIT 500
+                       )""",
+                    workspace_id,
+                )
         return {"id": str(row["id"]), "created_at": row["created_at"].isoformat()}
     except Exception:
         raise HTTPException(status_code=503, detail="research_history_save_failed") from None
