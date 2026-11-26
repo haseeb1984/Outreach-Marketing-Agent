@@ -87,6 +87,7 @@ REQUIRED_MIGRATIONS = (
     "067_wordpress_content_delivery.sql",
     "068_project_scoped_wordpress_connections.sql",
     "069_workspace_research_history.sql",
+    "070_campaign_project_relationship.sql",
 )
 
 REQUIRED_TABLES = (
@@ -174,6 +175,7 @@ REQUIRED_COLUMNS = (
     ("workspace_research_runs", "parameters"),
     ("workspace_research_runs", "results"),
     ("daily_feature_usage_reservations", "usage_date"),
+    ("outreach_campaigns", "project_id"),
 )
 
 

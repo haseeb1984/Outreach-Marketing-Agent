@@ -15,16 +15,23 @@ class CampaignStore:
 
     async def create_campaign(self, *, workspace_id: str, created_by: UUID | str, name: str,
                               client_business: str, client_offer: str,
-                              target_customer_profile: str) -> dict[str, Any]:
+                              target_customer_profile: str, project_id: UUID | None = None) -> dict[str, Any]:
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """INSERT INTO outreach_campaigns
-                   (workspace_id,created_by,name,client_business,client_offer,target_customer_profile)
-                   VALUES ($1,$2,$3,$4,$5,$6)
-                   RETURNING id,workspace_id,name,client_business,client_offer,target_customer_profile,status,created_by,created_at,updated_at""",
-                workspace_id, UUID(str(created_by)), name.strip(), client_business.strip(),
-                client_offer.strip(), target_customer_profile.strip(),
-            )
+            async with conn.transaction():
+                if project_id is not None:
+                    project = await conn.fetchrow(
+                        """SELECT id FROM workspace_projects WHERE id=$1 AND workspace_id=$2
+                           AND archived_at IS NULL FOR KEY SHARE""", project_id, workspace_id)
+                    if project is None:
+                        raise ValueError("project_not_found_or_archived")
+                row = await conn.fetchrow(
+                    """INSERT INTO outreach_campaigns
+                       (workspace_id,created_by,name,client_business,client_offer,target_customer_profile,project_id)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7)
+                       RETURNING id,workspace_id,name,client_business,client_offer,target_customer_profile,
+                                 project_id,status,created_by,created_at,updated_at""",
+                    workspace_id, UUID(str(created_by)), name.strip(), client_business.strip(),
+                    client_offer.strip(), target_customer_profile.strip(), project_id)
         return self._serialize(dict(row))
 
     async def list_campaigns(self, *, workspace_id: str, limit: int = 50, offset: int = 0,
@@ -36,14 +43,16 @@ class CampaignStore:
         pattern = "%" + term.replace("%", "\\%").replace("_", "\\_") + "%"
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
-                """SELECT id,workspace_id,name,client_business,client_offer,target_customer_profile,
-                          status,created_by,created_at,updated_at
-                   FROM outreach_campaigns
-                   WHERE workspace_id=$1
-                     AND ($2='all' OR ($2='current' AND status <> 'archived') OR status=$2)
-                     AND ($3='' OR name ILIKE $4 OR client_business ILIKE $4
-                          OR client_offer ILIKE $4 OR target_customer_profile ILIKE $4)
-                   ORDER BY updated_at DESC,id LIMIT $5 OFFSET $6""",
+                """SELECT c.id,c.workspace_id,c.name,c.client_business,c.client_offer,c.target_customer_profile,
+                          c.project_id,p.name AS project_name,p.status AS project_status,
+                          c.status,c.created_by,c.created_at,c.updated_at
+                   FROM outreach_campaigns c
+                   LEFT JOIN workspace_projects p ON p.id=c.project_id AND p.workspace_id=c.workspace_id
+                   WHERE c.workspace_id=$1
+                     AND ($2='all' OR ($2='current' AND c.status <> 'archived') OR c.status=$2)
+                     AND ($3='' OR c.name ILIKE $4 OR c.client_business ILIKE $4
+                          OR c.client_offer ILIKE $4 OR c.target_customer_profile ILIKE $4 OR p.name ILIKE $4)
+                   ORDER BY c.updated_at DESC,c.id LIMIT $5 OFFSET $6""",
                 workspace_id, status, term, pattern, limit, offset,
             )
         return [self._serialize(dict(row)) for row in rows]
@@ -64,7 +73,7 @@ class CampaignStore:
             )
         return int(count or 0)
 
-    async def update_campaign(self, *, workspace_id: str, campaign_id: UUID, name: str, client_business: str, client_offer: str, target_customer_profile: str, status: str) -> dict[str, Any] | None:
+    async def update_campaign(self, *, workspace_id: str, campaign_id: UUID, name: str, client_business: str, client_offer: str, target_customer_profile: str, status: str, project_id: UUID | None = None, project_id_supplied: bool = False) -> dict[str, Any] | None:
         if status not in {"draft", "active", "paused", "archived"}:
             raise ValueError("invalid_campaign_status")
         fields = ((name, 200), (client_business, 240), (client_offer, 2000), (target_customer_profile, 2000))
@@ -72,15 +81,22 @@ class CampaignStore:
             raise ValueError("invalid_campaign_fields")
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                if project_id_supplied and project_id is not None:
+                    project = await conn.fetchrow(
+                        """SELECT id FROM workspace_projects WHERE id=$1 AND workspace_id=$2
+                           AND archived_at IS NULL FOR KEY SHARE""", project_id, workspace_id)
+                    if project is None:
+                        raise ValueError("project_not_found_or_archived")
                 row = await conn.fetchrow(
                     """UPDATE outreach_campaigns SET name=$3,client_business=$4,client_offer=$5,
-                       target_customer_profile=$6,status=$7,updated_at=now()
+                       target_customer_profile=$6,status=$7,
+                       project_id=CASE WHEN $8 THEN $9 ELSE project_id END,updated_at=now()
                        WHERE id=$1 AND workspace_id=$2
                        RETURNING id,workspace_id,name,client_business,client_offer,target_customer_profile,
-                                 status,created_by,created_at,updated_at""",
+                                 project_id,status,created_by,created_at,updated_at""",
                     campaign_id, workspace_id, name.strip(), client_business.strip(),
                     client_offer.strip(), target_customer_profile.strip(), status,
-                )
+                    project_id_supplied, project_id)
                 if row is not None and status == "archived":
                     await conn.execute(
                         """UPDATE outreach_followup_sequences SET status='archived',updated_at=now()

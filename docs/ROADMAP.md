@@ -1,3 +1,12 @@
+
+## Implementation update — 2026-11-27 (persistent campaign-to-project relationship)
+
+- Campaigns now persist an optional `project_id`, with a tenant-safe composite foreign key to the owning workspace project. Existing campaigns remain unlinked and compatible. Deleting a project clears only the relationship; it does not delete campaign history.
+- Campaign create/update APIs validate that a selected project is active and belongs to the same workspace, preserve links when older update clients omit the field, and support explicit unlinking. Campaign listing includes linked project name/status and project-name search.
+- Dashboard creation saves the selected project ID; campaign cards show the linked project and existing campaigns can change or remove the association. Archived linked projects remain visible and can be unlinked, but cannot be newly selected.
+- Migration 070 is included in database diagnostics, release preflight and API readiness gates. Migration application and runtime acceptance have not been performed.
+- Source-only batch; no tests, build, CI, database migration, browser acceptance or deployment were run.
+
 ## Current implementation update — 2026-11-27 (project-to-campaign onboarding; application source `5c138572fd30508c008090212f3c87320f14411d`)
 
 - Campaign creation now offers an optional client-project selector. Choosing a project pre-fills business name, offer and target customer profile, and suggests a campaign name only when the operator has not already entered one. All fields remain editable and are reviewed before submission. This is a data-entry handoff only: campaign records remain workspace-scoped and are not falsely represented as project-linked in the current schema. No browser, database, build or CI acceptance was run.

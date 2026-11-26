@@ -103,3 +103,17 @@ def test_template_fallback_does_not_consume_ai_generation_quota():
     assert 'quota_outcome = "consumed" if generated_content is not None else "released"' in regenerate_source
     assert 'outcome=quota_outcome' in regenerate_source
     assert "settings.ai_api_key and settings.ai_api_key.strip()" in regenerate_source
+
+
+def test_campaign_project_link_is_optional_and_uuid_validated():
+    base = dict(workspace_id="w", name="n", client_business="b", client_offer="o", target_customer_profile="p")
+    assert CampaignCreate(**base).project_id is None
+    pid = "00000000-0000-0000-0000-000000000003"
+    assert str(CampaignCreate(**base, project_id=pid).project_id) == pid
+    assert str(CampaignUpdate(**{**base, "status":"draft", "project_id":pid}).project_id) == pid
+
+
+def test_campaign_update_distinguishes_omitted_project_from_explicit_unlink():
+    base = dict(workspace_id="w", name="n", client_business="b", client_offer="o", target_customer_profile="p", status="draft")
+    assert "project_id" not in CampaignUpdate(**base).model_fields_set
+    assert "project_id" in CampaignUpdate(**{**base, "project_id":None}).model_fields_set

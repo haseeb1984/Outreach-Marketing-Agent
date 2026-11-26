@@ -36,6 +36,7 @@ class CampaignCreate(BaseModel):
     client_business: str = Field(min_length=1, max_length=240)
     client_offer: str = Field(min_length=1, max_length=2000)
     target_customer_profile: str = Field(min_length=1, max_length=2000)
+    project_id: UUID | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -46,6 +47,7 @@ class CampaignUpdate(BaseModel):
     client_offer: str = Field(min_length=1, max_length=2000)
     target_customer_profile: str = Field(min_length=1, max_length=2000)
     status: str = "draft"
+    project_id: UUID | None = None
 
     @field_validator("status")
     @classmethod
@@ -105,7 +107,10 @@ async def create_campaign(payload: CampaignCreate, request: Request):
             workspace_id=payload.workspace_id, created_by=session["user_id"],
             name=payload.name, client_business=payload.client_business,
             client_offer=payload.client_offer, target_customer_profile=payload.target_customer_profile,
+            project_id=payload.project_id,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=503, detail="campaign_create_unavailable") from None
 
@@ -120,6 +125,8 @@ async def update_campaign(campaign_id: UUID, payload: CampaignUpdate, request: R
             workspace_id=payload.workspace_id, campaign_id=campaign_id, name=payload.name,
             client_business=payload.client_business, client_offer=payload.client_offer,
             target_customer_profile=payload.target_customer_profile, status=payload.status,
+            project_id=payload.project_id,
+            project_id_supplied="project_id" in payload.model_fields_set,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
