@@ -220,6 +220,11 @@ export default function DashboardPage() {
   const [wordpressEditing, setWordPressEditing] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const [campaignAppliedSearch, setCampaignAppliedSearch] = useState("");
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState("current");
+  const [campaignHasMore, setCampaignHasMore] = useState(false);
+  const [campaignLoadingMore, setCampaignLoadingMore] = useState(false);
   const [followupSequences, setFollowupSequences] = useState<FollowupSequence[]>([]);
   const [followupEnrollments, setFollowupEnrollments] = useState<Record<string, FollowupEnrollment[]>>({});
   const [followupName, setFollowupName] = useState("");
@@ -309,7 +314,7 @@ export default function DashboardPage() {
     // Load independent dashboard surfaces independently: one unavailable API must not blank the whole workspace.
     const primaryResults = await Promise.allSettled([
       api<ApiResult<Prospect>>("/api/v1/prospects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
-      api<ApiResult<Campaign>>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
+      api<ApiResult<Campaign> & {has_more?:boolean}>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50&status=current", token),
       api<ApiResult<Draft>>("/api/v1/drafts?workspace_id=" + encodeURIComponent(selectedId) + "&status=all&limit=50", token),
       api<{ counts: Counts }>("/api/v1/analytics/summary?workspace_id=" + encodeURIComponent(selectedId) + "&since_days=" + periodRef.current, token),
       api<ApiResult<Delivery>>("/api/v1/deliveries?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
@@ -325,6 +330,10 @@ export default function DashboardPage() {
     const deliveryData = deliveryResult.status === "fulfilled" ? deliveryResult.value : { items: [] as Delivery[] };
     setProspects(p.items || []);
     setCampaigns(c.items || []);
+    setCampaignHasMore(Boolean((c as ApiResult<Campaign> & {has_more?:boolean}).has_more));
+    setCampaignAppliedSearch("");
+    setCampaignSearch("");
+    setCampaignStatusFilter("current");
     setDrafts(d.items || []);
     setDeliveries(deliveryData.items || []);
     setContentBriefs(contentBriefResult.status === "fulfilled" ? (contentBriefResult.value.items || []) : []);
@@ -1393,6 +1402,39 @@ export default function DashboardPage() {
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project could not be saved.");
     } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
+  }
+
+  async function searchCampaigns() {
+    if (!workspaceId || !csrf || campaignLoadingMore) return;
+    const requestedWorkspaceId = workspaceId;
+    const query = campaignSearch.trim().slice(0, 120);
+    const status = campaignStatusFilter;
+    setCampaignLoadingMore(true); setError("");
+    try {
+      const result = await api<ApiResult<Campaign> & {has_more?:boolean}>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=0&status=" + encodeURIComponent(status) + "&search=" + encodeURIComponent(query), csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
+      setCampaigns(result.items || []);
+      setCampaignAppliedSearch(query);
+      setCampaignHasMore(Boolean(result.has_more));
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Campaign search could not be completed.");
+    } finally { if (requestedWorkspaceId === workspaceId) setCampaignLoadingMore(false); }
+  }
+
+  async function loadMoreCampaigns() {
+    if (!workspaceId || !csrf || !campaignHasMore || campaignLoadingMore) return;
+    const requestedWorkspaceId = workspaceId;
+    const offset = campaigns.length;
+    setCampaignLoadingMore(true);
+    try {
+      const result = await api<ApiResult<Campaign> & {has_more?:boolean}>("/api/v1/campaigns?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=" + offset + "&status=" + encodeURIComponent(campaignStatusFilter) + "&search=" + encodeURIComponent(campaignAppliedSearch), csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
+      const seen = new Set(campaigns.map(item => item.id));
+      setCampaigns(current => [...current, ...(result.items || []).filter(item => !seen.has(item.id))]);
+      setCampaignHasMore(Boolean(result.has_more));
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "More campaigns could not be loaded.");
+    } finally { if (requestedWorkspaceId === workspaceId) setCampaignLoadingMore(false); }
   }
 
   async function updateCampaign(event: FormEvent<HTMLFormElement>, campaign: Campaign) {
@@ -2952,7 +2994,7 @@ export default function DashboardPage() {
             <button className="button" type="submit" disabled={busy || !canWrite || !workspaceId || !csrf}>Save project profile</button>
           </form></article>
         </section>
-        <section className="section" id="campaigns"><h2>Campaigns</h2><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span><details><summary>Edit campaign settings</summary><form onSubmit={event=>updateCampaign(event,c)}><div className="field"><label htmlFor={"campaign-edit-name-"+c.id}>Campaign name</label><input id={"campaign-edit-name-"+c.id} name="name" required maxLength={200} defaultValue={c.name} /></div><div className="field"><label htmlFor={"campaign-edit-business-"+c.id}>Business / client</label><input id={"campaign-edit-business-"+c.id} name="client_business" required maxLength={240} defaultValue={c.client_business} /></div><div className="field"><label htmlFor={"campaign-edit-offer-"+c.id}>Offer</label><textarea id={"campaign-edit-offer-"+c.id} name="client_offer" required maxLength={2000} defaultValue={c.client_offer} /></div><div className="field"><label htmlFor={"campaign-edit-audience-"+c.id}>Target customer profile</label><textarea id={"campaign-edit-audience-"+c.id} name="target_customer_profile" required maxLength={2000} defaultValue={c.target_customer_profile} /></div><div className="field"><label htmlFor={"campaign-edit-status-"+c.id}>Status</label><select id={"campaign-edit-status-"+c.id} name="status" defaultValue={c.status || "draft"}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></div><button className="button secondary" type="submit" disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Save campaign</button></form></details></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div></section>
+        <section className="section" id="campaigns"><h2>Campaigns</h2><div className="card"><div className="field"><label htmlFor="campaign-search">Search campaigns</label><input id="campaign-search" type="search" maxLength={120} value={campaignSearch} onChange={event=>setCampaignSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void searchCampaigns();}}} placeholder="Name, client, offer or audience" /></div><div className="field"><label htmlFor="campaign-status-filter">Campaign status</label><select id="campaign-status-filter" value={campaignStatusFilter} onChange={event=>setCampaignStatusFilter(event.target.value)}><option value="current">All active records</option><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option><option value="all">All statuses</option></select></div><button className="button secondary" type="button" disabled={campaignLoadingMore || !workspaceId || !csrf} onClick={searchCampaigns}>{campaignLoadingMore ? "Loading…" : "Apply campaign filters"}</button></div><div className="cards">{campaigns.length ? campaigns.map(c=><article className="card" key={c.id}><h3>{c.name}</h3><p>{c.client_business}</p><p className="fine">{c.target_customer_profile}</p><span className="fine">{c.status || "Saved campaign"}</span><details><summary>Edit campaign settings</summary><form onSubmit={event=>updateCampaign(event,c)}><div className="field"><label htmlFor={"campaign-edit-name-"+c.id}>Campaign name</label><input id={"campaign-edit-name-"+c.id} name="name" required maxLength={200} defaultValue={c.name} /></div><div className="field"><label htmlFor={"campaign-edit-business-"+c.id}>Business / client</label><input id={"campaign-edit-business-"+c.id} name="client_business" required maxLength={240} defaultValue={c.client_business} /></div><div className="field"><label htmlFor={"campaign-edit-offer-"+c.id}>Offer</label><textarea id={"campaign-edit-offer-"+c.id} name="client_offer" required maxLength={2000} defaultValue={c.client_offer} /></div><div className="field"><label htmlFor={"campaign-edit-audience-"+c.id}>Target customer profile</label><textarea id={"campaign-edit-audience-"+c.id} name="target_customer_profile" required maxLength={2000} defaultValue={c.target_customer_profile} /></div><div className="field"><label htmlFor={"campaign-edit-status-"+c.id}>Status</label><select id={"campaign-edit-status-"+c.id} name="status" defaultValue={c.status || "draft"}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></div><button className="button secondary" type="submit" disabled={busy || !["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")}>Save campaign</button></form></details></article>) : <article className="card"><p>No campaigns yet. Create one above to organize outreach.</p></article>}</div>{campaignHasMore && <button className="button secondary" type="button" disabled={campaignLoadingMore} onClick={loadMoreCampaigns}>{campaignLoadingMore ? "Loading…" : "Load 50 more campaigns"}</button>}</section>
         <section className="section" aria-labelledby="followups-title">
           <h2 id="followups-title">Campaign follow-up sequences</h2>
           <p className="fine">Build timed email or WhatsApp follow-ups. When a step is due, the scheduler creates a draft for review. Every step still requires approval and a separate queue action; this automation never sends without those gates.</p>
