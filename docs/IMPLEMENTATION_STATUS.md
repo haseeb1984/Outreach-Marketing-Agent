@@ -1,3 +1,8 @@
+## Implementation update — 2026-11-27 (first-project onboarding)
+
+- First-project setup now carries the registration workspace name into the project-name field automatically, but only while the selected workspace has no active projects and the customer has not entered a name. The getting-started checklist links directly to the create form, Projects is available in dashboard shortcuts, and the form makes the minimum-first/enrich-later workflow clear. This reuses the existing CSRF-protected, workspace-authorized project API; no automatic project creation or external action occurs.
+- Source-only commit `bc31948d1edbe0a02bd8c675769cc01ce8b4641d` on `main`. No browser, database, build or CI acceptance was performed.
+
 - Unified reply inbox search now runs against the complete workspace conversation set on the backend (prospect name, company, latest message and channel), while retaining 50-thread pagination. Search is workspace-authorized and bounded to 200 characters; implementation is source-committed but not yet tested or deployed.
 
 # Implementation status and release blockers

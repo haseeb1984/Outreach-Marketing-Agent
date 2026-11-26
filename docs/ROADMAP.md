@@ -1,3 +1,7 @@
+## Current implementation update — 2026-11-27 (first-project onboarding; application source `bc31948d1edbe0a02bd8c675769cc01ce8b4641d`)
+
+- Dashboard now pre-fills the first client-project name from the active workspace name when the workspace has no project and the customer has not started typing a different name. The onboarding checklist links directly to the project-creation form, the dashboard shortcuts include Projects, and the form explains that the customer can create a minimal profile first and enrich its audience/offer/brand context later. Existing project API validation and workspace scoping are unchanged. Source-only; no browser, database, build or CI acceptance was run.
+
 ## Current implementation update — 2026-11-27 (first workspace naming; application source `76c55e94bd76a34997bf3d3d6f8736b578c4d9f1`)
 
 - New account registration now collects the business/workspace name and passes it to the account-creation transaction, which creates the customer's initial owner workspace with that chosen name. The API field remains optional for backward compatibility with existing callers; legacy callers still receive the prior email-derived fallback. Names are trimmed and bounded to 160 characters, and blank supplied values are rejected. No extra database migration is needed. Source-only; no registration email, database, browser or build acceptance was run.
