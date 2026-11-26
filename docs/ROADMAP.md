@@ -4,10 +4,12 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-26
 
+- PostgreSQL restore now performs a read-only inspection of the destination database before invoking `pg_restore`. It rejects targets containing user schemas, relations, routines or custom types, in addition to requiring a different source/target identity and explicit confirmation. This closes the gap where a non-empty target could be passed to a restore command despite the documented empty-target requirement. No database restore was run.
+
 - The API `/ready` gate now requires migrations 063–069 and the billing price-history, daily research quota, editorial article/CMS, project-scoped WordPress and saved-research schema. Previously it checked only through migration 062 and could return ready with newer feature tables absent. The readiness query now verifies the 69-migration ledger count and the added critical tables/columns. Source-only; no live database query or migration was run.
 
 - Database readiness and release preflight now track the full migration series through 069_workspace_research_history.sql, including platform billing price-history, daily research quota, editorial briefs/articles, project-scoped WordPress connections and saved research-history schema. The read-only schema diagnostic now checks the associated tables, key columns and indexes, so a database missing these newer feature migrations cannot be reported ready. This is source-only; no live database was queried or migrated.
-- Current application implementation source on main: `b690be9f5342f253b2d95f8ac25743113e6e2dac`. This is a source-control reference, not a CI or deployment claim.
+- Current application implementation source on main: `b5b86156d88a7ef55e835ff17bc7b405d2d1e4ab`. This is a source-control reference, not a CI or deployment claim.
 
 
 - Added a platform-admin-only WhatsApp webhook recovery workflow: a payload-free, paginated dead-letter queue in the admin dashboard plus an explicit per-event requeue confirmation. Replay is available only when the event's phone asset is currently mapped to an active WhatsApp account; the backend atomically requeues only an eligible unprocessed dead-letter event and records an audit event with the exact previous attempt count. Inactive/unmapped phone assets are visibly blocked from replay. This does not expose payloads or enable outbound sending. Source-only; no database/runtime or Meta provider acceptance was run.
