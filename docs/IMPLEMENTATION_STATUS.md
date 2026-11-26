@@ -2,6 +2,12 @@
 
 # Implementation status and release blockers
 
+## Implementation update — 2026-11-27 (first workspace naming)
+
+- Registration now asks for the business/workspace name and sends it with the account-creation request. `AuthStore.register_user` writes the supplied, trimmed name into the same transaction that creates the pending account, initial workspace, owner membership, verification token and audit event. The backend field is optional for compatibility with existing callers; omitted values retain the existing email-derived fallback. The UI requires a name, with a 160-character bound; blank supplied API values are rejected. No schema migration is required.
+- Source-only. No SMTP delivery, live database, browser, build or deployment acceptance was performed.
+
+
 ## Implementation update — 2026-11-27 (workspace invitation sign-in continuation)
 
 - Fixed the interrupted invitation journey for customers who are not signed in. The invitation page now removes the token fragment immediately and retains the short-lived token in tab-scoped session storage; its sign-in link carries no token and requests only the fixed /invitations/accept return route. After login, the customer returns to invitation acceptance and can complete the existing CSRF-protected, invited-email-matched API action without reopening the email. The login redirect allowlist accepts only this exact local route; other next values resolve to /dashboard. Successful and invalid/expired acceptance clear the pending token. Email-mismatch errors retain it so the customer can sign in with the invited address.

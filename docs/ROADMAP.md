@@ -1,3 +1,7 @@
+## Current implementation update — 2026-11-27 (first workspace naming)
+
+- New account registration now collects the business/workspace name and passes it to the account-creation transaction, which creates the customer's initial owner workspace with that chosen name. The API field remains optional for backward compatibility with existing callers; legacy callers still receive the prior email-derived fallback. Names are trimmed and bounded to 160 characters, and blank supplied values are rejected. No extra database migration is needed. Source-only; no registration email, database, browser or build acceptance was run.
+
 ## Current implementation update — 2026-11-27 (invitation continuation)
 
 - Workspace invitation acceptance now survives the sign-in step in the same browser tab: the short-lived invitation token is retained in tab-scoped session storage after its URL fragment is immediately removed, the sign-in link returns only to the fixed invitation route, and successful or expired/invalid acceptance clears the stored token. Login redirects accept only that exact local route; all other destinations fall back to the dashboard. This avoids asking an invited customer to reopen an email link after signing in, without introducing an arbitrary redirect target. Source-only; no browser/session-storage acceptance was run.
