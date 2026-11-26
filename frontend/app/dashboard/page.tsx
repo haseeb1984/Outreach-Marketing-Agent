@@ -501,9 +501,10 @@ export default function DashboardPage() {
   }, [csrf, loadWorkspaceData, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !csrf) { setResearchRuns([]); setResearchHistoryOffset(0); setResearchHistoryHasMore(false); return; }
+    if (!workspaceId || !csrf) { setResearchRuns([]); setResearchHistoryOffset(0); setResearchHistoryHasMore(false); setResearchHistoryLoadingMore(false); return; }
     let cancelled = false;
     setResearchHistoryBusy(true);
+    setResearchHistoryLoadingMore(false);
     api<{ items: ResearchRun[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=30&offset=0", csrf)
       .then(result => { if (!cancelled) { setResearchRuns(result.items || []); setResearchHistoryOffset(result.next_offset ?? (result.items || []).length); setResearchHistoryHasMore(Boolean(result.has_more)); } })
       .catch(() => { if (!cancelled) { setResearchRuns([]); setResearchHistoryOffset(0); setResearchHistoryHasMore(false); } })
