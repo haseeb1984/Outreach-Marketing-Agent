@@ -69,6 +69,7 @@ async def export_account_data(request: Request) -> JSONResponse:
                     "invitations": [],
                     "email_accounts": [],
                     "website_audits": [],
+                    "research_runs": [],
                     "content_briefs": [],
                     "wordpress_connections": [],
                     "workspace_growth_schedules": [],
@@ -276,6 +277,19 @@ async def export_account_data(request: Request) -> JSONResponse:
                     if truncated:
                         export["limits"]["truncated_collections"].append("website_audits")
                     export["website_audits"] = [dict(row) for row in audit_report_rows]
+                    research_run_rows = await conn.fetch(
+                        """SELECT id,workspace_id,created_by,research_type,query,provider,parameters,
+                                  results,result_count,created_at
+                           FROM workspace_research_runs WHERE workspace_id=ANY($1::text[])
+                           ORDER BY created_at DESC,id LIMIT $2""",
+                        workspace_ids, _MAX_EXPORT_ROWS + 1,
+                    )
+                    research_run_rows, truncated = _bounded_export_rows(
+                        research_run_rows, limit=_MAX_EXPORT_ROWS
+                    )
+                    if truncated:
+                        export["limits"]["truncated_collections"].append("research_runs")
+                    export["research_runs"] = [dict(row) for row in research_run_rows]
                     audit_rows = await conn.fetch(
                         """SELECT workspace_id,event_type,outcome,created_at
                            FROM security_audit_events
