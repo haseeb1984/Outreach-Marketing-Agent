@@ -396,14 +396,29 @@ async def readiness() -> Response:
                             '059_workspace_display_name.sql',
                             '060_account_deletion_lifecycle.sql',
                             '061_workspace_delivery_cascade_consistency.sql',
-                            '062_followup_resolution_tenant_cleanup.sql'
-                          )) = 62
+                            '062_followup_resolution_tenant_cleanup.sql',
+                            '063_platform_billing_price_history.sql',
+                            '064_daily_prospect_research_quota.sql',
+                            '065_website_content_briefs.sql',
+                            '066_website_content_articles.sql',
+                            '067_wordpress_content_delivery.sql',
+                            '068_project_scoped_wordpress_connections.sql',
+                            '069_workspace_research_history.sql'
+                          )) = 69
                      AND to_regclass('public.outreach_followup_delivery_resolutions') IS NOT NULL
                      AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversation_activity') IS NOT NULL
                      AND to_regclass('public.whatsapp_inbox_saved_views') IS NOT NULL
                      AND to_regclass('public.billing_transaction_events') IS NOT NULL
                      AND to_regclass('public.billing_transactions') IS NOT NULL
+                     AND to_regclass('public.platform_billing_plan_price_history') IS NOT NULL
+                     AND to_regclass('public.daily_feature_usage_reservations') IS NOT NULL
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='platform_billing_plan_price_history' AND column_name='plan_slug')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_feature_usage_reservations' AND column_name='usage_date')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='website_content_briefs' AND column_name='article_body')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='website_content_briefs' AND column_name='cms_connection_id')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workspace_research_runs' AND column_name='research_type')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workspace_research_runs' AND column_name='results')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='website_audit_reports' AND column_name='job_id')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_message_templates' AND column_name='components')
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='whatsapp_outbound_deliveries' AND column_name='template_parameters')
