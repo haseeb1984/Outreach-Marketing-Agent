@@ -15,6 +15,8 @@ type BillingReconciliationItem = { workspace_id: string; workspace_name: string;
 type BillingReconciliation = { summary: Record<string, number>; items: BillingReconciliationItem[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean };
 type BillingEvent = { event_kind: string; provider: string; provider_event_id: string; workspace_id: string | null; workspace_name: string | null; related_id: string; event_created_at: string; received_at: string; outcome: string; transaction_status: string | null; invoice_number: string | null };
 type BillingEvents = { items: BillingEvent[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean; payloads_exposed: boolean };
+type WhatsAppDeadLetter = { id: string; phone_number_id: string | null; event_kind: string; attempts: number; received_at: string; processing_started_at: string | null; dead_lettered_at: string | null; processing_error_code: string | null };
+type WhatsAppDeadLetters = { summary: { total: number; awaiting_manual_review: number; oldest_dead_lettered_at: string | null }; items: WhatsAppDeadLetter[]; limit: number; offset: number; has_more: boolean; read_only: boolean; payloads_exposed: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "ai_draft_generations": { "enabled": true, "monthly_limit": 100 },\n  "email_sends": { "enabled": true, "monthly_limit": 1000 },\n  "website_audits": { "enabled": true, "monthly_limit": 25 },\n  "whatsapp_sends": { "enabled": false, "monthly_limit": 0 },\n  "prospect_research": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
 
@@ -60,6 +62,10 @@ export default function PlatformAdminPage() {
   const [billingEventQuery, setBillingEventQuery] = useState("");
   const [billingEventOffset, setBillingEventOffset] = useState(0);
   const [billingEventsLoading, setBillingEventsLoading] = useState(false);
+  const [whatsappDeadLetters, setWhatsappDeadLetters] = useState<WhatsAppDeadLetters | null>(null);
+  const [whatsappDeadLetterOffset, setWhatsappDeadLetterOffset] = useState(0);
+  const [whatsappDeadLettersLoading, setWhatsappDeadLettersLoading] = useState(false);
+  const [replayingWhatsappEventId, setReplayingWhatsappEventId] = useState("");
   const [clientOffset, setClientOffset] = useState(0);
   const [usageOffset, setUsageOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
@@ -87,6 +93,27 @@ export default function PlatformAdminPage() {
       setBillingEventOffset(result.offset);
       setBillingEventQuery(search);
     } finally { setBillingEventsLoading(false); }
+  }
+
+  async function loadWhatsappDeadLetters(token: string, offset = 0) {
+    setWhatsappDeadLettersLoading(true);
+    try {
+      const result = await api<WhatsAppDeadLetters>("/api/v1/platform-admin/whatsapp/webhook-events/dead-lettered?limit=50&offset=" + offset, token);
+      setWhatsappDeadLetters(result);
+      setWhatsappDeadLetterOffset(result.offset);
+    } finally { setWhatsappDeadLettersLoading(false); }
+  }
+
+  async function replayWhatsappDeadLetter(event: WhatsAppDeadLetter) {
+    if (!window.confirm("Requeue this failed Meta webhook event for another processing attempt? The event will be handled by the background worker. This does not send a WhatsApp message.")) return;
+    setReplayingWhatsappEventId(event.id); setError(""); setNotice("");
+    try {
+      await api("/api/v1/platform-admin/whatsapp/webhook-events/" + encodeURIComponent(event.id) + "/replay", csrf, { method: "POST", body: "{}" });
+      await loadWhatsappDeadLetters(csrf, whatsappDeadLetterOffset);
+      setNotice("Webhook event requeued. Background processing will retry it; no WhatsApp message was sent.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Webhook event could not be requeued.");
+    } finally { setReplayingWhatsappEventId(""); }
   }
 
   async function loadClientDetail(workspaceId: string) {
@@ -123,6 +150,7 @@ export default function PlatformAdminPage() {
         refresh(csrf, clientOffset, usageOffset, auditOffset, clientQuery, auditQuery),
         loadBillingReconciliation(csrf, billingOffset, billingQuery),
         loadBillingEvents(csrf, billingEventOffset, billingEventQuery),
+        loadWhatsappDeadLetters(csrf, whatsappDeadLetterOffset),
       ]);
       setPlatformSmtp(smtp);
       setNotice("Platform overview and SMTP readiness refreshed.");
@@ -142,6 +170,7 @@ export default function PlatformAdminPage() {
         await refresh(session.csrf_token);
         await loadBillingReconciliation(session.csrf_token);
         await loadBillingEvents(session.csrf_token);
+        await loadWhatsappDeadLetters(session.csrf_token);
         const smtp = await api<{ configuration_complete: boolean; missing_fields: string[]; connection_tested: boolean }>("/api/v1/platform-admin/smtp/status", session.csrf_token);
         if (active) setPlatformSmtp(smtp);
       } catch (e) { if (active) setError(e instanceof Error ? e.message : "Admin access unavailable."); }
@@ -288,6 +317,28 @@ export default function PlatformAdminPage() {
           <button className="button secondary" type="button" disabled={billingLoading || billingOffset===0} onClick={async()=>{try{await loadBillingReconciliation(csrf,Math.max(0,billingOffset-50),billingQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load previous billing records.");}}}>Previous</button>
           <span className="fine">Subscriptions {billingReconciliation?.total ? billingOffset+1 : 0}–{Math.min(billingOffset+(billingReconciliation?.items.length||0),billingReconciliation?.total||0)} of {billingReconciliation?.total||0}</span>
           <button className="button secondary" type="button" disabled={billingLoading || !billingReconciliation?.truncated} onClick={async()=>{try{await loadBillingReconciliation(csrf,billingOffset+50,billingQuery);}catch(e){setError(e instanceof Error?e.message:"Could not load next billing records.");}}}>Next</button>
+        </div>
+      </section>
+      <section className="section" aria-labelledby="whatsapp-dead-letter-title">
+        <h2 id="whatsapp-dead-letter-title">WhatsApp webhook recovery</h2>
+        <p className="fine">Events that exhausted eight automatic worker attempts. Payloads and message content are never shown. Requeue is a deliberate, audited admin action; the worker processes the event again and this control never sends an outbound WhatsApp message.</p>
+        <div className="metric-grid">
+          <article className="card"><p className="fine">Dead-lettered events</p><p className="metric-value">{whatsappDeadLetters?.summary.total.toLocaleString() ?? "—"}</p></article>
+          <article className="card"><p className="fine">Awaiting manual review</p><p className="metric-value">{whatsappDeadLetters?.summary.awaiting_manual_review.toLocaleString() ?? "—"}</p></article>
+          <article className="card"><p className="fine">Oldest dead-lettered</p><p>{formatAdminDate(whatsappDeadLetters?.summary.oldest_dead_lettered_at, true)}</p></article>
+        </div>
+        <div className="card table-wrap"><table><thead><tr><th>Event</th><th>Phone asset</th><th>Kind</th><th>Attempts</th><th>Received</th><th>Dead-lettered</th><th>Last error</th><th>Action</th></tr></thead><tbody>
+          {whatsappDeadLetters?.items.map(event=><tr key={event.id}>
+            <td><span className="fine">{event.id}</span></td><td>{event.phone_number_id || "Unmapped"}</td><td>{event.event_kind}</td><td>{event.attempts}</td>
+            <td>{formatAdminDate(event.received_at,true)}</td><td>{formatAdminDate(event.dead_lettered_at,true)}</td><td>{event.processing_error_code || "—"}</td>
+            <td><button className="button secondary" type="button" disabled={!csrf || busy || whatsappDeadLettersLoading || !!replayingWhatsappEventId} onClick={()=>void replayWhatsappDeadLetter(event)}>{replayingWhatsappEventId===event.id ? "Requeuing…" : "Requeue event"}</button></td>
+          </tr>)}
+        </tbody></table>{whatsappDeadLetters && !whatsappDeadLetters.items.length && <p>No dead-lettered WhatsApp webhook events require review.</p>}</div>
+        <div className="actions" aria-label="WhatsApp webhook dead-letter pagination">
+          <button className="button secondary" type="button" disabled={whatsappDeadLettersLoading || whatsappDeadLetterOffset===0} onClick={()=>void loadWhatsappDeadLetters(csrf,Math.max(0,whatsappDeadLetterOffset-50))}>Previous</button>
+          <span className="fine">Events {whatsappDeadLetters?.summary.total ? whatsappDeadLetterOffset+1 : 0}–{whatsappDeadLetterOffset+(whatsappDeadLetters?.items.length||0)} of {whatsappDeadLetters?.summary.total||0}</span>
+          <button className="button secondary" type="button" disabled={whatsappDeadLettersLoading || !whatsappDeadLetters?.has_more} onClick={()=>void loadWhatsappDeadLetters(csrf,whatsappDeadLetterOffset+50)}>Next</button>
+          <button className="button secondary" type="button" disabled={whatsappDeadLettersLoading || !csrf} onClick={()=>void loadWhatsappDeadLetters(csrf,whatsappDeadLetterOffset)}>Refresh events</button>
         </div>
       </section>
       <section className="section" aria-labelledby="plans-title"><h2 id="plans-title">Package management</h2><p className="fine">Price IDs are shown only to authorized platform admins. Deleting a package is a soft-deactivation so billing history is retained.</p><div className="actions"><button className="button secondary" type="button" disabled={busy || !csrf} onClick={importConfiguredPlans}>Import configured Paddle packages</button><span className="fine">Imports environment-configured packages only when the slug and price ID are not already present. Existing admin edits are preserved.</span></div>
