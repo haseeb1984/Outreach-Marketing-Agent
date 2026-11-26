@@ -12,6 +12,7 @@
 
 ## Implementation update — 2026-11-26 (persistent research evidence)
 
+- Saved research history now paginates in 30-record batches with server-side `has_more`/`next_offset` metadata. The dashboard loads older runs on demand, deduplicates appended records, resets to the newest page after a successful search, and adjusts the next offset after a manual deletion. Source-only; no browser/database acceptance has been run.
 - WhatsApp integration status copy now distinguishes the application dispatch gate from actual Meta sandbox/production acceptance, avoiding the implication that a configured flag proves provider readiness. No live sending or provider acceptance was performed.
 - Research-history storage is bounded to the newest 500 successful runs per workspace. New snapshots and pruning occur in one database transaction, serialized by locking the workspace row so concurrent searches cannot race the cap; older snapshots are removed automatically, while manual per-run deletion remains available. Source-only; migration/runtime behavior has not been tested.
 - Prospect research provider resilience: Brave remains preferred, but a valid empty Brave result set now triggers the configured SerpAPI fallback. If fallback is unavailable, a genuine empty Brave response is preserved as a successful empty result rather than misreported as provider outage. Source-only; no provider credentials or live searches were exercised.
