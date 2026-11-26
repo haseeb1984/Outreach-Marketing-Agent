@@ -4,6 +4,7 @@ import { SiteHeader, SiteFooter } from "../components/site-chrome";
 import { FormEvent, useState } from "react";
 
 export default function RegisterPage() {
+  const [workspaceName, setWorkspaceName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -20,7 +21,7 @@ export default function RegisterPage() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, workspace_name: workspaceName.trim() }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -45,7 +46,7 @@ export default function RegisterPage() {
   return <>
     <SiteHeader/>
     <main className="wrap auth-main"><section className="form-card auth-card" aria-labelledby="register-title"><p className="eyebrow">Create an account</p><h1 id="register-title">Start with your workspace</h1><p className="fine">Use a unique password with at least 12 characters. You must verify your email before signing in.</p>
-      <form onSubmit={submit}><div className="field"><label htmlFor="email">Work email</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div>
+      <form onSubmit={submit}><div className="field"><label htmlFor="workspace-name">Business or workspace name</label><input id="workspace-name" name="workspace_name" type="text" autoComplete="organization" maxLength={160} required value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} placeholder="e.g. Acme Marketing" /></div><div className="field"><label htmlFor="email">Work email</label><input id="email" name="email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={event => setEmail(event.target.value)} /></div>
       <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></div>
       <button className="button" type="submit" disabled={busy}>{busy ? "Submitting…" : "Create account"}</button></form>
       {message && <p className="notice" role={success ? "status" : "alert"} aria-live="polite">{message}</p>}

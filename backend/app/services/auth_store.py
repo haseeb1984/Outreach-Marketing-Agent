@@ -21,7 +21,8 @@ class AuthStore:
         self._pool = pool
 
     async def register_user(
-        self, *, email: str, password: str, verification_lifetime_hours: int = 24,
+        self, *, email: str, password: str, workspace_name: str | None = None,
+        verification_lifetime_hours: int = 24,
     ) -> dict[str, Any] | None:
         """Create a pending user, personal workspace, owner membership and verification token.
 
@@ -32,6 +33,10 @@ class AuthStore:
         from app.services.auth_security import hash_password, normalize_email
 
         normalized_email = normalize_email(email)
+        if workspace_name is not None:
+            if not isinstance(workspace_name, str) or not workspace_name.strip() or len(workspace_name.strip()) > 160:
+                raise ValueError("invalid_workspace_name")
+            workspace_name = workspace_name.strip()
         password_hash = hash_password(password).encoded
         if (
             isinstance(verification_lifetime_hours, bool)
@@ -54,10 +59,12 @@ class AuthStore:
                 )
                 if user is None:
                     return None
-                workspace_name = normalized_email.split("@", 1)[0].strip()[:140] + "'s workspace"
+                initial_workspace_name = workspace_name or (
+                    normalized_email.split("@", 1)[0].strip()[:140] + "'s workspace"
+                )
                 await connection.execute(
                     "INSERT INTO workspaces (id, name) VALUES ($1, $2)",
-                    workspace_id, workspace_name,
+                    workspace_id, initial_workspace_name,
                 )
                 await connection.execute(
                     """INSERT INTO workspace_memberships

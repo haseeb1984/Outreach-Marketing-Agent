@@ -184,7 +184,12 @@ async def register(payload: RegistrationInput, request: Request):
     except EmailDeliveryNotConfigured:
         raise HTTPException(status_code=503, detail="email_delivery_not_configured") from None
     try:
-        created = await store.register_user(email=email, password=payload.password)
+        workspace_name = payload.workspace_name.strip() if payload.workspace_name is not None else None
+        if payload.workspace_name is not None and not workspace_name:
+            raise HTTPException(status_code=422, detail="workspace_name_required")
+        created = await store.register_user(
+            email=email, password=payload.password, workspace_name=workspace_name,
+        )
     except ValueError:
         raise HTTPException(status_code=422, detail="invalid_registration_input") from None
     except Exception:
