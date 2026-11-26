@@ -64,11 +64,12 @@ class CampaignStore:
         pattern = "%" + term.replace("%", "\\%").replace("_", "\\_") + "%"
         async with self._pool.acquire() as conn:
             count = await conn.fetchval(
-                """SELECT count(*) FROM outreach_campaigns
-                   WHERE workspace_id=$1
-                     AND ($2='all' OR ($2='current' AND status <> 'archived') OR status=$2)
-                     AND ($3='' OR name ILIKE $4 OR client_business ILIKE $4
-                          OR client_offer ILIKE $4 OR target_customer_profile ILIKE $4)""",
+                """SELECT count(*) FROM outreach_campaigns c
+                   LEFT JOIN workspace_projects p ON p.id=c.project_id AND p.workspace_id=c.workspace_id
+                   WHERE c.workspace_id=$1
+                     AND ($2='all' OR ($2='current' AND c.status <> 'archived') OR c.status=$2)
+                     AND ($3='' OR c.name ILIKE $4 OR c.client_business ILIKE $4
+                          OR c.client_offer ILIKE $4 OR c.target_customer_profile ILIKE $4 OR p.name ILIKE $4)""",
                 workspace_id, status, term, pattern,
             )
         return int(count or 0)
@@ -84,7 +85,10 @@ class CampaignStore:
                 if project_id_supplied and project_id is not None:
                     project = await conn.fetchrow(
                         """SELECT id FROM workspace_projects WHERE id=$1 AND workspace_id=$2
-                           AND archived_at IS NULL FOR KEY SHARE""", project_id, workspace_id)
+                           AND (archived_at IS NULL OR EXISTS (
+                               SELECT 1 FROM outreach_campaigns
+                               WHERE id=$3 AND workspace_id=$2 AND project_id=$1
+                           )) FOR KEY SHARE""", project_id, workspace_id, campaign_id)
                     if project is None:
                         raise ValueError("project_not_found_or_archived")
                 row = await conn.fetchrow(
@@ -569,7 +573,7 @@ class CampaignStore:
 
     @classmethod
     def _serialize(cls, row: dict[str, Any]) -> dict[str, Any]:
-        for key in ("id", "created_by", "reviewed_by", "campaign_id", "prospect_id", "updated_by"):
+        for key in ("id", "created_by", "reviewed_by", "campaign_id", "prospect_id", "project_id", "updated_by"):
             if row.get(key) is not None:
                 row[key] = str(row[key])
         if "verified_facts_used" in row:
