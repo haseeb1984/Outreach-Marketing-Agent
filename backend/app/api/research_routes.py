@@ -92,6 +92,51 @@ def _public_https_url(value: object) -> str | None:
         return None
 
 
+async def _search_public_web(query: str, count: int) -> tuple[str, list[dict] | None]:
+    """Query an available search provider and normalize results to the Brave result shape."""
+    timeout = httpx.Timeout(12.0, connect=4.0)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+        # Prefer Brave when configured; fall back to SerpAPI on provider errors or absence.
+        if settings.brave_search_api_key and settings.brave_search_api_key.strip():
+            try:
+                response = await client.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    params={"q": query, "count": min(20, count), "safesearch": "moderate"},
+                    headers={"Accept": "application/json", "X-Subscription-Token": settings.brave_search_api_key},
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    web = data.get("web") if isinstance(data, dict) else None
+                    results = web.get("results") if isinstance(web, dict) else None
+                    if isinstance(results, list):
+                        return "brave_search", results
+            except (httpx.HTTPError, ValueError, TypeError):
+                pass
+        if settings.serpapi_api_key and settings.serpapi_api_key.strip():
+            try:
+                response = await client.get(
+                    "https://serpapi.com/search.json",
+                    params={"engine": "google", "q": query, "num": min(20, count), "safe": "active", "api_key": settings.serpapi_api_key},
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    organic = data.get("organic_results") if isinstance(data, dict) else None
+                    if isinstance(organic, list):
+                        normalized = []
+                        for item in organic:
+                            if not isinstance(item, dict):
+                                continue
+                            normalized.append({
+                                "url": item.get("link"),
+                                "title": item.get("title"),
+                                "description": item.get("snippet") or "",
+                            })
+                        return "serpapi", normalized
+            except (httpx.HTTPError, ValueError, TypeError):
+                pass
+    return "unavailable", None
+
+
 _SEARCH_STOP_WORDS = {
     "about", "and", "are", "for", "from", "how", "into", "its", "our", "the",
     "their", "this", "that", "with", "you", "your", "who", "what", "where",
@@ -140,7 +185,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
-    if not settings.brave_search_api_key or not settings.brave_search_api_key.strip():
+    if not ((settings.brave_search_api_key and settings.brave_search_api_key.strip()) or (settings.serpapi_api_key and settings.serpapi_api_key.strip())):
         raise HTTPException(status_code=503, detail="search_provider_not_configured")
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
@@ -164,23 +209,12 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
     reservation_id = reservation["reservation_id"]
     requested_count = int(reservation.get("reserved_units", payload.count))
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False) as client:
-            response = await client.get(
-                "https://api.search.brave.com/res/v1/web/search",
-                params={"q": payload.query.strip(), "count": min(20, requested_count * 2), "safesearch": "moderate"},
-                headers={
-                    "Accept": "application/json",
-                    "X-Subscription-Token": settings.brave_search_api_key,
-                },
-            )
-        if response.status_code != 200:
+        provider, raw_results = await _search_public_web(payload.query.strip(), requested_count * 2)
+        if raw_results is None:
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
             raise HTTPException(status_code=502, detail="search_provider_unavailable")
-        data = response.json()
-        web = data.get("web") if isinstance(data, dict) else None
-        raw_results = web.get("results") if isinstance(web, dict) else None
         if not isinstance(raw_results, list):
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
@@ -233,7 +267,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         return {
             "workspace_id": payload.workspace_id,
             "query": payload.query.strip(),
-            "provider": "brave_search",
+            "provider": provider,
             "ranking": {
                 "method": "query_term_overlap_v1",
                 "description": "Lexical overlap between query, title and snippet; not a prediction of lead quality or conversion.",
@@ -402,20 +436,12 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
     reservation_id = reservation["reservation_id"]
     requested_count = int(reservation.get("reserved_units", payload.count))
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False) as client:
-            response = await client.get(
-                "https://api.search.brave.com/res/v1/web/search",
-                params={"q": search_query, "count": min(20, requested_count * 3), "safesearch": "moderate"},
-                headers={"Accept": "application/json", "X-Subscription-Token": settings.brave_search_api_key},
-            )
-        if response.status_code != 200:
+        provider, raw_results = await _search_public_web(search_query, requested_count * 3)
+        if raw_results is None:
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
             )
             raise HTTPException(status_code=502, detail="search_provider_unavailable")
-        data = response.json()
-        web = data.get("web") if isinstance(data, dict) else None
-        raw_results = web.get("results") if isinstance(web, dict) else None
         if not isinstance(raw_results, list):
             await subscriptions.finish_reservation(
                 workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="released", units=0
