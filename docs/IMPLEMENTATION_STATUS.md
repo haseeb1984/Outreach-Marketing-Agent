@@ -3,7 +3,7 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `3d89dbdbe397d6624cb6a4139dbffbf13fea2b3c` on `main` (2026-11-26). Billing dashboard, WhatsApp queue management/pagination and dispatch gating, research provider fallback, bounded/paginated research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed the consolidated CI/build or provider acceptance.  
+**Current application implementation source checked:** `d73cdb6c1fd794549f7c4a553fda48850b8e1f5a` on `main` (2026-11-26). Recent billing dashboard, WhatsApp queue and delivery analytics, dispatch gating, research provider fallback and bounded/paginated research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed consolidated CI/build or provider acceptance.
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
@@ -12,6 +12,7 @@
 
 ## Implementation update — 2026-11-26 (persistent research evidence)
 
+- Analytics now counts WhatsApp provider-confirmed delivery cumulatively: a `read` status also qualifies as delivered, so later read transitions no longer make delivered totals fall. Workspace summary exposes distinct provider-confirmed deliveries and reads; campaign metrics derive these from persisted provider status events in the selected reporting window rather than only the delivery row's current state. Source-only; SQL/runtime and dashboard acceptance remain pending.
 - Saved research history now paginates in 30-record batches with server-side `has_more`/`next_offset` metadata. The dashboard loads older runs on demand, deduplicates appended records, resets to the newest page after a successful search, and adjusts the next offset after a manual deletion. Source-only; no browser/database acceptance has been run.
 - WhatsApp integration status copy now distinguishes the application dispatch gate from actual Meta sandbox/production acceptance, avoiding the implication that a configured flag proves provider readiness. No live sending or provider acceptance was performed.
 - Research-history storage is bounded to the newest 500 successful runs per workspace. New snapshots and pruning occur in one database transaction, serialized by locking the workspace row so concurrent searches cannot race the cap; older snapshots are removed automatically, while manual per-run deletion remains available. Source-only; migration/runtime behavior has not been tested.
