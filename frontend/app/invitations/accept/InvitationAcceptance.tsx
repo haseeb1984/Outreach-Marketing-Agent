@@ -17,16 +17,29 @@ export default function InvitationAcceptance() {
     let cancelled = false;
     const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
     const fragmentParams = new URLSearchParams(fragment);
-    const inviteToken = fragmentParams.get("token") || "";
+    const fragmentToken = fragmentParams.get("token") || "";
     // Remove the bearer token from browser history/address bar immediately.
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    const storageKey = "oma.pending-workspace-invitation";
+    let inviteToken = fragmentToken;
+    try {
+      if (inviteToken) {
+        // Keep the short-lived invite only in this tab so sign-in can resume acceptance.
+        window.sessionStorage.setItem(storageKey, inviteToken);
+      } else {
+        inviteToken = window.sessionStorage.getItem(storageKey) || "";
+      }
+    } catch {
+      // Storage restrictions should not prevent an already-authenticated user from
+      // accepting a token still present in the current page fragment.
+    }
     setToken(inviteToken);
     fetch("/api/v1/auth/me", { credentials: "same-origin", cache: "no-store" })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!inviteToken) throw new Error("The invitation token is missing. Open the complete link from the invitation email.");
         if (!response.ok || typeof data.csrf_token !== "string" || !data.csrf_token) {
-          throw new Error("Sign in with the invited email address, then reopen the invitation link.");
+          throw new Error("Sign in with the invited email address to continue accepting this invitation.");
         }
         if (!cancelled) {
           setCsrf(data.csrf_token);
@@ -53,6 +66,7 @@ export default function InvitationAcceptance() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        const code = typeof data.detail === "string" ? data.detail : "";
         const details: Record<string, string> = {
           invitation_invalid_or_expired: "This invitation is invalid, expired or already used.",
           invitation_expired: "This invitation has expired. Ask the workspace admin to send a new one.",
@@ -60,8 +74,14 @@ export default function InvitationAcceptance() {
           already_workspace_member: "This account is already a member of the workspace.",
           csrf_validation_failed: "Security check expired. Refresh this page and try again.",
         };
-        throw new Error(details[typeof data.detail === "string" ? data.detail : ""] || "The invitation could not be accepted.");
+        if (code === "invitation_invalid_or_expired" || code === "invitation_expired") {
+          try { window.sessionStorage.removeItem("oma.pending-workspace-invitation"); } catch {}
+          setToken("");
+        }
+        throw new Error(details[code] || "The invitation could not be accepted.");
       }
+      try { window.sessionStorage.removeItem("oma.pending-workspace-invitation"); } catch {}
+      setToken("");
       setMessage("Invitation accepted. Opening your workspace…");
       router.replace("/dashboard");
       router.refresh();
@@ -80,7 +100,7 @@ export default function InvitationAcceptance() {
       {message ? <p className="notice" role="status" aria-live="polite">{message}</p> : null}
       {!sessionReady && token ? <p className="fine">Checking your sign-in session…</p> : null}
       {sessionReady && token ? <button className="button" type="button" disabled={busy} onClick={accept}>{busy ? "Accepting invitation…" : "Accept invitation"}</button> : null}
-      {!sessionReady && <p><Link href="/login">Sign in</Link> · <Link href="/register">Create account</Link></p>}
+      {!sessionReady && <p><Link href="/login?next=%2Finvitations%2Faccept">Sign in and continue</Link> · <Link href="/register">Create account</Link></p>}
       <p className="fine">The invitation can only be accepted by the account matching the invited email address.</p>
     </section></main>
     <SiteFooter/>

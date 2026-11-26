@@ -41,7 +41,11 @@ export default function LoginPage() {
         };
         throw new Error(friendly[detail] || "Sign-in could not be completed. Check your details or try again later.");
       }
-      router.replace("/dashboard");
+      const requestedNext = new URLSearchParams(window.location.search).get("next");
+      // Only allow the invitation acceptance route as a post-login destination.
+      // Arbitrary external or unrelated paths must never become an open redirect.
+      const destination = requestedNext === "/invitations/accept" ? requestedNext : "/dashboard";
+      router.replace(destination);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not reach the account service.");
