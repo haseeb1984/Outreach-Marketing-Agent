@@ -672,10 +672,14 @@ async def whatsapp_webhook_dead_letters(
                    WHERE dead_lettered_at IS NOT NULL"""
             )
             rows = await conn.fetch(
-                """SELECT id,phone_number_id,event_kind,attempts,received_at,
-                          processing_started_at,dead_lettered_at,processing_error_code
-                   FROM meta_whatsapp_webhook_events
-                   WHERE dead_lettered_at IS NOT NULL
+                """SELECT e.id,e.phone_number_id,e.event_kind,e.attempts,e.received_at,
+                          e.processing_started_at,e.dead_lettered_at,e.processing_error_code,
+                          EXISTS (
+                            SELECT 1 FROM workspace_whatsapp_accounts a
+                            WHERE a.phone_number_id=e.phone_number_id AND a.status='active'
+                          ) AS phone_account_active
+                   FROM meta_whatsapp_webhook_events e
+                   WHERE e.dead_lettered_at IS NOT NULL
                    ORDER BY dead_lettered_at DESC,id DESC
                    LIMIT $1 OFFSET $2""",
                 limit, offset,
@@ -721,10 +725,14 @@ async def replay_whatsapp_webhook_dead_letter(event_id: str, request: Request):
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """WITH eligible AS (
-                         SELECT id,event_kind,attempts
-                         FROM meta_whatsapp_webhook_events
-                         WHERE id=$1 AND processed_at IS NULL AND dead_lettered_at IS NOT NULL
-                         FOR UPDATE
+                         SELECT e.id,e.event_kind,e.attempts
+                         FROM meta_whatsapp_webhook_events e
+                         WHERE e.id=$1 AND e.processed_at IS NULL AND e.dead_lettered_at IS NOT NULL
+                           AND EXISTS (
+                             SELECT 1 FROM workspace_whatsapp_accounts a
+                             WHERE a.phone_number_id=e.phone_number_id AND a.status='active'
+                           )
+                         FOR UPDATE OF e
                        )
                        UPDATE meta_whatsapp_webhook_events e
                        SET attempts=0, processing_started_at=NULL,
@@ -741,7 +749,7 @@ async def replay_whatsapp_webhook_dead_letter(event_id: str, request: Request):
                     )
                     if exists is None:
                         raise HTTPException(status_code=404, detail="webhook_event_not_found")
-                    raise HTTPException(status_code=409, detail="webhook_event_not_replayable")
+                    raise HTTPException(status_code=409, detail="webhook_event_not_replayable_or_phone_inactive")
                 await conn.execute(
                     """INSERT INTO platform_admin_audit_events
                        (actor_user_id,event_type,target_type,target_id,metadata)
