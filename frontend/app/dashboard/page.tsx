@@ -34,6 +34,7 @@ type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: stri
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string; delivery_status?: string | null };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
+type ResearchRun = { id: string; research_type: "prospects" | "influencers"; query: string; provider: string; result_count: number; created_at: string };
 type ResearchResult = { title: string; url: string; domain?: string; description: string; relevance_score?: number; relevance_reasons?: string[]; relevance_method?: string; evidence_type: string; requires_human_review: boolean };
 type InfluencerCandidate = { profile_url: string; platform: string; title: string; description: string; relevance_score: number; relevance_reasons: string[]; requires_human_review: boolean; audience_metrics: null; audience_metrics_status: string };
 type DomainChallenge = { domain: string; expires_at: string; dns_record: { record_name: string; record_value: string; type: string }; instructions: string };
@@ -193,6 +194,8 @@ export default function DashboardPage() {
   const crmPageSize = 50;
   const [researchQuery, setResearchQuery] = useState("");
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
+  const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
+  const [researchHistoryBusy, setResearchHistoryBusy] = useState(false);
   const [researchBusy, setResearchBusy] = useState(false);
   const [influencerQuery, setInfluencerQuery] = useState("");
   const [influencerPlatforms, setInfluencerPlatforms] = useState(["instagram", "tiktok", "youtube", "linkedin", "x"]);
@@ -452,6 +455,17 @@ export default function DashboardPage() {
       if (loadSequenceRef.current === requestedLoad) setRefreshing(false);
     }
   }, [csrf, loadWorkspaceData, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !csrf) { setResearchRuns([]); return; }
+    let cancelled = false;
+    setResearchHistoryBusy(true);
+    api<{ items: ResearchRun[] }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=30", csrf)
+      .then(result => { if (!cancelled) setResearchRuns(result.items || []); })
+      .catch(() => { if (!cancelled) setResearchRuns([]); })
+      .finally(() => { if (!cancelled) setResearchHistoryBusy(false); });
+    return () => { cancelled = true; };
+  }, [workspaceId, csrf]);
 
   useEffect(() => {
     periodRef.current = period;
@@ -1570,13 +1584,34 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setAuditBusy(false); }
   }
 
+  async function openResearchRun(run: ResearchRun) {
+    if (!workspaceId || !csrf) return;
+    setResearchHistoryBusy(true); setError("");
+    try {
+      const result = await api<{ research_type: "prospects" | "influencers"; items: ResearchResult[] | InfluencerCandidate[]; query: string; provider: string }>(
+        "/api/v1/research/runs/" + encodeURIComponent(run.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf
+      );
+      if (result.research_type === "prospects") {
+        setResearchResults(result.items as ResearchResult[]);
+        setResearchQuery(result.query);
+        setInfluencerResults([]);
+      } else {
+        setInfluencerResults(result.items as InfluencerCandidate[]);
+        setInfluencerQuery(result.query);
+        setResearchResults([]);
+      }
+      setNotice("Saved " + result.research_type + " research restored from " + result.provider + ". Evidence is historical; recheck each source before use.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Saved research could not be loaded."); }
+    finally { setResearchHistoryBusy(false); }
+  }
+
   async function searchProspects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf || !researchQuery.trim()) return;
     const requestedWorkspaceId = workspaceId;
     setResearchBusy(true); setError(""); setNotice(""); setResearchResults([]);
     try {
-      const result = await api<{ items: ResearchResult[]; notice?: string }>("/api/v1/research/prospects/search", csrf, {
+      const result = await api<{ items: ResearchResult[]; notice?: string; run_id?: string }>("/api/v1/research/prospects/search", csrf, {
         method: "POST",
         body: JSON.stringify({
           workspace_id: requestedWorkspaceId,
@@ -1587,7 +1622,9 @@ export default function DashboardPage() {
       });
       if (requestedWorkspaceId !== workspaceId) return;
       setResearchResults(result.items || []);
-      setNotice(result.notice || "Research results loaded for human review.");
+      const history = await api<{ items: ResearchRun[] }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30", csrf);
+      if (requestedWorkspaceId === workspaceId) setResearchRuns(history.items || []);
+      setNotice(result.notice || "Research results saved to workspace history for human review.");
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Public-web research could not be completed.");
     } finally { if (requestedWorkspaceId === workspaceId) setResearchBusy(false); }
@@ -1600,7 +1637,7 @@ export default function DashboardPage() {
     const requestedWorkspaceId = workspaceId;
     setInfluencerBusy(true); setError(""); setNotice(""); setInfluencerResults([]);
     try {
-      const result = await api<{ items: InfluencerCandidate[]; notice?: string }>(
+      const result = await api<{ items: InfluencerCandidate[]; notice?: string; run_id?: string }>(
         "/api/v1/research/influencers/search", csrf, {
           method: "POST",
           body: JSON.stringify({
@@ -1614,7 +1651,9 @@ export default function DashboardPage() {
       );
       if (requestedWorkspaceId !== workspaceId) return;
       setInfluencerResults(result.items || []);
-      setNotice(result.notice || "Public creator-profile candidates are ready for review.");
+      const history = await api<{ items: ResearchRun[] }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30", csrf);
+      if (requestedWorkspaceId === workspaceId) setResearchRuns(history.items || []);
+      setNotice(result.notice || "Creator candidates saved to workspace history for review.");
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Influencer discovery could not be completed.");
     } finally {
@@ -2888,6 +2927,15 @@ export default function DashboardPage() {
             <form onSubmit={searchProspects}><div className="field"><label htmlFor="research-query">Business, audience and market query</label><textarea id="research-query" required minLength={3} maxLength={400} value={researchQuery} onChange={e=>setResearchQuery(e.target.value)} placeholder="Describe the type of business, creator, publisher or potential customer you want to find." /></div>
               <button className="button" type="submit" disabled={researchBusy || busy || !workspaceId || !csrf || !canWrite}>{researchBusy ? "Searching public sources…" : "Search public web"}</button>
             </form>
+          </article>
+          <article className="card" aria-labelledby="research-history-title">
+            <h3 id="research-history-title">Saved research history</h3>
+            <p className="fine">Recent prospect and creator searches are retained in this workspace with their original public-source evidence. Restoring a run does not refresh the sources or verify the claims.</p>
+            {researchHistoryBusy && <p className="fine">Loading saved research…</p>}
+            {!researchHistoryBusy && researchRuns.length === 0 && <p className="fine">No saved research runs yet. New successful searches will appear here.</p>}
+            {researchRuns.length > 0 && <div className="table-wrap"><table><thead><tr><th>Type</th><th>Search</th><th>Provider</th><th>Results</th><th>Date</th><th></th></tr></thead><tbody>
+              {researchRuns.map(run=><tr key={run.id}><td>{run.research_type === "influencers" ? "Creators" : "Prospects"}</td><td>{run.query}</td><td>{run.provider}</td><td>{run.result_count}</td><td>{new Date(run.created_at).toLocaleString()}</td><td><button className="button secondary" type="button" disabled={researchHistoryBusy} onClick={()=>void openResearchRun(run)}>Restore</button></td></tr>)}
+            </tbody></table></div>}
           </article>
           {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Domain: {item.domain || "Domain unavailable"} · Relevance hint: {typeof item.relevance_score === "number" ? item.relevance_score + "/100" : "not scored"} · Review required · Not saved to CRM</p>{item.relevance_reasons && item.relevance_reasons.length > 0 && <p className="fine">{item.relevance_reasons.join(" · ")}</p>}<button className="button secondary" type="button" disabled={busy || !canWrite} onClick={() => { setProspectName(item.title.slice(0, 200)); setProspectCompany(""); setProspectWebsite(""); setProspectEmail(""); setProspectPhone(""); setEvidenceUrl(item.url); setFitReason((item.description || "Public search result; verify relevance before saving.").slice(0, 2000)); setNotice("Search evidence copied to the prospect form. Verify the real contact name, company, website and relevance before saving."); document.getElementById("prospect-name")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Prepare CRM record for review</button></article>)}</div>}
 
