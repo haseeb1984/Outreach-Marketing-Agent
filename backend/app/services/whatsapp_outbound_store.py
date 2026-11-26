@@ -313,7 +313,7 @@ class WhatsAppOutboundStore:
         return int(recovered_count or 0)
 
     async def list(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+        if not 1 <= limit <= 101 or not 0 <= offset <= 100000:
             raise ValueError("pagination_out_of_range")
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
