@@ -52,6 +52,13 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "060_account_deletion_lifecycle.sql",
     "061_workspace_delivery_cascade_consistency.sql",
     "062_followup_resolution_tenant_cleanup.sql",
+    "063_platform_billing_price_history.sql",
+    "064_daily_prospect_research_quota.sql",
+    "065_website_content_briefs.sql",
+    "066_website_content_articles.sql",
+    "067_wordpress_content_delivery.sql",
+    "068_project_scoped_wordpress_connections.sql",
+    "069_workspace_research_history.sql",
 )
 
 

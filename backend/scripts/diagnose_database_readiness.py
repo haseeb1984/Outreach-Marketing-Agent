@@ -75,6 +75,18 @@ REQUIRED_MIGRATIONS = (
     "055_whatsapp_webhook_retry_tracking.sql",
     "056_billing_transaction_past_due.sql",
     "057_core_outreach_tenant_integrity.sql",
+    "058_draft_request_idempotency.sql",
+    "059_workspace_display_name.sql",
+    "060_account_deletion_lifecycle.sql",
+    "061_workspace_delivery_cascade_consistency.sql",
+    "062_followup_resolution_tenant_cleanup.sql",
+    "063_platform_billing_price_history.sql",
+    "064_daily_prospect_research_quota.sql",
+    "065_website_content_briefs.sql",
+    "066_website_content_articles.sql",
+    "067_wordpress_content_delivery.sql",
+    "068_project_scoped_wordpress_connections.sql",
+    "069_workspace_research_history.sql",
 )
 
 REQUIRED_TABLES = (
@@ -94,6 +106,11 @@ REQUIRED_TABLES = (
     "outreach_followup_steps", "outreach_followup_enrollments",
     "outreach_followup_delivery_resolutions", "billing_transaction_events",
     "billing_transactions",
+    "platform_billing_plan_price_history",
+    "daily_feature_usage_reservations",
+    "website_content_briefs",
+    "workspace_wordpress_connections",
+    "workspace_research_runs",
 )
 
 REQUIRED_CONSTRAINTS = (
@@ -116,6 +133,14 @@ REQUIRED_INDEXES = (
     "outreach_campaigns_id_workspace_uidx",
     "outreach_drafts_id_workspace_uidx",
     "workspace_email_accounts_id_workspace_uidx",
+    "platform_billing_plan_price_history_slug_idx",
+    "idx_daily_feature_usage_workspace_day",
+    "website_content_briefs_workspace_status_idx",
+    "idx_content_briefs_cms_status",
+    "workspace_wordpress_connections_workspace_fallback_uidx",
+    "workspace_wordpress_connections_project_uidx",
+    "workspace_wordpress_connections_project_status_idx",
+    "workspace_research_runs_history_idx",
 )
 
 REQUIRED_COLUMNS = (
@@ -139,6 +164,16 @@ REQUIRED_COLUMNS = (
     ("billing_provider_events", "event_fingerprint"),
     ("billing_transaction_events", "event_fingerprint"),
     ("billing_transactions", "status"),
+    ("website_content_briefs", "article_title"),
+    ("website_content_briefs", "article_body"),
+    ("website_content_briefs", "article_status"),
+    ("website_content_briefs", "cms_connection_id"),
+    ("website_content_briefs", "cms_status"),
+    ("workspace_wordpress_connections", "project_id"),
+    ("workspace_research_runs", "research_type"),
+    ("workspace_research_runs", "parameters"),
+    ("workspace_research_runs", "results"),
+    ("daily_feature_usage_reservations", "usage_date"),
 )
 
 
