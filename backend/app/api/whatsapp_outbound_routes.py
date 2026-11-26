@@ -203,7 +203,7 @@ async def list_whatsapp_outbound_queue(
     await _authorize(request, workspace_id, session, "viewer")
     try:
         fetched = await WhatsAppOutboundStore(_pool(request)).list(
-            workspace_id=workspace_id, limit=min(limit + 1, 100), offset=offset,
+            workspace_id=workspace_id, limit=limit + 1, offset=offset,
         )
         has_more = len(fetched) > limit
         items = fetched[:limit]
