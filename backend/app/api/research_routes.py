@@ -190,6 +190,14 @@ async def _persist_research_run(request, workspace_id, user_id, research_type, q
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # Serialize inserts for this workspace so concurrent searches
+                # cannot race the per-workspace retention cap.
+                workspace_exists = await conn.fetchval(
+                    "SELECT id FROM workspaces WHERE id=$1 FOR UPDATE",
+                    workspace_id,
+                )
+                if workspace_exists is None:
+                    raise LookupError("research_workspace_missing")
                 row = await conn.fetchrow(
                     """INSERT INTO workspace_research_runs
                        (workspace_id,created_by,research_type,query,provider,parameters,results,result_count)
