@@ -705,3 +705,54 @@ async def whatsapp_webhook_dead_letters(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="whatsapp_dead_letter_lookup_unavailable") from None
+
+
+@router.post("/whatsapp/webhook-events/{event_id}/replay")
+async def replay_whatsapp_webhook_dead_letter(event_id: str, request: Request):
+    """Explicitly requeue one exhausted Meta event; processing remains idempotent and audited."""
+    actor = await require_platform_admin(request, write=True)
+    from uuid import UUID
+    try:
+        event_uuid = UUID(event_id)
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(status_code=422, detail="invalid_webhook_event_id") from None
+    try:
+        async with pool_for(request).acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE meta_whatsapp_webhook_events
+                       SET attempts=0, processing_started_at=NULL,
+                           dead_lettered_at=NULL, processing_error_code=NULL
+                       WHERE id=$1 AND processed_at IS NULL AND dead_lettered_at IS NOT NULL
+                       RETURNING id,event_kind,attempts""",
+                    event_uuid,
+                )
+                if row is None:
+                    exists = await conn.fetchval(
+                        "SELECT 1 FROM meta_whatsapp_webhook_events WHERE id=$1",
+                        event_uuid,
+                    )
+                    if exists is None:
+                        raise HTTPException(status_code=404, detail="webhook_event_not_found")
+                    raise HTTPException(status_code=409, detail="webhook_event_not_replayable")
+                await conn.execute(
+                    """INSERT INTO platform_admin_audit_events
+                       (actor_user_id,event_type,target_type,target_id,metadata)
+                       VALUES($1::uuid,'whatsapp.webhook_event.requeued',
+                              'meta_whatsapp_webhook_event',$2,$3::jsonb)""",
+                    actor["user_id"], str(event_uuid),
+                    json.dumps({
+                        "event_kind": row["event_kind"],
+                        "previous_attempts": 8,
+                        "payload_exposed": False,
+                    }),
+                )
+        return {
+            "event_id": str(event_uuid),
+            "status": "requeued",
+            "automatic_outbound_sending": False,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_webhook_replay_unavailable") from None
