@@ -3,7 +3,7 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `339f1d7990b8093d5c6c74aeb1f55c4eb552ecc7` on `main` (2026-11-26). The current editorial/WordPress source has not yet completed CI or deployment acceptance.  
+**Current application implementation source checked:** `2988c21e4aed1b3dfa5e0847012e078988747a74` on `main` (2026-11-26). Recent billing dashboard, research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed the consolidated CI/build or provider acceptance.  
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
@@ -12,6 +12,7 @@
 
 ## Implementation update — 2026-11-26 (persistent research evidence)
 
+- Billing dashboard completion: loads the workspace billing-account API and displays the verified subscription, status and billing-period dates, current-period quota usage states, and recent invoice/transaction records. Entitlement status now covers AI drafts, email, website audits, WhatsApp sends and prospect research. Checkout controls expose only server-configured purchasable plans; portal access is presented for an existing Paddle subscription. Workspace owner/admin UI authorization now matches the backend. This is source-only; no tests/build, Paddle sandbox checkout/webhook/portal acceptance, live payment, deployment or Hostinger package was performed.
 - Added migration `069_workspace_research_history.sql` and a workspace-scoped research-run table for successful prospect and creator searches. Each record retains the original query, provider, parameters, result snapshot, result count and timestamp.
 - Added authenticated history-list, restore and delete endpoints. Every operation checks active workspace membership and scopes database reads/deletes to the supplied workspace; workspace deletion cascades saved research. The dashboard now loads recent runs, restores original snapshots without re-querying providers, and offers deletion.
 - Added saved research snapshots to the authenticated account data export. The backend readiness endpoint also requires the new table, so an unapplied migration is surfaced as not-ready. Research results remain separate from CRM until a person explicitly reviews and prepares/saves a prospect.
