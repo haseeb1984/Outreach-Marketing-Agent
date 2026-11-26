@@ -12,6 +12,7 @@
 
 ## Implementation update — 2026-11-26 (persistent research evidence)
 
+- Research-history storage is now bounded to the newest 500 successful runs per workspace. New snapshots and pruning occur in one database transaction; older snapshots are removed automatically, while the existing manual per-run deletion remains available. This prevents unbounded evidence-table growth. Source-only; migration/runtime behavior has not been tested.
 - Prospect research provider resilience: Brave remains preferred, but a valid empty Brave result set now triggers the configured SerpAPI fallback. If fallback is unavailable, a genuine empty Brave response is preserved as a successful empty result rather than misreported as provider outage. Source-only; no provider credentials or live searches were exercised.
 - WhatsApp dispatch gate consistency: the scheduler endpoint, queue API diagnostics and workspace integration-status response now all use the same `dispatch_is_enabled()` helper, which requires both the parsed application setting and exact `WHATSAPP_DISPATCH_ENABLED=true` environment opt-in. This avoids reporting dispatch enabled when the worker's second gate would reject it. Source-only; no tests or live sends.
 - WhatsApp outbound queue pagination now returns `has_more`/`next_offset`; the dashboard incrementally loads more queue history and deduplicates appended rows. The queue API's lookahead is bounded to 101 records. Source-only; no tests/build/browser acceptance.
