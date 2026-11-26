@@ -1,3 +1,8 @@
+## Implementation update — 2026-11-27 (project-to-campaign onboarding)
+
+- Added an optional client-project selector to campaign creation. It pre-fills the business name, offer and audience profile from the chosen project and suggests a campaign name without overwriting an existing operator-entered name. The user reviews and can edit all fields. The current campaign schema does not persist a project foreign key, so this deliberately improves the onboarding handoff without claiming project-level campaign linkage.
+- Source-only application commit `5c138572fd30508c008090212f3c87320f14411d` on `main`. No browser, database, build, tests or deployment were run.
+
 ## Implementation update — 2026-11-27 (first-project onboarding)
 
 - First-project setup now carries the registration workspace name into the project-name field automatically, but only while the selected workspace has no active projects and the customer has not entered a name. The getting-started checklist links directly to the create form, Projects is available in dashboard shortcuts, and the form makes the minimum-first/enrich-later workflow clear. This reuses the existing CSRF-protected, workspace-authorized project API; no automatic project creation or external action occurs.

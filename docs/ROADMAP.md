@@ -1,3 +1,7 @@
+## Current implementation update — 2026-11-27 (project-to-campaign onboarding; application source `5c138572fd30508c008090212f3c87320f14411d`)
+
+- Campaign creation now offers an optional client-project selector. Choosing a project pre-fills business name, offer and target customer profile, and suggests a campaign name only when the operator has not already entered one. All fields remain editable and are reviewed before submission. This is a data-entry handoff only: campaign records remain workspace-scoped and are not falsely represented as project-linked in the current schema. No browser, database, build or CI acceptance was run.
+
 ## Current implementation update — 2026-11-27 (first-project onboarding; application source `bc31948d1edbe0a02bd8c675769cc01ce8b4641d`)
 
 - Dashboard now pre-fills the first client-project name from the active workspace name when the workspace has no project and the customer has not started typing a different name. The onboarding checklist links directly to the project-creation form, the dashboard shortcuts include Projects, and the form explains that the customer can create a minimal profile first and enrich its audience/offer/brand context later. Existing project API validation and workspace scoping are unchanged. Source-only; no browser, database, build or CI acceptance was run.
