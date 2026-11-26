@@ -2,9 +2,10 @@
 
 Percentages represent verified implementation scope, not launch readiness. A phase is complete only after its acceptance checks pass. See [Implementation status and release blockers](IMPLEMENTATION_STATUS.md) for the current evidence-based matrix.
 
-## Current implementation update — 2026-11-24
+## Current implementation update — 2026-11-26
 
-- Current application implementation source on `main`: `3f739dfb94080016671a13d57b2f0bd8db2956a9` (WordPress delivery concurrency, site-identity and connection-pinned egress safeguards). This is a source-control reference, not a CI or deployment claim.
+- Current application implementation source on `main`: `0709e95732a8a6ab01c92b3347d06568fc1c5323` (multi-provider public research: Brave preferred with SerpAPI fallback). This is a source-control reference, not a CI or deployment claim.
+- Public prospect and creator discovery now share a normalized provider adapter: Brave Search is preferred when configured; SerpAPI is used when Brave is absent or its request/response fails. Both result shapes are normalized before existing URL validation, relevance ranking, deduplication, and human-review gates. The response identifies the provider actually used. `SERPAPI_API_KEY` is optional and server-only; no key is required when Brave remains available. This adds provider resilience, not guaranteed coverage or verified account connectivity.
 - Added a persistent editorial pipeline from website-growth recommendations to workspace content briefs, editorial review, AI-generated SEO article drafts, editable metadata/body, and article approval.
 - Added project-workflow dashboard loading so saved briefs survive refreshes and workspace switches.
 - Added project-scoped WordPress Application Password storage (with a workspace-default fallback) encrypted with AES-GCM, HTTPS/public-DNS checks, connection verification, and permission checks for authoring/publishing.
@@ -18,7 +19,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 - WordPress provider requests now resolve and validate all public A/AAAA records, then connect to a validated IP literal while preserving the original Host header and TLS SNI. This removes the DNS-rebinding gap between validation and the HTTP connection.
 - WordPress draft delivery now locks the selected connection and pins the article in the same database transaction. Public publishing also locks its pinned connection while claiming the publish operation, serializing concurrent disconnect and credential changes against both delivery paths. A concurrent site/credential update cannot switch the destination between connection selection and the first delivery attempt; site URL changes are blocked after any article is pinned, including ambiguous attempts without a saved post ID.
 - Project settings now display the inherited workspace-default connection as read-only when no project-specific connection exists; project scope cannot accidentally disconnect the workspace fallback. Article delivery buttons no longer depend on whichever connection scope happens to be selected in settings: the backend resolves the correct connection from each saved article's project and enforces fail-closed behavior. Concurrent connection setup for the same scope is serialized. An unpinned project-specific override can be removed to restore workspace fallback; if articles are already pinned to it, disconnect retains a disabled record and keeps delivery fail-closed.
-- **Not yet verified:** these latest editorial/CMS changes have not been built or tested, migrations have not been confirmed applied to a live database, WordPress staging credentials/provider acceptance have not been exercised, and no Hostinger frontend ZIP/upload or production deployment has occurred.
+- **Not yet verified:** the latest editorial/CMS and multi-provider research changes have not been built or tested, migrations have not been confirmed applied to a live database, WordPress/SerpAPI staging credentials/provider acceptance have not been exercised, and no Hostinger frontend ZIP/upload or production deployment has occurred.
 - Earlier CI and deployment records below apply only to the commits they explicitly identify; they do not validate this newer implementation.
 
 ## Earlier verified baseline — 2026-11-24
