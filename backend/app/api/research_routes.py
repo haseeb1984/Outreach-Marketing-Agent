@@ -97,8 +97,10 @@ def _public_https_url(value: object) -> str | None:
 async def _search_public_web(query: str, count: int) -> tuple[str, list[dict] | None]:
     """Query an available search provider and normalize results to the Brave result shape."""
     timeout = httpx.Timeout(12.0, connect=4.0)
+    brave_empty: list[dict] | None = None
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, trust_env=False) as client:
-        # Prefer Brave when configured; fall back to SerpAPI on provider errors or absence.
+        # Prefer Brave when it returns usable results; try SerpAPI if Brave is
+        # unavailable or returns a valid-but-empty result set.
         if settings.brave_search_api_key and settings.brave_search_api_key.strip():
             try:
                 response = await client.get(
@@ -111,7 +113,9 @@ async def _search_public_web(query: str, count: int) -> tuple[str, list[dict] | 
                     web = data.get("web") if isinstance(data, dict) else None
                     results = web.get("results") if isinstance(web, dict) else None
                     if isinstance(results, list):
-                        return "brave_search", results
+                        if results:
+                            return "brave_search", results
+                        brave_empty = results
             except (httpx.HTTPError, ValueError, TypeError):
                 pass
         if settings.serpapi_api_key and settings.serpapi_api_key.strip():
@@ -136,6 +140,9 @@ async def _search_public_web(query: str, count: int) -> tuple[str, list[dict] | 
                         return "serpapi", normalized
             except (httpx.HTTPError, ValueError, TypeError):
                 pass
+    # Preserve a genuine empty Brave response when no working fallback is available.
+    if brave_empty is not None:
+        return "brave_search", brave_empty
     return "unavailable", None
 
 
