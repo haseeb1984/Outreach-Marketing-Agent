@@ -33,6 +33,7 @@ type WhatsAppMessage = { id: string; provider_message_id: string; message_type: 
 type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: string; prospect_company: string; contact_email?: string | null; contact_phone_e164?: string | null; channel: string; latest_message: string; provider: string; latest_direction?: string; latest_delivery_status?: string | null; latest_message_at: string; message_count: number };
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string; delivery_status?: string | null };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
+type WhatsAppOutboundDelivery = { id: string; account_id: string; draft_id: string; prospect_id: string; status: string; error_code?: string | null; attempts: number; queued_at: string; sent_at?: string | null; updated_at: string; account_label: string; prospect_name: string };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
 type BillingAccount = { workspace_id: string; subscription: null | { provider: string; plan_slug: string; plan_name?: string | null; status: string; display_price?: string | null; currency?: string | null; billing_interval?: string | null; billing_period_starts_at?: string | null; billing_period_ends_at?: string | null }; usage: Array<{ feature: string; consumed: number; reserved: number; released: number }>; invoices: Array<{ transaction_id: string; invoice_number?: string | null; status: string; currency_code?: string | null; total_minor?: string | null; billed_at?: string | null; updated_at?: string | null }> };
 type ResearchRun = { id: string; research_type: "prospects" | "influencers"; query: string; provider: string; result_count: number; created_at: string };
@@ -124,6 +125,8 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  const [whatsappOutboundDeliveries, setWhatsappOutboundDeliveries] = useState<WhatsAppOutboundDelivery[]>([]);
+  const [whatsappOutboundUnavailable, setWhatsappOutboundUnavailable] = useState(false);
   const [whatsappTemplates, setWhatsappTemplates] = useState<Record<string, WhatsAppTemplate[]>>({});
   const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
@@ -412,13 +415,16 @@ export default function DashboardPage() {
       if (result.status === "fulfilled") loadedTemplates[loadedWhatsAppAccounts[index].id] = result.value.items || [];
     });
     setWhatsappTemplates(loadedTemplates);
-    const [inboxResult, webhookDeadLetterResult] = await Promise.allSettled([
+    const [inboxResult, webhookDeadLetterResult, outboundQueueResult] = await Promise.allSettled([
       api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<{ items: WhatsAppWebhookEvent[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25&offset=0", token),
+      api<{ items: WhatsAppOutboundDelivery[] }>("/api/v1/integrations/whatsapp/outbound?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50&offset=0", token),
     ]);
     if (!isCurrentLoad()) return;
     const loadedConversations = inboxResult.status === "fulfilled" ? (inboxResult.value.items || []) : [];
     setWhatsappConversations(loadedConversations);
+    setWhatsappOutboundDeliveries(outboundQueueResult.status === "fulfilled" ? outboundQueueResult.value.items || [] : []);
+    setWhatsappOutboundUnavailable(outboundQueueResult.status === "rejected");
     setWhatsappDeadLetterEvents(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.items || []) : []);
     setWhatsappDeadLetterOffset(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.next_offset ?? 25) : 25);
     setWhatsappDeadLetterHasMore(webhookDeadLetterResult.status === "fulfilled" && Boolean(webhookDeadLetterResult.value.has_more));
@@ -463,6 +469,7 @@ export default function DashboardPage() {
     if (templateResults.some(result => result.status === "rejected")) failedSections.push("WhatsApp message templates");
     if (inboxResult.status === "rejected") failedSections.push("WhatsApp inbox");
     if (webhookDeadLetterResult.status === "rejected") failedSections.push("webhook events");
+    if (outboundQueueResult.status === "rejected") failedSections.push("WhatsApp outbound queue");
     if (entitlementResults.some(result => result.status === "rejected") || accountResult.status === "rejected") failedSections.push("billing and usage");
     if (failedSections.length) setError("Some workspace sections could not load (" + failedSections.join(", ") + "). Other sections remain available; use Refresh to retry.");
     // Load secondary inbox controls with the selected workspace so saved views and SLA
@@ -606,7 +613,7 @@ export default function DashboardPage() {
     setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
     setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
-    setWhatsappAccounts([]); setWhatsappTemplates({}); setWhatsappConversations([]); setWhatsappMessages([]);
+    setWhatsappAccounts([]); setWhatsappOutboundDeliveries([]); setWhatsappOutboundUnavailable(false); setWhatsappTemplates({}); setWhatsappConversations([]); setWhatsappMessages([]);
     whatsappDeadLetterLoadSequenceRef.current += 1; whatsappDeadLetterLoadLockRef.current = false;
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappDeadLetterOffset(25); setWhatsappDeadLetterHasMore(false); setWhatsappDeadLetterLoadingMore(false); setWhatsappSavedViews([]);
     setWhatsappFilterStatus(""); setWhatsappFilterPriority(""); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
@@ -2256,6 +2263,19 @@ export default function DashboardPage() {
     finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
+  async function cancelWhatsAppDelivery(delivery: WhatsAppOutboundDelivery) {
+    if (!workspaceId || !csrf || delivery.status !== "queued" || !window.confirm("Cancel this queued WhatsApp delivery? Its unused quota reservation will be released.")) return;
+    const requestedWorkspaceId = workspaceId;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/integrations/whatsapp/outbound/" + encodeURIComponent(delivery.id) + "?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf, { method: "DELETE" });
+      if (requestedWorkspaceId !== workspaceId) return;
+      setNotice("Queued WhatsApp delivery cancelled and its unused quota reservation released.");
+      await refresh(requestedWorkspaceId, csrf);
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "WhatsApp delivery could not be cancelled."); }
+    finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
+  }
+
   async function cancelDelivery(delivery: Delivery) {
     if (!workspaceId || !csrf || !window.confirm("Cancel this queued email? A cancelled delivery will not be sent.")) return;
     const requestedWorkspaceId = workspaceId;
@@ -3137,6 +3157,9 @@ export default function DashboardPage() {
               </section> : <p className="fine">No synchronized templates are recorded for this account yet.</p>}
                             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && account.status !== "disabled" && <button className="button secondary" type="button" disabled={busy} onClick={() => disableWhatsAppAccount(account)}>Disable account</button>}
             </article>) : <article className="card"><p>No WhatsApp Business accounts registered for this workspace.</p></article>}</div>
+            <h3>WhatsApp outbound queue</h3>
+            <p className="fine">Queued messages are not proof of delivery. The worker remains disabled unless both server-side dispatch gates are explicitly enabled. Cancelling a still-queued item releases its unused quota reservation.</p>
+            {whatsappOutboundUnavailable ? <p className="notice" role="status">WhatsApp outbound queue could not be loaded. Refresh to retry.</p> : whatsappOutboundDeliveries.length ? <div className="cards">{whatsappOutboundDeliveries.map(delivery=><article className="card" key={delivery.id}><h4>{delivery.prospect_name || "Prospect"}</h4><p className="fine">{delivery.account_label} · {delivery.status.replaceAll("_"," ")}</p><p className="fine">Queued: {new Date(delivery.queued_at).toLocaleString()} · Attempts: {delivery.attempts}</p>{delivery.sent_at && <p className="fine">Sent at: {new Date(delivery.sent_at).toLocaleString()}</p>}{delivery.error_code && <p className="fine">Last status: {delivery.error_code.replaceAll("_"," ")}</p>}{delivery.status === "queued" && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={()=>cancelWhatsAppDelivery(delivery)}>Cancel queued delivery</button>}</article>)}</div> : <p className="fine">No WhatsApp outbound deliveries have been queued in this workspace.</p>}
             <h3>WhatsApp inbox</h3>
             <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; approved templates can be synchronized by workspace admins; outbound dispatch is off by default and requires explicit server activation.</p>
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !whatsappAccounts.some(account=>account.status==="active")} onClick={processWhatsAppInboxEvents}>Process pending inbound events</button><p className="fine">Processes at most 25 pending events for active accounts in this workspace. Does not send messages.</p></div>}
