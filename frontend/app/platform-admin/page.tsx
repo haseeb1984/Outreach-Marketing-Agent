@@ -15,7 +15,7 @@ type BillingReconciliationItem = { workspace_id: string; workspace_name: string;
 type BillingReconciliation = { summary: Record<string, number>; items: BillingReconciliationItem[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean };
 type BillingEvent = { event_kind: string; provider: string; provider_event_id: string; workspace_id: string | null; workspace_name: string | null; related_id: string; event_created_at: string; received_at: string; outcome: string; transaction_status: string | null; invoice_number: string | null };
 type BillingEvents = { items: BillingEvent[]; limit: number; offset: number; total: number; truncated: boolean; search: string; read_only: boolean; payloads_exposed: boolean };
-type WhatsAppDeadLetter = { id: string; phone_number_id: string | null; event_kind: string; attempts: number; received_at: string; processing_started_at: string | null; dead_lettered_at: string | null; processing_error_code: string | null };
+type WhatsAppDeadLetter = { id: string; phone_number_id: string | null; event_kind: string; attempts: number; received_at: string; processing_started_at: string | null; dead_lettered_at: string | null; processing_error_code: string | null; phone_account_active: boolean };
 type WhatsAppDeadLetters = { summary: { total: number; awaiting_manual_review: number; oldest_dead_lettered_at: string | null }; items: WhatsAppDeadLetter[]; limit: number; offset: number; has_more: boolean; read_only: boolean; payloads_exposed: boolean };
 
 const emptyPlan = { slug: "", name: "", description: "", price_id: "", display_price: "", currency: "USD", billing_interval: "month", entitlements: '{\n  "ai_draft_generations": { "enabled": true, "monthly_limit": 100 },\n  "email_sends": { "enabled": true, "monthly_limit": 1000 },\n  "website_audits": { "enabled": true, "monthly_limit": 25 },\n  "whatsapp_sends": { "enabled": false, "monthly_limit": 0 },\n  "prospect_research": { "enabled": true, "monthly_limit": 100 }\n}', active: true };
@@ -330,8 +330,8 @@ export default function PlatformAdminPage() {
         <div className="card table-wrap"><table><thead><tr><th>Event</th><th>Phone asset</th><th>Kind</th><th>Attempts</th><th>Received</th><th>Dead-lettered</th><th>Last error</th><th>Action</th></tr></thead><tbody>
           {whatsappDeadLetters?.items.map(event=><tr key={event.id}>
             <td><span className="fine">{event.id}</span></td><td>{event.phone_number_id || "Unmapped"}</td><td>{event.event_kind}</td><td>{event.attempts}</td>
-            <td>{formatAdminDate(event.received_at,true)}</td><td>{formatAdminDate(event.dead_lettered_at,true)}</td><td>{event.processing_error_code || "—"}</td>
-            <td><button className="button secondary" type="button" disabled={!csrf || busy || whatsappDeadLettersLoading || !!replayingWhatsappEventId} onClick={()=>void replayWhatsappDeadLetter(event)}>{replayingWhatsappEventId===event.id ? "Requeuing…" : "Requeue event"}</button></td>
+            <td>{formatAdminDate(event.received_at,true)}</td><td>{formatAdminDate(event.dead_lettered_at,true)}</td><td>{event.processing_error_code || "—"}<br/><span className="fine">{event.phone_account_active ? "Phone account active" : "Phone account inactive or unmapped"}</span></td>
+            <td><button className="button secondary" type="button" disabled={!csrf || busy || whatsappDeadLettersLoading || !!replayingWhatsappEventId || !event.phone_account_active} onClick={()=>void replayWhatsappDeadLetter(event)}>{replayingWhatsappEventId===event.id ? "Requeuing…" : "Requeue event"}</button></td>
           </tr>)}
         </tbody></table>{whatsappDeadLetters && !whatsappDeadLetters.items.length && <p>No dead-lettered WhatsApp webhook events require review.</p>}</div>
         <div className="actions" aria-label="WhatsApp webhook dead-letter pagination">
