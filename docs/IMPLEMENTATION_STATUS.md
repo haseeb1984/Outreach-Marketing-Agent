@@ -1,7 +1,7 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `619a44490768d73782226494ce05a0d4b32716fd` on `main` (2026-11-26). The current editorial/WordPress source has not yet completed CI or deployment acceptance.  
+**Current application implementation source checked:** `954873961d157c80142afc7d5f965e1c301b5f0d` on `main` (2026-11-26). The current editorial/WordPress source has not yet completed CI or deployment acceptance.  
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
@@ -14,6 +14,7 @@
 - Added authenticated history-list, restore and delete endpoints. Every operation checks active workspace membership and scopes database reads/deletes to the supplied workspace; workspace deletion cascades saved research. The dashboard now loads recent runs, restores original snapshots without re-querying providers, and offers deletion.
 - Added saved research snapshots to the authenticated account data export. The backend readiness endpoint also requires the new table, so an unapplied migration is surfaced as not-ready. Research results remain separate from CRM until a person explicitly reviews and prepares/saves a prospect.
 - Source implementation only: migration application, backend/frontend CI, browser acceptance, provider credentials and live database behavior have not been tested for this batch.
+- Added a dashboard onboarding checklist with live completion indicators for client project, CRM prospect, campaign, active workspace SMTP account and first draft. Steps navigate to the actual workflow sections and explicitly state that outreach is never sent automatically. This frontend change has not yet passed type-check, build or browser acceptance.
 
 ## Implementation update — 2026-11-26 (multi-provider research)
 
