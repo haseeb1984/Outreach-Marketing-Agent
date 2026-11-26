@@ -2,6 +2,14 @@
 
 # Implementation status and release blockers
 
+## Implementation update — 2026-11-27 (workspace invitation sign-in continuation)
+
+- Fixed the interrupted invitation journey for customers who are not signed in. The invitation page now removes the token fragment immediately and retains the short-lived token in tab-scoped session storage; its sign-in link carries no token and requests only the fixed /invitations/accept return route. After login, the customer returns to invitation acceptance and can complete the existing CSRF-protected, invited-email-matched API action without reopening the email. The login redirect allowlist accepts only this exact local route; other next values resolve to /dashboard. Successful and invalid/expired acceptance clear the pending token. Email-mismatch errors retain it so the customer can sign in with the invited address.
+- Source-only. No browser, multi-tab, session-storage, database, build or deployment acceptance was performed.
+
+**Current application source on main:** `a0a10ab09c6f766097da3ed75fd4bceafca1fea7` (2026-11-27). Documentation update follows separately.
+
+
 ## Implementation update — 2026-11-27 (account recovery and invitation token handling)
 
 - Password-reset emails now link to the public frontend reset page and carry the one-time token only in the URL fragment, avoiding transmission in the initial HTTP request and reverse-proxy access logs. The new frontend page removes the fragment before network activity, confirms the new password locally, submits the reset token via the existing same-origin API, and provides invalid/expired-link recovery guidance. The backend's existing reset-confirmation endpoint remains the authoritative verifier and continues to revoke sessions through the existing store implementation.

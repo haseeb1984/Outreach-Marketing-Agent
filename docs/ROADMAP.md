@@ -1,3 +1,7 @@
+## Current implementation update — 2026-11-27 (invitation continuation)
+
+- Workspace invitation acceptance now survives the sign-in step in the same browser tab: the short-lived invitation token is retained in tab-scoped session storage after its URL fragment is immediately removed, the sign-in link returns only to the fixed invitation route, and successful or expired/invalid acceptance clears the stored token. Login redirects accept only that exact local route; all other destinations fall back to the dashboard. This avoids asking an invited customer to reopen an email link after signing in, without introducing an arbitrary redirect target. Source-only; no browser/session-storage acceptance was run.
+
 # Delivery and conversation roadmap
 
 Percentages represent verified implementation scope, not launch readiness. A phase is complete only after its acceptance checks pass. See [Implementation status and release blockers](IMPLEMENTATION_STATUS.md) for the current evidence-based matrix.
