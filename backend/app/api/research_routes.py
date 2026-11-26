@@ -398,7 +398,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
-    if not settings.brave_search_api_key or not settings.brave_search_api_key.strip():
+    if not ((settings.brave_search_api_key and settings.brave_search_api_key.strip()) or (settings.serpapi_api_key and settings.serpapi_api_key.strip())):
         raise HTTPException(status_code=503, detail="search_provider_not_configured")
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
@@ -492,7 +492,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
             "workspace_id": payload.workspace_id,
             "query": payload.query.strip(),
             "platforms": payload.platforms,
-            "provider": "brave_search",
+            "provider": provider,
             "quota_feature": "prospect_research",
             "ranking": {
                 "method": "query_term_overlap_v1",
