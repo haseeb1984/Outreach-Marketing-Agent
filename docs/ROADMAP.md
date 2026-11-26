@@ -4,6 +4,10 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-26
 
+- Database readiness and release preflight now track the full migration series through 069_workspace_research_history.sql, including platform billing price-history, daily research quota, editorial briefs/articles, project-scoped WordPress connections and saved research-history schema. The read-only schema diagnostic now checks the associated tables, key columns and indexes, so a database missing these newer feature migrations cannot be reported ready. This is source-only; no live database was queried or migrated.
+- Current application implementation source on main: `461d481846fb98c69a8f91c6669237f4f03f3a99`. This is a source-control reference, not a CI or deployment claim.
+
+
 - Added a platform-admin-only WhatsApp webhook recovery workflow: a payload-free, paginated dead-letter queue in the admin dashboard plus an explicit per-event requeue confirmation. Replay is available only when the event's phone asset is currently mapped to an active WhatsApp account; the backend atomically requeues only an eligible unprocessed dead-letter event and records an audit event with the exact previous attempt count. Inactive/unmapped phone assets are visibly blocked from replay. This does not expose payloads or enable outbound sending. Source-only; no database/runtime or Meta provider acceptance was run.
 
 - WhatsApp webhook operations now expose a platform-admin-only, read-only dead-letter view with bounded pagination and aggregate counts. It returns event metadata and retry/error timestamps only; raw webhook payloads and message content are never exposed. Source-only; no database/runtime acceptance or Meta provider acceptance was run.
