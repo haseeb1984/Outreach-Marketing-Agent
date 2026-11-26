@@ -105,6 +105,7 @@ async def list_conversation_threads(
     workspace_id: str = Query(min_length=1, max_length=200),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100000),
+    search: str = Query(default="", max_length=200),
 ):
     """Unified workspace inbox of inbound email and WhatsApp replies."""
     _, _, session = await _authenticated(request)
@@ -119,7 +120,7 @@ async def list_conversation_threads(
     if store is None:
         raise HTTPException(status_code=503, detail="conversation_service_not_configured")
     return {
-        "items": await store.list_threads(workspace_id=workspace_id, limit=limit, offset=offset),
+        "items": await store.list_threads(workspace_id=workspace_id, limit=limit, offset=offset, search=search),
         "limit": limit,
         "offset": offset,
     }
