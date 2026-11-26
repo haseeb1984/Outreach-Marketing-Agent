@@ -127,6 +127,9 @@ export default function DashboardPage() {
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
   const [whatsappOutboundDeliveries, setWhatsappOutboundDeliveries] = useState<WhatsAppOutboundDelivery[]>([]);
   const [whatsappOutboundUnavailable, setWhatsappOutboundUnavailable] = useState(false);
+  const [whatsappOutboundOffset, setWhatsappOutboundOffset] = useState(50);
+  const [whatsappOutboundHasMore, setWhatsappOutboundHasMore] = useState(false);
+  const [whatsappOutboundLoadingMore, setWhatsappOutboundLoadingMore] = useState(false);
   const [whatsappTemplates, setWhatsappTemplates] = useState<Record<string, WhatsAppTemplate[]>>({});
   const [whatsappConversations, setWhatsappConversations] = useState<WhatsAppConversation[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
@@ -418,12 +421,15 @@ export default function DashboardPage() {
     const [inboxResult, webhookDeadLetterResult, outboundQueueResult] = await Promise.allSettled([
       api<{ items: WhatsAppConversation[] }>("/api/v1/integrations/whatsapp/inbox/conversations?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
       api<{ items: WhatsAppWebhookEvent[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/integrations/whatsapp/inbox/webhook-events?workspace_id=" + encodeURIComponent(selectedId) + "&state=dead_letter&limit=25&offset=0", token),
-      api<{ items: WhatsAppOutboundDelivery[] }>("/api/v1/integrations/whatsapp/outbound?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50&offset=0", token),
+      api<{ items: WhatsAppOutboundDelivery[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/integrations/whatsapp/outbound?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50&offset=0", token),
     ]);
     if (!isCurrentLoad()) return;
     const loadedConversations = inboxResult.status === "fulfilled" ? (inboxResult.value.items || []) : [];
     setWhatsappConversations(loadedConversations);
     setWhatsappOutboundDeliveries(outboundQueueResult.status === "fulfilled" ? outboundQueueResult.value.items || [] : []);
+    setWhatsappOutboundOffset(outboundQueueResult.status === "fulfilled" ? outboundQueueResult.value.next_offset ?? (outboundQueueResult.value.items || []).length : 0);
+    setWhatsappOutboundHasMore(outboundQueueResult.status === "fulfilled" && Boolean(outboundQueueResult.value.has_more));
+    setWhatsappOutboundLoadingMore(false);
     setWhatsappOutboundUnavailable(outboundQueueResult.status === "rejected");
     setWhatsappDeadLetterEvents(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.items || []) : []);
     setWhatsappDeadLetterOffset(webhookDeadLetterResult.status === "fulfilled" ? (webhookDeadLetterResult.value.next_offset ?? 25) : 25);
@@ -613,7 +619,7 @@ export default function DashboardPage() {
     setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
     setSmtpHost("smtp.gmail.com"); setSmtpUsername(""); setSmtpPassword(""); setSmtpFromEmail(""); setSmtpFromName("Outreach Marketing Agent");
-    setWhatsappAccounts([]); setWhatsappOutboundDeliveries([]); setWhatsappOutboundUnavailable(false); setWhatsappTemplates({}); setWhatsappConversations([]); setWhatsappMessages([]);
+    setWhatsappAccounts([]); setWhatsappOutboundDeliveries([]); setWhatsappOutboundUnavailable(false); setWhatsappOutboundOffset(50); setWhatsappOutboundHasMore(false); setWhatsappOutboundLoadingMore(false); setWhatsappTemplates({}); setWhatsappConversations([]); setWhatsappMessages([]);
     whatsappDeadLetterLoadSequenceRef.current += 1; whatsappDeadLetterLoadLockRef.current = false;
     setWhatsappNotes([]); setWhatsappActivity([]); setWhatsappDeadLetterEvents([]); setWhatsappDeadLetterOffset(25); setWhatsappDeadLetterHasMore(false); setWhatsappDeadLetterLoadingMore(false); setWhatsappSavedViews([]);
     setWhatsappFilterStatus(""); setWhatsappFilterPriority(""); setWhatsappFilterSearch(""); setWhatsappFilterAssignee("all");
@@ -2263,6 +2269,20 @@ export default function DashboardPage() {
     finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
+  async function loadMoreWhatsAppOutbound() {
+    if (!workspaceId || !csrf || whatsappOutboundLoadingMore || !whatsappOutboundHasMore) return;
+    const requestedWorkspaceId = workspaceId;
+    setWhatsappOutboundLoadingMore(true);
+    try {
+      const result = await api<{ items: WhatsAppOutboundDelivery[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/integrations/whatsapp/outbound?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=" + whatsappOutboundOffset, csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
+      setWhatsappOutboundDeliveries(current => { const seen = new Set(current.map(item => item.id)); return [...current, ...(result.items || []).filter(item => !seen.has(item.id))]; });
+      setWhatsappOutboundOffset(result.next_offset ?? (whatsappOutboundOffset + (result.items || []).length));
+      setWhatsappOutboundHasMore(Boolean(result.has_more));
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "More WhatsApp queue records could not be loaded."); }
+    finally { if (requestedWorkspaceId === workspaceId) setWhatsappOutboundLoadingMore(false); }
+  }
+
   async function cancelWhatsAppDelivery(delivery: WhatsAppOutboundDelivery) {
     if (!workspaceId || !csrf || delivery.status !== "queued" || !window.confirm("Cancel this queued WhatsApp delivery? Its unused quota reservation will be released.")) return;
     const requestedWorkspaceId = workspaceId;
@@ -3160,6 +3180,7 @@ export default function DashboardPage() {
             <h3>WhatsApp outbound queue</h3>
             <p className="fine">Queued messages are not proof of delivery. The worker remains disabled unless both server-side dispatch gates are explicitly enabled. Cancelling a still-queued item releases its unused quota reservation.</p>
             {whatsappOutboundUnavailable ? <p className="notice" role="status">WhatsApp outbound queue could not be loaded. Refresh to retry.</p> : whatsappOutboundDeliveries.length ? <div className="cards">{whatsappOutboundDeliveries.map(delivery=><article className="card" key={delivery.id}><h4>{delivery.prospect_name || "Prospect"}</h4><p className="fine">{delivery.account_label} · {delivery.status.replaceAll("_"," ")}</p><p className="fine">Queued: {new Date(delivery.queued_at).toLocaleString()} · Attempts: {delivery.attempts}</p>{delivery.sent_at && <p className="fine">Sent at: {new Date(delivery.sent_at).toLocaleString()}</p>}{delivery.error_code && <p className="fine">Last status: {delivery.error_code.replaceAll("_"," ")}</p>}{delivery.status === "queued" && ["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <button className="button secondary" type="button" disabled={busy} onClick={()=>cancelWhatsAppDelivery(delivery)}>Cancel queued delivery</button>}</article>)}</div> : <p className="fine">No WhatsApp outbound deliveries have been queued in this workspace.</p>}
+            {whatsappOutboundHasMore && <button className="button secondary" type="button" disabled={busy || whatsappOutboundLoadingMore} onClick={loadMoreWhatsAppOutbound}>{whatsappOutboundLoadingMore ? "Loading…" : "Load more WhatsApp deliveries"}</button>}
             <h3>WhatsApp inbox</h3>
             <p className="fine">Inbound messages received by the configured Meta webhook appear here. Processing is workspace-scoped and admin-triggered; approved templates can be synchronized by workspace admins; outbound dispatch is off by default and requires explicit server activation.</p>
             {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions"><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !whatsappAccounts.some(account=>account.status==="active")} onClick={processWhatsAppInboxEvents}>Process pending inbound events</button><p className="fine">Processes at most 25 pending events for active accounts in this workspace. Does not send messages.</p></div>}
