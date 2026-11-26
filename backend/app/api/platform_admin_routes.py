@@ -653,3 +653,55 @@ async def deactivate_plan(slug: str, request: Request):
         return {"slug":slug,"active":False,"deleted":True}
     except HTTPException: raise
     except Exception: raise HTTPException(status_code=503,detail="billing_plan_deactivation_unavailable") from None
+
+@router.get("/whatsapp/webhook-events/dead-lettered")
+async def whatsapp_webhook_dead_letters(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=1000000),
+):
+    """Read-only, payload-free view of Meta webhook events exhausted by the worker."""
+    await require_platform_admin(request)
+    try:
+        async with pool_for(request).acquire() as conn:
+            summary = await conn.fetchrow(
+                """SELECT count(*)::bigint AS total,
+                          count(*) FILTER(WHERE processed_at IS NULL)::bigint AS awaiting_manual_review,
+                          min(dead_lettered_at) AS oldest_dead_lettered_at
+                   FROM meta_whatsapp_webhook_events
+                   WHERE dead_lettered_at IS NOT NULL"""
+            )
+            rows = await conn.fetch(
+                """SELECT id,phone_number_id,event_kind,attempts,received_at,
+                          processing_started_at,dead_lettered_at,processing_error_code
+                   FROM meta_whatsapp_webhook_events
+                   WHERE dead_lettered_at IS NOT NULL
+                   ORDER BY dead_lettered_at DESC,id DESC
+                   LIMIT $1 OFFSET $2""",
+                limit, offset,
+            )
+        items = []
+        for row in rows:
+            item = {}
+            for key, value in dict(row).items():
+                item[key] = value.isoformat() if hasattr(value, "isoformat") else value
+            items.append(item)
+        total = int(summary["total"] or 0)
+        oldest = summary["oldest_dead_lettered_at"]
+        return {
+            "summary": {
+                "total": total,
+                "awaiting_manual_review": int(summary["awaiting_manual_review"] or 0),
+                "oldest_dead_lettered_at": oldest.isoformat() if hasattr(oldest, "isoformat") else None,
+            },
+            "items": items,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(items) < total,
+            "read_only": True,
+            "payloads_exposed": False,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="whatsapp_dead_letter_lookup_unavailable") from None
