@@ -2,7 +2,11 @@
 
 Percentages represent verified implementation scope, not launch readiness. A phase is complete only after its acceptance checks pass. See [Implementation status and release blockers](IMPLEMENTATION_STATUS.md) for the current evidence-based matrix.
 
-## Current implementation update — 2026-11-26
+## Current implementation update — 2026-11-27
+
+- Account recovery now sends password-reset links to the Hostinger frontend `/reset-password` page with the one-time token in the URL fragment. The frontend strips the fragment from browser history before network activity, requires matching 12-character-minimum password entries, and submits the token only in the reset-confirmation POST body. Workspace invitation acceptance now also strips its bearer-token fragment immediately after reading it. The backend legacy reset landing route remains available for previously issued links. Source-only; SMTP delivery and browser acceptance were not run.
+
+## Previous implementation update — 2026-11-26
 
 - Account deletion now requires current-password reauthentication in addition to the existing CSRF/origin checks and explicit browser confirmation. The endpoint applies a user-scoped rate limit before validating the password and does not begin the destructive workspace/account transaction on an incorrect password. The dashboard collects the password and sends it only in the authenticated deletion request. Source-only; no live deletion or browser acceptance was run.
 

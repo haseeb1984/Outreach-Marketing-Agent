@@ -2,8 +2,14 @@
 
 # Implementation status and release blockers
 
+## Implementation update — 2026-11-27 (account recovery and invitation token handling)
+
+- Password-reset emails now link to the public frontend reset page and carry the one-time token only in the URL fragment, avoiding transmission in the initial HTTP request and reverse-proxy access logs. The new frontend page removes the fragment before network activity, confirms the new password locally, submits the reset token via the existing same-origin API, and provides invalid/expired-link recovery guidance. The backend's existing reset-confirmation endpoint remains the authoritative verifier and continues to revoke sessions through the existing store implementation.
+- Workspace invitation acceptance now removes its bearer token from the address bar and browser history immediately after reading the fragment, matching the email-verification flow's token hygiene.
+- Source-only. No SMTP inbox delivery, browser acceptance, database operation, build or deployment was performed.
+
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `1b9b62da7f5165025c167f581126900fac7b3761` on `main` (2026-11-26). Billing dashboard, verified Paddle portal plan-change reconciliation, WhatsApp queue and provider-confirmed delivery analytics, dispatch gating, research provider fallback and bounded/paginated research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed consolidated CI/build or provider acceptance.
+**Current application implementation source checked:** `4ac76db1093feb045e2c129281330681a4b05f34` on `main` (2026-11-27). Billing dashboard, verified Paddle portal plan-change reconciliation, WhatsApp queue and provider-confirmed delivery analytics, dispatch gating, research provider fallback and bounded/paginated research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed consolidated CI/build or provider acceptance.
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
