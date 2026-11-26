@@ -102,6 +102,8 @@ def backup() -> Path:
         _run(["pg_dump", "--format=custom", "--no-owner", "--no-privileges", "--file", str(temporary)], environment)
         if not temporary.exists() or temporary.stat().st_size == 0:
             raise RuntimeError("backup_output_empty")
+        # Validate the archive before publishing it under its final backup name.
+        _run(["pg_restore", "--list", str(temporary)], dict(os.environ))
         os.chmod(temporary, 0o600)
         temporary.replace(destination)
         checksum_file = destination.with_suffix(destination.suffix + ".sha256")
