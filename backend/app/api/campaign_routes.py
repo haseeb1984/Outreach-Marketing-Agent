@@ -132,11 +132,17 @@ async def update_campaign(campaign_id: UUID, payload: CampaignUpdate, request: R
 
 @router.get("/campaigns")
 async def list_campaigns(request: Request, workspace_id: str = Query(min_length=1, max_length=200),
-                         limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0, le=100000)):
+                         limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0, le=100000),
+                         search: str = Query(default="", max_length=120),
+                         status: str = Query(default="current")):
+    if status not in {"current", "draft", "active", "paused", "archived", "all"}:
+        raise HTTPException(status_code=422, detail="invalid_campaign_status_filter")
     _, _, session = await _authenticated(request)
     await _authorize(request, workspace_id, "viewer", session)
-    return {"items": await _store(request).list_campaigns(workspace_id=workspace_id, limit=limit, offset=offset),
-            "limit": limit, "offset": offset}
+    store = _store(request)
+    items = await store.list_campaigns(workspace_id=workspace_id, limit=limit, offset=offset, search=search, status=status)
+    total = await store.count_campaigns(workspace_id=workspace_id, search=search, status=status)
+    return {"items": items, "limit": limit, "offset": offset, "total": total, "has_more": offset + len(items) < total, "status": status}
 
 
 class DraftEdit(BaseModel):
