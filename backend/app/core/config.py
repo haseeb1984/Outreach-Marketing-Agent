@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     frontend_origins: str = ""
     frontend_public_url: str | None = None
     brave_search_api_key: str | None = None
+    serpapi_api_key: str | None = None
     ai_api_key: str | None = None
     ai_base_url: str = "https://api.groq.com/openai/v1"
     ai_model: str = "openai/gpt-oss-20b"
