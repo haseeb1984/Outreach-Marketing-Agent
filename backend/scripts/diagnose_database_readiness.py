@@ -125,6 +125,7 @@ REQUIRED_CONSTRAINTS = (
     "outreach_drafts_prospect_workspace_fk",
     "outreach_deliveries_draft_workspace_fk",
     "outreach_deliveries_email_account_workspace_fk",
+    "outreach_campaigns_project_workspace_fk",
 )
 
 REQUIRED_INDEXES = (
@@ -132,6 +133,8 @@ REQUIRED_INDEXES = (
     "crm_prospects_id_workspace_uidx",
     "whatsapp_conversations_id_workspace_uidx",
     "outreach_campaigns_id_workspace_uidx",
+    "workspace_projects_id_workspace_uidx",
+    "outreach_campaigns_project_workspace_idx",
     "outreach_drafts_id_workspace_uidx",
     "workspace_email_accounts_id_workspace_uidx",
     "platform_billing_plan_price_history_slug_idx",
