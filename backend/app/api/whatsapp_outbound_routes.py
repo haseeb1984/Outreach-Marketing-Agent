@@ -12,6 +12,7 @@ from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
 from app.services.whatsapp_outbound_store import WhatsAppOutboundStore
 from app.services.whatsapp_send_policy import WhatsAppSendPolicy
+from app.workers.whatsapp_dispatch_worker import dispatch_is_enabled
 
 router = APIRouter(prefix="/api/v1/integrations/whatsapp/outbound", tags=["WhatsApp outbound queue"])
 
@@ -83,7 +84,7 @@ async def queue_whatsapp_draft(
             **existing,
             "policy_reason": "idempotent_replay",
             "requires_approved_template": bool(existing.get("template_name")),
-            "dispatch_enabled": settings.whatsapp_dispatch_enabled,
+            "dispatch_enabled": dispatch_is_enabled(),
             "notice": "Existing queue record returned. No WhatsApp message was sent; outbound dispatch remains disabled.",
         }
 
@@ -175,7 +176,7 @@ async def queue_whatsapp_draft(
         **result,
         "policy_reason": decision["reason"],
         "requires_approved_template": decision["requires_approved_template"],
-        "dispatch_enabled": False,
+        "dispatch_enabled": dispatch_is_enabled(),
         "notice": "Queued only. No WhatsApp message was sent; outbound dispatch remains disabled.",
     }
 
@@ -206,7 +207,7 @@ async def list_whatsapp_outbound_queue(
         )
         return {
             "items": items, "limit": limit, "offset": offset,
-            "dispatch_enabled": False,
+            "dispatch_enabled": dispatch_is_enabled(),
         }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
