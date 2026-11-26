@@ -207,6 +207,9 @@ export default function DashboardPage() {
   const [researchResults, setResearchResults] = useState<ResearchResult[]>([]);
   const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
   const [researchHistoryBusy, setResearchHistoryBusy] = useState(false);
+  const [researchHistoryOffset, setResearchHistoryOffset] = useState(30);
+  const [researchHistoryHasMore, setResearchHistoryHasMore] = useState(false);
+  const [researchHistoryLoadingMore, setResearchHistoryLoadingMore] = useState(false);
   const [researchBusy, setResearchBusy] = useState(false);
   const [influencerQuery, setInfluencerQuery] = useState("");
   const [influencerPlatforms, setInfluencerPlatforms] = useState(["instagram", "tiktok", "youtube", "linkedin", "x"]);
@@ -498,12 +501,12 @@ export default function DashboardPage() {
   }, [csrf, loadWorkspaceData, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !csrf) { setResearchRuns([]); return; }
+    if (!workspaceId || !csrf) { setResearchRuns([]); setResearchHistoryOffset(0); setResearchHistoryHasMore(false); return; }
     let cancelled = false;
     setResearchHistoryBusy(true);
-    api<{ items: ResearchRun[] }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=30", csrf)
-      .then(result => { if (!cancelled) setResearchRuns(result.items || []); })
-      .catch(() => { if (!cancelled) setResearchRuns([]); })
+    api<{ items: ResearchRun[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(workspaceId) + "&limit=30&offset=0", csrf)
+      .then(result => { if (!cancelled) { setResearchRuns(result.items || []); setResearchHistoryOffset(result.next_offset ?? (result.items || []).length); setResearchHistoryHasMore(Boolean(result.has_more)); } })
+      .catch(() => { if (!cancelled) { setResearchRuns([]); setResearchHistoryOffset(0); setResearchHistoryHasMore(false); } })
       .finally(() => { if (!cancelled) setResearchHistoryBusy(false); });
     return () => { cancelled = true; };
   }, [workspaceId, csrf]);
@@ -1698,6 +1701,20 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setAuditBusy(false); }
   }
 
+  async function loadMoreResearchHistory() {
+    if (!workspaceId || !csrf || researchHistoryLoadingMore || !researchHistoryHasMore) return;
+    const requestedWorkspaceId = workspaceId;
+    setResearchHistoryLoadingMore(true);
+    try {
+      const result = await api<{ items: ResearchRun[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30&offset=" + researchHistoryOffset, csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
+      setResearchRuns(current => { const seen = new Set(current.map(item => item.id)); return [...current, ...(result.items || []).filter(item => !seen.has(item.id))]; });
+      setResearchHistoryOffset(result.next_offset ?? (researchHistoryOffset + (result.items || []).length));
+      setResearchHistoryHasMore(Boolean(result.has_more));
+    } catch (err) { if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "More saved research could not be loaded."); }
+    finally { if (requestedWorkspaceId === workspaceId) setResearchHistoryLoadingMore(false); }
+  }
+
   async function deleteResearchRun(run: ResearchRun) {
     if (!workspaceId || !csrf || !canWrite) return;
     setResearchHistoryBusy(true); setError("");
@@ -1747,8 +1764,8 @@ export default function DashboardPage() {
       });
       if (requestedWorkspaceId !== workspaceId) return;
       setResearchResults(result.items || []);
-      const history = await api<{ items: ResearchRun[] }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30", csrf);
-      if (requestedWorkspaceId === workspaceId) setResearchRuns(history.items || []);
+      const history = await api<{ items: ResearchRun[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30&offset=0", csrf);
+      if (requestedWorkspaceId === workspaceId) { setResearchRuns(history.items || []); setResearchHistoryOffset(history.next_offset ?? (history.items || []).length); setResearchHistoryHasMore(Boolean(history.has_more)); }
       setNotice(result.notice || "Research results saved to workspace history for human review.");
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Public-web research could not be completed.");
@@ -1776,8 +1793,8 @@ export default function DashboardPage() {
       );
       if (requestedWorkspaceId !== workspaceId) return;
       setInfluencerResults(result.items || []);
-      const history = await api<{ items: ResearchRun[] }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30", csrf);
-      if (requestedWorkspaceId === workspaceId) setResearchRuns(history.items || []);
+      const history = await api<{ items: ResearchRun[]; next_offset?: number | null; has_more?: boolean }>("/api/v1/research/runs?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=30&offset=0", csrf);
+      if (requestedWorkspaceId === workspaceId) { setResearchRuns(history.items || []); setResearchHistoryOffset(history.next_offset ?? (history.items || []).length); setResearchHistoryHasMore(Boolean(history.has_more)); }
       setNotice(result.notice || "Creator candidates saved to workspace history for review.");
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Influencer discovery could not be completed.");
@@ -3107,6 +3124,7 @@ export default function DashboardPage() {
             {researchRuns.length > 0 && <div className="table-wrap"><table><thead><tr><th>Type</th><th>Search</th><th>Provider</th><th>Results</th><th>Date</th><th></th></tr></thead><tbody>
               {researchRuns.map(run=><tr key={run.id}><td>{run.research_type === "influencers" ? "Creators" : "Prospects"}</td><td>{run.query}</td><td>{run.provider}</td><td>{run.result_count}</td><td>{new Date(run.created_at).toLocaleString()}</td><td><div className="actions"><button className="button secondary" type="button" disabled={researchHistoryBusy} onClick={()=>void openResearchRun(run)}>Restore</button><button className="button secondary" type="button" disabled={researchHistoryBusy || !canWrite} onClick={()=>void deleteResearchRun(run)}>Delete</button></div></td></tr>)}
             </tbody></table></div>}
+            {researchHistoryHasMore && <button className="button secondary" type="button" disabled={researchHistoryBusy || researchHistoryLoadingMore} onClick={loadMoreResearchHistory}>{researchHistoryLoadingMore ? "Loading…" : "Load more saved research"}</button>}
           </article>
           {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Domain: {item.domain || "Domain unavailable"} · Relevance hint: {typeof item.relevance_score === "number" ? item.relevance_score + "/100" : "not scored"} · Review required · Not saved to CRM</p>{item.relevance_reasons && item.relevance_reasons.length > 0 && <p className="fine">{item.relevance_reasons.join(" · ")}</p>}<button className="button secondary" type="button" disabled={busy || !canWrite} onClick={() => { setProspectName(item.title.slice(0, 200)); setProspectCompany(""); setProspectWebsite(""); setProspectEmail(""); setProspectPhone(""); setEvidenceUrl(item.url); setFitReason((item.description || "Public search result; verify relevance before saving.").slice(0, 2000)); setNotice("Search evidence copied to the prospect form. Verify the real contact name, company, website and relevance before saving."); document.getElementById("prospect-name")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Prepare CRM record for review</button></article>)}</div>}
 
