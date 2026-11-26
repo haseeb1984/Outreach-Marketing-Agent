@@ -1,12 +1,18 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `3f739dfb94080016671a13d57b2f0bd8db2956a9` on `main` (2026-11-24). The current editorial/WordPress source has not yet completed CI or deployment acceptance.  
+**Current application implementation source checked:** `0709e95732a8a6ab01c92b3347d06568fc1c5323` on `main` (2026-11-26). The current editorial/WordPress source has not yet completed CI or deployment acceptance.  
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
 
 > **Status freshness note (2026-11-24):** The historical notes and matrix below contain older phase snapshots. Read the dated update below as the newer evidence where it conflicts with an older status. The old “latest deployed commit” value below is historical, not a current deployment claim.
+
+## Implementation update — 2026-11-26 (multi-provider research)
+
+- Public prospect and creator discovery now use a shared normalized provider adapter. Brave Search remains preferred; when it is not configured or returns a failed/invalid response, the adapter falls back to SerpAPI if `SERPAPI_API_KEY` is configured. Provider response fields are normalized before the existing public-HTTPS URL filtering, creator-profile validation, explainable relevance ranking, deduplication and human-review flow.
+- Search API responses now identify the provider actually used. The optional SerpAPI key is server-side only and is documented in `backend/.env.example`; no secret is stored in source control.
+- This is source implementation only. No provider credentials were supplied or exercised, and no CI/build, live provider acceptance, deployment or Hostinger package was run for this batch.
 
 ## Implementation update — 2026-11-24 (fresh post-merge verification)
 
