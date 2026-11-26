@@ -305,8 +305,16 @@ def _subscription_price_ids(items: Any) -> set[str]:
     return {price_id}
 
 
-def _resolve_subscription_plan(custom_data: Any, price_ids: set[Any], plans: dict[str, Any]) -> tuple[str, Any]:
-    """Require provider price and our signed custom metadata to identify one same plan."""
+def _resolve_subscription_plan(
+    custom_data: Any, price_ids: set[Any], plans: dict[str, Any], *,
+    allow_existing_subscription_plan_change: bool = False,
+) -> tuple[str, Any]:
+    """Resolve one plan from provider price; metadata stays strict for new subscriptions.
+
+    Paddle portal plan changes can leave checkout-time custom_data.plan_id unchanged.
+    Only callers that independently verified an existing workspace/subscription link
+    may let the current signed provider price supersede that stale metadata.
+    """
     if not isinstance(custom_data, dict):
         raise ValueError("workspace_mapping_missing")
     declared_plan = custom_data.get("plan_id")
@@ -320,7 +328,7 @@ def _resolve_subscription_plan(custom_data: Any, price_ids: set[Any], plans: dic
     if len(matching) != 1:
         raise ValueError("subscription_plan_mapping_invalid")
     matched_slug, plan = matching[0]
-    if declared_plan != matched_slug:
+    if declared_plan != matched_slug and not allow_existing_subscription_plan_change:
         raise ValueError("subscription_plan_metadata_mismatch")
     return matched_slug, plan
 
@@ -450,20 +458,44 @@ async def paddle_webhook(request: Request):
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         raise HTTPException(status_code=422, detail="workspace_mapping_missing")
 
-    plans = await _effective_plans(request, include_inactive=True)
-    items = data.get("items")
-    try:
-        price_ids = _subscription_price_ids(items)
-        matched_slug, plan = _resolve_subscription_plan(custom_data, price_ids, plans)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
-    if not _valid_entitlements(plan.get("entitlements")):
-        raise HTTPException(status_code=422, detail="subscription_plan_entitlements_invalid")
     provider_subscription_id = data.get("id")
     provider_event_id = payload.get("event_id")
     if (not isinstance(provider_subscription_id, str) or not provider_subscription_id.strip()
             or not isinstance(provider_event_id, str) or not provider_event_id.strip()):
         raise HTTPException(status_code=422, detail="subscription_event_identity_missing")
+
+    # The portal may change a subscription's price without rewriting the original
+    # checkout custom_data.plan_id. Permit that mismatch only for an update to the
+    # exact subscription already linked to this workspace; creation and all
+    # unlinked events still require the metadata and provider price to agree.
+    allow_existing_plan_change = False
+    if event_type == "subscription.updated":
+        pool = getattr(request.app.state, "db_pool", None)
+        if pool is not None:
+            try:
+                async with pool.acquire() as conn:
+                    existing_link = await conn.fetchval(
+                        """SELECT 1 FROM workspace_subscriptions
+                           WHERE workspace_id=$1 AND provider='paddle'
+                             AND provider_subscription_id=$2""",
+                        workspace_id, provider_subscription_id,
+                    )
+                allow_existing_plan_change = existing_link is not None
+            except Exception:
+                raise HTTPException(status_code=503, detail="billing_subscription_lookup_unavailable") from None
+
+    plans = await _effective_plans(request, include_inactive=True)
+    items = data.get("items")
+    try:
+        price_ids = _subscription_price_ids(items)
+        matched_slug, plan = _resolve_subscription_plan(
+            custom_data, price_ids, plans,
+            allow_existing_subscription_plan_change=allow_existing_plan_change,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if not _valid_entitlements(plan.get("entitlements")):
+        raise HTTPException(status_code=422, detail="subscription_plan_entitlements_invalid")
 
     status_map = {
         "active": "active", "trialing": "trialing", "past_due": "past_due",
