@@ -34,6 +34,7 @@ type UnifiedReplyThread = { id: string; prospect_id: string; prospect_name: stri
 type UnifiedReplyMessage = { id: string; channel: string; provider: string; direction: string; body: string; occurred_at: string; received_at: string; delivery_status?: string | null };
 type WhatsAppWebhookEvent = { id: string; phone_number_id?: string | null; event_kind: string; received_at: string; processing_error_code?: string | null };
 type Entitlement = { feature: string; allowed: boolean; reason: string; remaining: number | null };
+type BillingAccount = { workspace_id: string; subscription: null | { provider: string; plan_slug: string; plan_name?: string | null; status: string; display_price?: string | null; currency?: string | null; billing_interval?: string | null; billing_period_starts_at?: string | null; billing_period_ends_at?: string | null }; usage: Array<{ feature: string; consumed: number; reserved: number; released: number }>; invoices: Array<{ transaction_id: string; invoice_number?: string | null; status: string; currency_code?: string | null; total_minor?: string | null; billed_at?: string | null; updated_at?: string | null }> };
 type ResearchRun = { id: string; research_type: "prospects" | "influencers"; query: string; provider: string; result_count: number; created_at: string };
 type ResearchResult = { title: string; url: string; domain?: string; description: string; relevance_score?: number; relevance_reasons?: string[]; relevance_method?: string; evidence_type: string; requires_human_review: boolean };
 type InfluencerCandidate = { profile_url: string; platform: string; title: string; description: string; relevance_score: number; relevance_reasons: string[]; requires_human_review: boolean; audience_metrics: null; audience_metrics_status: string };
@@ -242,6 +243,8 @@ export default function DashboardPage() {
   const [integrationBusy, setIntegrationBusy] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
+  const [billingAccount, setBillingAccount] = useState<BillingAccount | null>(null);
+  const [billingAccountUnavailable, setBillingAccountUnavailable] = useState(false);
   const [counts, setCounts] = useState<Counts>({});
   const [campaignPerformance, setCampaignPerformance] = useState<CampaignPerformance[]>([]);
   const [campaignPerformanceUnavailable, setCampaignPerformanceUnavailable] = useState(false);
@@ -426,9 +429,12 @@ export default function DashboardPage() {
       return "";
     });
 
-    const entitlementResults = await Promise.allSettled([
-      api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
-      api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
+    const [entitlementResults, billingAccountResult] = await Promise.all([
+      Promise.allSettled([
+        api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=ai_draft_generations", token),
+        api<Entitlement>("/api/v1/billing/entitlements?workspace_id=" + encodeURIComponent(selectedId) + "&feature=email_sends", token),
+      ]),
+      Promise.allSettled([api<BillingAccount>("/api/v1/billing/account?workspace_id=" + encodeURIComponent(selectedId), token)]),
     ]);
     if (!isCurrentLoad()) return;
     const availableEntitlements = entitlementResults
@@ -436,6 +442,9 @@ export default function DashboardPage() {
       .map(result => result.value);
     setEntitlements(availableEntitlements);
     setEntitlementsUnavailable(availableEntitlements.length !== 2);
+    const accountResult = billingAccountResult[0];
+    setBillingAccount(accountResult.status === "fulfilled" ? accountResult.value : null);
+    setBillingAccountUnavailable(accountResult.status === "rejected");
     const failedSections = [...primaryFailureNames];
     if (followupResult[0].status === "rejected") failedSections.push("follow-up automation");
     if (replyInboxResult[0].status === "rejected") failedSections.push("unified inbox");
@@ -451,7 +460,7 @@ export default function DashboardPage() {
     if (templateResults.some(result => result.status === "rejected")) failedSections.push("WhatsApp message templates");
     if (inboxResult.status === "rejected") failedSections.push("WhatsApp inbox");
     if (webhookDeadLetterResult.status === "rejected") failedSections.push("webhook events");
-    if (entitlementResults.some(result => result.status === "rejected")) failedSections.push("billing entitlements");
+    if (entitlementResults.some(result => result.status === "rejected") || accountResult.status === "rejected") failedSections.push("billing and usage");
     if (failedSections.length) setError("Some workspace sections could not load (" + failedSections.join(", ") + "). Other sections remain available; use Refresh to retry.");
     // Load secondary inbox controls with the selected workspace so saved views and SLA
     // thresholds are immediately available after first load and every workspace switch.
@@ -588,7 +597,7 @@ export default function DashboardPage() {
     setCounts({}); setCampaignPerformance([]); setCampaignPerformanceUnavailable(false);
     setGrowthSchedules([]); setGrowthSchedulesUnavailable(false); setGrowthJobs([]); setGrowthJobsUnavailable(false); setGrowthJobReport(null);
     setScheduleStartUrl(""); setScheduleBusinessType(""); setScheduleTargetMarket(""); setScheduleQueries("");
-    setEntitlements([]); setEntitlementsUnavailable(false); setIntegrationStatus(null);
+    setEntitlements([]); setEntitlementsUnavailable(false); setBillingAccount(null); setBillingAccountUnavailable(false); setIntegrationStatus(null);
     setProjects([]); setProjectName(""); setProjectWebsite(""); setProjectBusinessModel(""); setProjectMarket("");
     setProjectLanguage(""); setProjectAudience(""); setProjectOffer(""); setProjectGoal(""); setProjectBrandVoice(""); setProjectCompetitors("");
     setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
@@ -2877,20 +2886,27 @@ export default function DashboardPage() {
           <div className="cards">{invitations.length ? invitations.map(invitation=><article className="card" key={invitation.id}><h3>{invitation.invited_email}</h3><p className="fine">Role: {invitation.role} · Status: {invitation.status}</p><p className="fine">Expires: {new Date(invitation.expires_at).toLocaleString()}</p>{invitation.status === "pending" && <button className="button secondary" type="button" disabled={busy} onClick={() => revokeInvitation(invitation)}>Revoke invitation</button>}</article>) : <article className="card"><p>No invitations available for this workspace, or the invitation service is not yet configured.</p></article>}</div>
         </section>}
         <section className="section" id="billing" aria-labelledby="billing-title"><h2 id="billing-title">Plan and billing</h2>
+          {billingAccountUnavailable && <p className="notice" role="status">Current subscription and invoice details could not be loaded. Refresh to retry; paid access remains controlled by the server.</p>}
+          {billingAccount && <article className="card"><h3>Current subscription</h3>{billingAccount.subscription ? <><p><strong>{billingAccount.subscription.plan_name || billingAccount.subscription.plan_slug}</strong> · {billingAccount.subscription.status.replaceAll("_"," ")}</p><p className="fine">{billingAccount.subscription.display_price ? billingAccount.subscription.display_price + (billingAccount.subscription.currency ? " " + billingAccount.subscription.currency : "") + (billingAccount.subscription.billing_interval ? " / " + billingAccount.subscription.billing_interval : "") : "Plan pricing is not available in the current catalog."}</p><p className="fine">Billing period: {billingAccount.subscription.billing_period_starts_at ? new Date(billingAccount.subscription.billing_period_starts_at).toLocaleDateString() : "—"} to {billingAccount.subscription.billing_period_ends_at ? new Date(billingAccount.subscription.billing_period_ends_at).toLocaleDateString() : "—"}</p></> : <p>No verified subscription is currently linked to this workspace.</p>}</article>}
           {plans.length ? <div className="cards">{plans.map(plan=><article className="card" key={plan.id}><h3>{plan.name}</h3><p>{plan.description || "Workspace subscription plan."}</p><p className="fine">{plan.display_price ? plan.display_price + (plan.currency ? " " + plan.currency : "") + (plan.billing_interval ? " / " + plan.billing_interval : "") : "Price is configured in the billing provider; display price has not been supplied."}</p><p className="fine">{plan.checkout_available ? "Provider configuration is present; complete sandbox and production verification before launch." : "Checkout is not enabled until server-side billing configuration is complete."}</p></article>)}</div> : <article className="card"><p>No billing plans are configured yet. Plans must be configured server-side; this screen never invents prices.</p></article>}
-          {plans.some(plan=>plan.checkout_available) && <div className="card"><div className="field"><label htmlFor="billing-plan">Choose a plan</label><select id="billing-plan" value={selectedPlan} onChange={e=>setSelectedPlan(e.target.value)}>{plans.filter(plan=>plan.checkout_available).map(plan=><option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></div><div className="actions"><button className="button" type="button" disabled={busy || !workspaceId || !selectedPlan || !["owner"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={startCheckout}>Continue to secure checkout</button><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !["owner"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={openBillingPortal}>Manage billing</button></div><p className="fine">Workspace owner permission is required. Paid access activates only after a verified billing webhook updates server-side subscription state. Manage billing opens the provider portal for an existing Paddle customer.</p></div>}
+          {(plans.some(plan=>plan.checkout_available) || billingAccount?.subscription?.provider === "paddle") && <div className="card"><div className="field"><label htmlFor="billing-plan">Choose a plan</label><select id="billing-plan" value={selectedPlan} onChange={e=>setSelectedPlan(e.target.value)}>{plans.filter(plan=>plan.checkout_available).map(plan=><option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></div><div className="actions"><button className="button" type="button" disabled={busy || !workspaceId || !selectedPlan || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={startCheckout}>Continue to secure checkout</button><button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf || !["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "")} onClick={openBillingPortal}>Manage billing</button></div><p className="fine">Workspace owner permission is required. Paid access activates only after a verified billing webhook updates server-side subscription state. Manage billing opens the provider portal for an existing Paddle customer.</p></div>}
         </section>
         <section className="section" aria-labelledby="entitlements-title"><h2 id="entitlements-title">Feature access and usage</h2>
           <p className="fine">Access comes from the server-side subscription record. Missing or unavailable billing state does not grant paid access.</p>
           {entitlementsUnavailable && <p className="notice" role="status">One or more entitlement checks are unavailable. Paid actions remain subject to server-side enforcement.</p>}
-          <div className="cards">{["ai_draft_generations", "email_sends"].map(feature => {
+          <div className="cards">{["ai_draft_generations", "email_sends", "website_audits", "whatsapp_sends", "prospect_research"].map(feature => {
             const item = entitlements.find(entry => entry.feature === feature);
-            const label = feature === "ai_draft_generations" ? "AI draft generation" : "Email sends";
+            const labels: Record<string,string> = { ai_draft_generations: "AI draft generation", email_sends: "Email sends", website_audits: "Website audits", whatsapp_sends: "WhatsApp sends", prospect_research: "Prospect research" };
+            const label = labels[feature] || feature;
             return <article className="card" key={feature}><h3>{label}</h3>
               <p><strong>{item ? (item.allowed ? "Available" : "Not available") : "Status unavailable"}</strong></p>
               <p className="fine">{item ? (item.allowed ? (item.remaining === null ? "No remaining limit reported by the server." : item.remaining + " uses remaining in the current period.") : "Access decision: " + item.reason.replaceAll("_", " ")) : "Refresh the workspace or contact the operator if this persists."}</p>
             </article>;
           })}</div>
+          <h3>Usage in the current billing period</h3>
+          {billingAccount?.usage.length ? <div className="cards">{billingAccount.usage.map(item=><article className="card" key={item.feature}><h3>{item.feature.replaceAll("_"," ")}</h3><p>{item.consumed} consumed · {item.reserved} reserved · {item.released} released</p></article>)}</div> : <p className="fine">No quota usage records are available for the current billing period.</p>}
+          <h3>Recent invoices and transactions</h3>
+          {billingAccount?.invoices.length ? <div className="cards">{billingAccount.invoices.map(invoice=><article className="card" key={invoice.transaction_id}><h3>{invoice.invoice_number || invoice.transaction_id}</h3><p>{invoice.status.replaceAll("_"," ")}{invoice.currency_code && invoice.total_minor ? " · " + invoice.currency_code + " " + (Number(invoice.total_minor)/100).toFixed(2) : ""}</p><p className="fine">Updated: {invoice.updated_at ? new Date(invoice.updated_at).toLocaleString() : "—"}</p></article>)}</div> : <p className="fine">No invoice or transaction records are available yet.</p>}
         </section>
         <section className="section" id="analytics" aria-labelledby="metrics-title"><div className="section-head"><h2 id="metrics-title">Recorded activity</h2><p className="fine">Counts from saved records; not estimates of revenue or ROI.</p></div><div className="dashboard-grid">{metricItems.map(([label,key])=><article className="metric" key={key}><strong>{counts[key] ?? "—"}</strong><span>{label}</span></article>)}</div><p className="fine">“Marked sent” means the configured email adapter returned successfully; it does not prove inbox delivery. Clicks, revenue and ROI are not inferred.</p></section>
         <section className="section" aria-labelledby="campaign-performance-title">
