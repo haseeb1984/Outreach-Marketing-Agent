@@ -1,4 +1,4 @@
-## Current implementation update — 2026-11-27 (first workspace naming)
+## Current implementation update — 2026-11-27 (first workspace naming; application source `76c55e94bd76a34997bf3d3d6f8736b578c4d9f1`)
 
 - New account registration now collects the business/workspace name and passes it to the account-creation transaction, which creates the customer's initial owner workspace with that chosen name. The API field remains optional for backward compatibility with existing callers; legacy callers still receive the prior email-derived fallback. Names are trimmed and bounded to 160 characters, and blank supplied values are rejected. No extra database migration is needed. Source-only; no registration email, database, browser or build acceptance was run.
 
