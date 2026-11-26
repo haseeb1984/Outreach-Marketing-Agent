@@ -289,7 +289,16 @@ async def export_account_data(request: Request) -> JSONResponse:
                     )
                     if truncated:
                         export["limits"]["truncated_collections"].append("research_runs")
-                    export["research_runs"] = [dict(row) for row in research_run_rows]
+                    export["research_runs"] = []
+                    for row in research_run_rows:
+                        item = dict(row)
+                        for json_field in ("parameters", "results"):
+                            if isinstance(item.get(json_field), str):
+                                try:
+                                    item[json_field] = json.loads(item[json_field])
+                                except ValueError:
+                                    item[json_field] = None
+                        export["research_runs"].append(item)
                     audit_rows = await conn.fetch(
                         """SELECT workspace_id,event_type,outcome,created_at
                            FROM security_audit_events
