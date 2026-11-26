@@ -223,7 +223,12 @@ async def _persist_research_run(request, workspace_id, user_id, research_type, q
 
 
 @router.get("/runs")
-async def list_research_runs(request: Request, workspace_id: str, limit: int = 30) -> dict:
+async def list_research_runs(
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+) -> dict:
     _, _, session = await _authenticated(request)
     auth_store = getattr(request.app.state, "auth_store", None)
     if auth_store is None or not await auth_store.authorize_workspace(
@@ -238,12 +243,19 @@ async def list_research_runs(request: Request, workspace_id: str, limit: int = 3
             rows = await conn.fetch(
                 """SELECT id,research_type,query,provider,result_count,created_at
                    FROM workspace_research_runs WHERE workspace_id=$1
-                   ORDER BY created_at DESC,id DESC LIMIT $2""",
-                workspace_id, max(1, min(100, limit)),
+                   ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3""",
+                workspace_id, limit + 1, offset,
             )
-        return {"items": [{"id": str(row["id"]), "research_type": row["research_type"],
-            "query": row["query"], "provider": row["provider"], "result_count": row["result_count"],
-            "created_at": row["created_at"].isoformat()} for row in rows]}
+        has_more = len(rows) > limit
+        items = rows[:limit]
+        return {
+            "items": [{"id": str(row["id"]), "research_type": row["research_type"],
+                "query": row["query"], "provider": row["provider"], "result_count": row["result_count"],
+                "created_at": row["created_at"].isoformat()} for row in items],
+            "limit": limit, "offset": offset,
+            "next_offset": offset + len(items) if has_more else None,
+            "has_more": has_more,
+        }
     except Exception:
         raise HTTPException(status_code=503, detail="research_history_unavailable") from None
 
