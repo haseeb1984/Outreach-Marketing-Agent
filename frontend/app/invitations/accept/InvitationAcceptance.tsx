@@ -18,6 +18,8 @@ export default function InvitationAcceptance() {
     const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
     const fragmentParams = new URLSearchParams(fragment);
     const inviteToken = fragmentParams.get("token") || "";
+    // Remove the bearer token from browser history/address bar immediately.
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setToken(inviteToken);
     fetch("/api/v1/auth/me", { credentials: "same-origin", cache: "no-store" })
       .then(async response => {

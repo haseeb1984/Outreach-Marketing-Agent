@@ -73,18 +73,21 @@ class SMTPEmailDelivery:
         self._validate_configuration()
         if not isinstance(recipient, str) or len(recipient) > 320 or "@" not in recipient:
             raise ValueError("invalid_recipient")
-        base = (self._settings.public_base_url or "").strip()
+        # Password-reset links land on the public frontend. Keep the bearer token
+        # in the URL fragment so it is never sent in the initial HTTP request,
+        # reverse-proxy access logs, or referrer headers.
+        base = (
+            getattr(self._settings, "frontend_public_url", None)
+            or next((item.strip() for item in (getattr(self._settings, "frontend_origins", "") or "").split(",") if item.strip()), "")
+        ).strip()
         parts = urlsplit(base)
         if (
             parts.scheme.lower() != "https" or not parts.hostname
             or parts.username is not None or parts.password is not None
-            or parts.query or parts.fragment
+            or parts.path not in ("", "/") or parts.query or parts.fragment
         ):
-            raise ValueError("public_https_origin_required")
-        link = urlunsplit((
-            "https", parts.netloc, parts.path.rstrip("/") + "/api/v1/auth/reset-password",
-            urlencode({"token": token}), "",
-        ))
+            raise ValueError("frontend_https_origin_required")
+        link = urlunsplit(("https", parts.netloc, "/reset-password", "", "")) + "#" + urlencode({"token": token})
         message = EmailMessage()
         message["Subject"] = "Reset your Outreach Marketing Agent password"
         message["From"] = f'{self._settings.smtp_from_name} <{self._settings.smtp_from_email}>'
