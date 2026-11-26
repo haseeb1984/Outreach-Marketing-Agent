@@ -147,7 +147,23 @@ def _require_empty_restore_target(environment: dict[str, str]) -> None:
                 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
                   AND n.nspname NOT LIKE 'pg_toast%'
                   AND n.nspname NOT LIKE 'pg_temp_%'
-                  AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND n.nspname NOT LIKE 'pg_toast%'
+                  AND n.nspname NOT LIKE 'pg_temp_%'
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND n.nspname NOT LIKE 'pg_toast%'
+                  AND n.nspname NOT LIKE 'pg_temp_%'
+                  AND t.typtype <> 'p'
             )
         )::text
     """
