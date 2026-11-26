@@ -173,6 +173,89 @@ def _relevance(query: str, title: str, description: str) -> tuple[int, list[str]
     return min(100, max(0, score)), reasons
 
 
+
+import json
+import uuid
+
+async def _persist_research_run(request, workspace_id, user_id, research_type, query, provider, parameters, results):
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="research_history_not_configured")
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO workspace_research_runs
+                   (workspace_id,created_by,research_type,query,provider,parameters,results,result_count)
+                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8)
+                   RETURNING id,created_at""",
+                workspace_id, user_id, research_type, query, provider,
+                json.dumps(parameters), json.dumps(results), len(results),
+            )
+        return {"id": str(row["id"]), "created_at": row["created_at"].isoformat()}
+    except Exception:
+        raise HTTPException(status_code=503, detail="research_history_save_failed") from None
+
+
+@router.get("/runs")
+async def list_research_runs(request: Request, workspace_id: str, limit: int = 30) -> dict:
+    _, _, session = await _authenticated(request)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None or not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role="member"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="research_history_not_configured")
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT id,research_type,query,provider,result_count,created_at
+                   FROM workspace_research_runs WHERE workspace_id=$1
+                   ORDER BY created_at DESC,id DESC LIMIT $2""",
+                workspace_id, max(1, min(100, limit)),
+            )
+        return {"items": [{"id": str(row["id"]), "research_type": row["research_type"],
+            "query": row["query"], "provider": row["provider"], "result_count": row["result_count"],
+            "created_at": row["created_at"].isoformat()} for row in rows]}
+    except Exception:
+        raise HTTPException(status_code=503, detail="research_history_unavailable") from None
+
+
+@router.get("/runs/{run_id}")
+async def get_research_run(run_id: str, request: Request, workspace_id: str) -> dict:
+    _, _, session = await _authenticated(request)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None or not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role="member"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    try:
+        parsed_id = uuid.UUID(run_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="research_run_not_found") from None
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="research_history_not_configured")
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT id,research_type,query,provider,parameters,results,result_count,created_at
+                   FROM workspace_research_runs WHERE id=$1 AND workspace_id=$2""",
+                parsed_id, workspace_id,
+            )
+        if row is None:
+            raise HTTPException(status_code=404, detail="research_run_not_found")
+        return {"id": str(row["id"]), "research_type": row["research_type"], "query": row["query"],
+            "provider": row["provider"], "parameters": row["parameters"], "items": row["results"],
+            "count": row["result_count"], "created_at": row["created_at"].isoformat()}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="research_history_unavailable") from None
+
+
+
 @router.post("/prospects/search")
 async def search_public_prospects(payload: ProspectSearchInput, request: Request) -> dict:
     """Search public web results with relevance hints and evidence links; never contacts prospects."""
@@ -264,7 +347,13 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         await subscriptions.finish_reservation(
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed", units=len(results)
         )
+        saved_run = await _persist_research_run(
+            request, payload.workspace_id, session["user_id"], "prospects",
+            payload.query.strip(), provider, {"count": requested_count}, results,
+        )
         return {
+            "run_id": saved_run["id"],
+            "created_at": saved_run["created_at"],
             "workspace_id": payload.workspace_id,
             "query": payload.query.strip(),
             "provider": provider,
@@ -488,7 +577,13 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         await subscriptions.finish_reservation(
             workspace_id=payload.workspace_id, reservation_id=reservation_id, outcome="consumed", units=len(items)
         )
+        saved_run = await _persist_research_run(
+            request, payload.workspace_id, session["user_id"], "influencers",
+            payload.query.strip(), provider, {"count": requested_count, "platforms": payload.platforms}, items,
+        )
         return {
+            "run_id": saved_run["id"],
+            "created_at": saved_run["created_at"],
             "workspace_id": payload.workspace_id,
             "query": payload.query.strip(),
             "platforms": payload.platforms,
