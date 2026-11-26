@@ -1,6 +1,7 @@
 """Authenticated account data export limited to the current user's active workspaces."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
