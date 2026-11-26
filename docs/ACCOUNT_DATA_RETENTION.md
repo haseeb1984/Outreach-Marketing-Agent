@@ -2,7 +2,7 @@
 
 ## Current account-deletion behavior
 
-The authenticated `DELETE /api/v1/account` operation is an immediate, transactional account-access revocation and identity-pseudonymization workflow. It is not a claim that every copy of every record is erased instantly.
+The authenticated `DELETE /api/v1/account` operation requires a valid current password, CSRF/origin validation and a user-scoped rate limit before performing immediate, transactional account-access revocation and identity pseudonymization. It is not a claim that every copy of every record is erased instantly.
 
 Within one database transaction, the service:
 
@@ -14,7 +14,7 @@ Within one database transaction, the service:
 - replaces the login email with a non-routable tombstone address, replaces the password with a newly generated hash, clears email verification, sets `status='deleted'` and records `deleted_at`;
 - writes a security audit event without recording the original email address.
 
-The operation does not silently delete a shared workspace or its shared business records. Other non-revoked members retain the workspace and its records. Attribution in shared operational history may remain associated with the pseudonymized account for audit integrity.
+The operation does not silently delete a shared workspace or its shared business records. Password reauthentication is checked against the currently authenticated account identity before any destructive transaction begins; incorrect attempts are rate-limited. Other non-revoked members retain the workspace and its records. Attribution in shared operational history may remain associated with the pseudonymized account for audit integrity.
 
 ## Data categories and handling
 

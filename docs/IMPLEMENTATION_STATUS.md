@@ -10,6 +10,10 @@
 
 > **Status freshness note (2026-11-24):** The historical notes and matrix below contain older phase snapshots. Read the dated update below as the newer evidence where it conflicts with an older status. The old “latest deployed commit” value below is historical, not a current deployment claim.
 
+## Implementation update — 2026-11-26 (account deletion reauthentication)
+
+- `DELETE /api/v1/account` now requires current-password reauthentication, CSRF/origin validation and a user-scoped rate limit before destructive work. Dashboard UI collects the password and retains the existing irreversible-action confirmation. No live account deletion or browser acceptance was run.
+
 ## Implementation update — 2026-11-26 (restore destination safety)
 
 - Hardened `backend/scripts/database_backup.py`: a newly created dump must pass `pg_restore --list` before it is published with its checksum. Before restore, the tool checks the destination for non-system schemas, relations, routines and custom types and refuses any non-empty target. This enforces the documented recovery-database requirement in code rather than relying only on operator discipline. No actual database connection, backup or restore was performed.

@@ -4,6 +4,8 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-26
 
+- Account deletion now requires current-password reauthentication in addition to the existing CSRF/origin checks and explicit browser confirmation. The endpoint applies a user-scoped rate limit before validating the password and does not begin the destructive workspace/account transaction on an incorrect password. The dashboard collects the password and sends it only in the authenticated deletion request. Source-only; no live deletion or browser acceptance was run.
+
 - PostgreSQL backups now run `pg_restore --list` against the temporary archive before publishing the final dump and checksum, so an unreadable archive is not promoted as a completed backup. Restore also performs a read-only inspection of the destination database before invoking `pg_restore`. It rejects targets containing user schemas, relations, routines or custom types, in addition to requiring a different source/target identity and explicit confirmation. This closes the gap where a non-empty target could be passed to a restore command despite the documented empty-target requirement. No database restore was run.
 
 - The API `/ready` gate now requires migrations 063–069 and the billing price-history, daily research quota, editorial article/CMS, project-scoped WordPress and saved-research schema. Previously it checked only through migration 062 and could return ready with newer feature tables absent. The readiness query now verifies the 69-migration ledger count and the added critical tables/columns. Source-only; no live database query or migration was run.
