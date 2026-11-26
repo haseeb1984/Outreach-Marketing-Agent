@@ -7,7 +7,9 @@ not lead-conversion predictions. The provider credential is read from server env
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
+import uuid
 from urllib.parse import urlsplit
 
 import httpx
@@ -174,9 +176,6 @@ def _relevance(query: str, title: str, description: str) -> tuple[int, list[str]
 
 
 
-import json
-import uuid
-
 async def _persist_research_run(request, workspace_id, user_id, research_type, query, provider, parameters, results):
     pool = getattr(request.app.state, "db_pool", None)
     if pool is None:
@@ -220,6 +219,38 @@ async def list_research_runs(request: Request, workspace_id: str, limit: int = 3
             "created_at": row["created_at"].isoformat()} for row in rows]}
     except Exception:
         raise HTTPException(status_code=503, detail="research_history_unavailable") from None
+
+
+@router.delete("/runs/{run_id}")
+async def delete_research_run(run_id: str, request: Request, workspace_id: str) -> dict:
+    """Delete a saved research run from the authorized workspace."""
+    _, _, session = await _authenticated(request)
+    _check_csrf(request, session)
+    auth_store = getattr(request.app.state, "auth_store", None)
+    if auth_store is None or not await auth_store.authorize_workspace(
+        user_id=session["user_id"], workspace_id=workspace_id, minimum_role="member"
+    ):
+        raise HTTPException(status_code=404, detail="workspace_not_found")
+    try:
+        parsed_id = uuid.UUID(run_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="research_run_not_found") from None
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=503, detail="research_history_not_configured")
+    try:
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM workspace_research_runs WHERE id=$1 AND workspace_id=$2",
+                parsed_id, workspace_id,
+            )
+        if result.endswith(" 0"):
+            raise HTTPException(status_code=404, detail="research_run_not_found")
+        return {"deleted": True, "id": run_id}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="research_history_delete_failed") from None
 
 
 @router.get("/runs/{run_id}")
