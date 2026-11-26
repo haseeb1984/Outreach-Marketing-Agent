@@ -2723,6 +2723,18 @@ export default function DashboardPage() {
       <section className="page-head"><p className="eyebrow">Private workspace</p><h1>Your outreach workspace</h1><p className="lead">Signed in as {email || "your account"}. Research, campaigns and approvals stay separated by workspace.</p></section>
       <ErrorNotice message={error} />
       {notice && <p className="notice" role="status" aria-live="polite">{notice}</p>}
+      {!loading && workspaces.length > 0 && workspaceId && <section className="card onboarding-checklist" aria-labelledby="onboarding-title">
+        <div className="section-head"><div><p className="eyebrow">Getting started</p><h2 id="onboarding-title">Set up your outreach workflow</h2></div>
+          <span className="pill">{[projects.length > 0, prospects.length > 0, campaigns.length > 0, emailAccounts.some(account => account.status === "active"), drafts.length > 0].filter(Boolean).length} of 5 complete</span></div>
+        <p className="muted">Complete these steps in order. Nothing is sent automatically; every outreach message still requires human approval.</p>
+        <ol className="onboarding-steps">
+          <li><span aria-hidden="true">{projects.length > 0 ? "✓" : "1"}</span><div><strong>Create a client project</strong><p className="fine">Save the website, audience, offer and brand context.</p></div><a href="#project-workflow">Open projects</a></li>
+          <li><span aria-hidden="true">{prospects.length > 0 ? "✓" : "2"}</span><div><strong>Add researched prospects</strong><p className="fine">Save contacts with source evidence and verified details.</p></div><a href="#crm">Open CRM</a></li>
+          <li><span aria-hidden="true">{campaigns.length > 0 ? "✓" : "3"}</span><div><strong>Create an outreach campaign</strong><p className="fine">Define the offer and the audience you want to reach.</p></div><a href="#campaigns">Open campaigns</a></li>
+          <li><span aria-hidden="true">{emailAccounts.some(account => account.status === "active") ? "✓" : "4"}</span><div><strong>Connect and test your SMTP account</strong><p className="fine">Use a workspace-owned mailbox before creating email deliveries.</p></div><a href="#integrations">Open connections</a></li>
+          <li><span aria-hidden="true">{drafts.length > 0 ? "✓" : "5"}</span><div><strong>Generate and review your first draft</strong><p className="fine">Review the message and approve it before any delivery action.</p></div><a href="#drafts">Open draft queue</a></li>
+        </ol>
+      </section>}
       {!loading && workspaces.length > 0 && workspaceId && <nav className="dashboard-shortcuts" aria-label="Jump to workspace tools">
         <a href="#crm">Prospects</a><a href="#campaigns">Campaigns</a><a href="#drafts">Create draft</a><a href="#approvals">Approvals</a><a href="#inbox">Inbox</a><a href="#deliveries">Deliveries</a><a href="#integrations">Connections</a><a href="#billing">Billing</a><a href="#analytics">Analytics</a><a href="#team">Team</a>
       </nav>}
