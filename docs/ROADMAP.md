@@ -4,6 +4,7 @@ Percentages represent verified implementation scope, not launch readiness. A pha
 
 ## Current implementation update — 2026-11-26
 
+- WhatsApp webhook operations now expose a platform-admin-only, read-only dead-letter view with bounded pagination and aggregate counts. It returns event metadata and retry/error timestamps only; raw webhook payloads and message content are never exposed. Source-only; no database/runtime acceptance or Meta provider acceptance was run.
 - Analytics now counts WhatsApp provider-confirmed delivery cumulatively: a `read` status also qualifies as delivered, so later read transitions no longer make delivered totals fall. Workspace summary exposes distinct provider-confirmed deliveries and reads; campaign metrics derive these from persisted provider status events in the selected reporting window rather than only the delivery row's current state. Source-only; SQL/runtime and dashboard acceptance remain pending.
 - Saved research history now paginates in 30-record batches with server-side `has_more`/`next_offset` metadata. The dashboard loads older runs on demand, deduplicates appended records, resets to the newest page after a successful search, and adjusts the next offset after a manual deletion. Source-only; no browser/database acceptance has been run.
 - WhatsApp integration status copy now distinguishes the application dispatch gate from actual Meta sandbox/production acceptance, avoiding the implication that a configured flag proves provider readiness. No live sending or provider acceptance was performed.
