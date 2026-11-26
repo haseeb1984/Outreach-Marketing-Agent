@@ -720,11 +720,18 @@ async def replay_whatsapp_webhook_dead_letter(event_id: str, request: Request):
         async with pool_for(request).acquire() as conn:
             async with conn.transaction():
                 row = await conn.fetchrow(
-                    """UPDATE meta_whatsapp_webhook_events
+                    """WITH eligible AS (
+                         SELECT id,event_kind,attempts
+                         FROM meta_whatsapp_webhook_events
+                         WHERE id=$1 AND processed_at IS NULL AND dead_lettered_at IS NOT NULL
+                         FOR UPDATE
+                       )
+                       UPDATE meta_whatsapp_webhook_events e
                        SET attempts=0, processing_started_at=NULL,
                            dead_lettered_at=NULL, processing_error_code=NULL
-                       WHERE id=$1 AND processed_at IS NULL AND dead_lettered_at IS NOT NULL
-                       RETURNING id,event_kind,attempts""",
+                       FROM eligible
+                       WHERE e.id=eligible.id
+                       RETURNING e.id,e.event_kind,eligible.attempts AS previous_attempts""",
                     event_uuid,
                 )
                 if row is None:
@@ -743,7 +750,7 @@ async def replay_whatsapp_webhook_dead_letter(event_id: str, request: Request):
                     actor["user_id"], str(event_uuid),
                     json.dumps({
                         "event_kind": row["event_kind"],
-                        "previous_attempts": 8,
+                        "previous_attempts": int(row["previous_attempts"]),
                         "payload_exposed": False,
                     }),
                 )
