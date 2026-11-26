@@ -1721,6 +1721,7 @@ export default function DashboardPage() {
     try {
       await api("/api/v1/research/runs/" + encodeURIComponent(run.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
       setResearchRuns(current => current.filter(item => item.id !== run.id));
+      setResearchHistoryOffset(current => Math.max(0, current - 1));
       setNotice("Saved research run deleted from this workspace.");
     } catch (err) { setError(err instanceof Error ? err.message : "Saved research could not be deleted."); }
     finally { setResearchHistoryBusy(false); }
