@@ -152,6 +152,9 @@ export default function DashboardPage() {
   const [whatsappDeadLetterLoadingMore, setWhatsappDeadLetterLoadingMore] = useState(false);
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
   const [unifiedReplyThreads, setUnifiedReplyThreads] = useState<UnifiedReplyThread[]>([]);
+  const [replyInboxSearch, setReplyInboxSearch] = useState("");
+  const [replyInboxHasMore, setReplyInboxHasMore] = useState(false);
+  const [replyInboxLoadingMore, setReplyInboxLoadingMore] = useState(false);
   const [selectedReplyProspectId, setSelectedReplyProspectId] = useState("");
   const [unifiedReplyMessages, setUnifiedReplyMessages] = useState<UnifiedReplyMessage[]>([]);
   const [unifiedReplyBusy, setUnifiedReplyBusy] = useState(false);
@@ -337,6 +340,8 @@ export default function DashboardPage() {
     if (!isCurrentLoad()) return;
     const loadedReplyThreads = replyInboxResult[0].status === "fulfilled" ? (replyInboxResult[0].value.items || []) : [];
     setUnifiedReplyThreads(loadedReplyThreads);
+    setReplyInboxHasMore(loadedReplyThreads.length === 50);
+    setReplyInboxSearch("");
     setSelectedReplyProspectId(current => loadedReplyThreads.some(thread => thread.prospect_id === current) ? current : "");
     if (!loadedReplyThreads.length) setUnifiedReplyMessages([]);
     const performanceResult = await Promise.allSettled([
@@ -863,6 +868,25 @@ export default function DashboardPage() {
     } catch (err) {
       if (requestSequence === replyDetailSequenceRef.current && requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Reply conversation could not be loaded.");
     } finally { if (requestSequence === replyDetailSequenceRef.current) setUnifiedReplyBusy(false); }
+  }
+
+  async function loadMoreReplyThreads() {
+    if (!workspaceId || !csrf || !replyInboxHasMore || replyInboxLoadingMore) return;
+    const requestedWorkspaceId = workspaceId;
+    const offset = unifiedReplyThreads.length;
+    setReplyInboxLoadingMore(true);
+    try {
+      const result = await api<{ items: UnifiedReplyThread[] }>("/api/v1/conversations?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=" + offset, csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
+      const existing = new Set(unifiedReplyThreads.map(thread => thread.prospect_id));
+      const additions = (result.items || []).filter(thread => !existing.has(thread.prospect_id));
+      setUnifiedReplyThreads(current => [...current, ...additions]);
+      setReplyInboxHasMore((result.items || []).length === 50);
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "More reply threads could not be loaded.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId) setReplyInboxLoadingMore(false);
+    }
   }
 
   async function createUnifiedReplyDraft() {
@@ -3209,9 +3233,11 @@ export default function DashboardPage() {
           <div className="cards">
             <article className="card">
               <h3>Reply threads ({unifiedReplyThreads.length})</h3>
-              {unifiedReplyThreads.length ? unifiedReplyThreads.map(thread=><button key={thread.prospect_id} type="button" className={"button " + (selectedReplyProspectId===thread.prospect_id ? "" : "secondary")} disabled={unifiedReplyBusy} onClick={()=>openUnifiedReplyThread(thread)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}>
+              <div className="field"><label htmlFor="reply-inbox-search">Search conversations</label><input id="reply-inbox-search" type="search" maxLength={200} value={replyInboxSearch} onChange={event=>setReplyInboxSearch(event.target.value)} placeholder="Search name, company, message or channel" /></div>
+              {unifiedReplyThreads.filter(thread => [thread.prospect_name, thread.prospect_company, thread.latest_message, thread.channel].some(value => String(value || "").toLowerCase().includes(replyInboxSearch.trim().toLowerCase()))).length ? unifiedReplyThreads.filter(thread => [thread.prospect_name, thread.prospect_company, thread.latest_message, thread.channel].some(value => String(value || "").toLowerCase().includes(replyInboxSearch.trim().toLowerCase()))).map(thread=><button key={thread.prospect_id} type="button" className={"button " + (selectedReplyProspectId===thread.prospect_id ? "" : "secondary")} disabled={unifiedReplyBusy} onClick={()=>openUnifiedReplyThread(thread)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}>
                 <strong>{thread.prospect_name}</strong><span style={{display:"block"}}>{thread.prospect_company} · {thread.channel.toUpperCase()} · {thread.message_count} messages · {thread.latest_direction || "inbound"}{thread.latest_delivery_status ? " · " + thread.latest_delivery_status : ""}</span><span style={{display:"block"}}>{thread.latest_message}</span><span className="fine">{new Date(thread.latest_message_at).toLocaleString()}</span>
               </button>) : <p className="fine">No linked email or WhatsApp replies have been received yet.</p>}
+              {replyInboxHasMore && <button className="button secondary" type="button" disabled={replyInboxLoadingMore || !workspaceId || !csrf} onClick={loadMoreReplyThreads}>{replyInboxLoadingMore ? "Loading…" : "Load 50 more conversations"}</button>}
               <button className="button secondary" type="button" disabled={busy || !workspaceId || !csrf} onClick={()=>refresh(workspaceId,csrf)}>Refresh reply inbox</button>
             </article>
             <article className="card">
