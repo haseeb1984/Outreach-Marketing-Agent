@@ -127,6 +127,41 @@ def verify(path: Path) -> None:
     _run(["pg_restore", "--list", str(path)], dict(os.environ))
 
 
+def _require_empty_restore_target(environment: dict[str, str]) -> None:
+    """Refuse restoration when the target contains user schemas or database objects."""
+    executable = shutil.which("psql")
+    if executable is None:
+        raise RuntimeError("required_postgres_tool_missing:psql")
+    query = """
+        SELECT (
+            EXISTS (
+                SELECT 1 FROM pg_namespace
+                WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'public')
+                  AND nspname NOT LIKE 'pg_toast%'
+                  AND nspname NOT LIKE 'pg_temp_%'
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND n.nspname NOT LIKE 'pg_toast%'
+                  AND n.nspname NOT LIKE 'pg_temp_%'
+                  AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+            )
+        )::text
+    """
+    completed = subprocess.run(
+        [executable, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1",
+         "--dbname", environment["PGDATABASE"], "-c", query],
+        env=environment, capture_output=True, text=True, check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("restore_target_inspection_failed")
+    if completed.stdout.strip().lower() != "f":
+        raise ValueError("restore_target_must_be_empty")
+
+
 def restore(path: Path) -> None:
     verify(path)
     source_url = os.environ.get("SOURCE_DATABASE_URL", "").strip()
@@ -138,7 +173,8 @@ def restore(path: Path) -> None:
     if os.environ.get("CONFIRM_RESTORE") != "YES":
         raise ValueError("set_CONFIRM_RESTORE_YES_for_explicit_restore")
     environment = _connection_environment(target_url)
-    # No --clean: restore is intended for a newly created empty recovery database.
+    _require_empty_restore_target(environment)
+    # No --clean: restore is intended for a newly provisioned empty recovery database.
     _run(["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges", "--dbname", environment["PGDATABASE"], str(path)], environment)
 
 
