@@ -277,8 +277,12 @@ async def get_research_run(run_id: str, request: Request, workspace_id: str) -> 
             )
         if row is None:
             raise HTTPException(status_code=404, detail="research_run_not_found")
+        parameters = json.loads(row["parameters"]) if isinstance(row["parameters"], str) else row["parameters"]
+        results = json.loads(row["results"]) if isinstance(row["results"], str) else row["results"]
+        if not isinstance(parameters, dict) or not isinstance(results, list):
+            raise HTTPException(status_code=503, detail="research_history_invalid")
         return {"id": str(row["id"]), "research_type": row["research_type"], "query": row["query"],
-            "provider": row["provider"], "parameters": row["parameters"], "items": row["results"],
+            "provider": row["provider"], "parameters": parameters, "items": results,
             "count": row["result_count"], "created_at": row["created_at"].isoformat()}
     except HTTPException:
         raise
