@@ -1,3 +1,5 @@
+- Unified reply inbox search now runs against the complete workspace conversation set on the backend (prospect name, company, latest message and channel), while retaining 50-thread pagination. Search is workspace-authorized and bounded to 200 characters; implementation is source-committed but not yet tested or deployed.
+
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
