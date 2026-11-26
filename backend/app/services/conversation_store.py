@@ -89,7 +89,7 @@ class ConversationStore:
             result.append(item)
         return result
 
-    async def list_threads(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+    async def list_threads(self, *, workspace_id: str, limit: int = 50, offset: int = 0, search: str = "") -> list[dict[str, Any]]:
         """Return one cross-channel thread per prospect, including native Meta inbox messages."""
         if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
             raise ValueError("pagination_out_of_range")
@@ -129,8 +129,10 @@ class ConversationStore:
                    ranked.provider,ranked.direction AS latest_direction,ranked.delivery_status AS latest_delivery_status,ranked.occurred_at AS latest_message_at,ranked.received_at,ranked.message_count
             FROM ranked JOIN crm_prospects p ON p.id=ranked.prospect_id
             WHERE ranked.position=1
+              AND ($4 = '' OR p.name ILIKE $5 OR COALESCE(p.company,'') ILIKE $5
+                   OR ranked.body ILIKE $5 OR ranked.channel ILIKE $5)
             ORDER BY ranked.occurred_at DESC,ranked.id DESC LIMIT $2 OFFSET $3""",
-                workspace_id, limit, offset)
+                workspace_id, limit, offset, search.strip(), '%' + search.strip() + '%')
         result = []
         for row in rows:
             item = dict(row)
