@@ -153,6 +153,7 @@ export default function DashboardPage() {
   const [selectedWhatsAppConversation, setSelectedWhatsAppConversation] = useState("");
   const [unifiedReplyThreads, setUnifiedReplyThreads] = useState<UnifiedReplyThread[]>([]);
   const [replyInboxSearch, setReplyInboxSearch] = useState("");
+  const [replyInboxAppliedSearch, setReplyInboxAppliedSearch] = useState("");
   const [replyInboxHasMore, setReplyInboxHasMore] = useState(false);
   const [replyInboxLoadingMore, setReplyInboxLoadingMore] = useState(false);
   const [selectedReplyProspectId, setSelectedReplyProspectId] = useState("");
@@ -342,6 +343,7 @@ export default function DashboardPage() {
     setUnifiedReplyThreads(loadedReplyThreads);
     setReplyInboxHasMore(loadedReplyThreads.length === 50);
     setReplyInboxSearch("");
+    setReplyInboxAppliedSearch("");
     setSelectedReplyProspectId(current => loadedReplyThreads.some(thread => thread.prospect_id === current) ? current : "");
     if (!loadedReplyThreads.length) setUnifiedReplyMessages([]);
     const performanceResult = await Promise.allSettled([
@@ -870,13 +872,34 @@ export default function DashboardPage() {
     } finally { if (requestSequence === replyDetailSequenceRef.current) setUnifiedReplyBusy(false); }
   }
 
+  async function searchReplyThreads() {
+    if (!workspaceId || !csrf || replyInboxLoadingMore) return;
+    const requestedWorkspaceId = workspaceId;
+    const query = replyInboxSearch.trim().slice(0, 200);
+    setReplyInboxLoadingMore(true); setError("");
+    try {
+      const result = await api<{ items: UnifiedReplyThread[] }>("/api/v1/conversations?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=0&search=" + encodeURIComponent(query), csrf);
+      if (requestedWorkspaceId !== workspaceId) return;
+      const items = result.items || [];
+      setUnifiedReplyThreads(items);
+      setReplyInboxAppliedSearch(query);
+      setReplyInboxHasMore(items.length === 50);
+      setSelectedReplyProspectId(current => items.some(thread => thread.prospect_id === current) ? current : "");
+      if (!items.some(thread => thread.prospect_id === selectedReplyProspectId)) setUnifiedReplyMessages([]);
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Conversation search could not be completed.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId) setReplyInboxLoadingMore(false);
+    }
+  }
+
   async function loadMoreReplyThreads() {
     if (!workspaceId || !csrf || !replyInboxHasMore || replyInboxLoadingMore) return;
     const requestedWorkspaceId = workspaceId;
     const offset = unifiedReplyThreads.length;
     setReplyInboxLoadingMore(true);
     try {
-      const result = await api<{ items: UnifiedReplyThread[] }>("/api/v1/conversations?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=" + offset, csrf);
+      const result = await api<{ items: UnifiedReplyThread[] }>("/api/v1/conversations?workspace_id=" + encodeURIComponent(requestedWorkspaceId) + "&limit=50&offset=" + offset + "&search=" + encodeURIComponent(replyInboxAppliedSearch), csrf);
       if (requestedWorkspaceId !== workspaceId) return;
       const existing = new Set(unifiedReplyThreads.map(thread => thread.prospect_id));
       const additions = (result.items || []).filter(thread => !existing.has(thread.prospect_id));
@@ -3233,8 +3256,8 @@ export default function DashboardPage() {
           <div className="cards">
             <article className="card">
               <h3>Reply threads ({unifiedReplyThreads.length})</h3>
-              <div className="field"><label htmlFor="reply-inbox-search">Search conversations</label><input id="reply-inbox-search" type="search" maxLength={200} value={replyInboxSearch} onChange={event=>setReplyInboxSearch(event.target.value)} placeholder="Search name, company, message or channel" /></div>
-              {unifiedReplyThreads.filter(thread => [thread.prospect_name, thread.prospect_company, thread.latest_message, thread.channel].some(value => String(value || "").toLowerCase().includes(replyInboxSearch.trim().toLowerCase()))).length ? unifiedReplyThreads.filter(thread => [thread.prospect_name, thread.prospect_company, thread.latest_message, thread.channel].some(value => String(value || "").toLowerCase().includes(replyInboxSearch.trim().toLowerCase()))).map(thread=><button key={thread.prospect_id} type="button" className={"button " + (selectedReplyProspectId===thread.prospect_id ? "" : "secondary")} disabled={unifiedReplyBusy} onClick={()=>openUnifiedReplyThread(thread)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}>
+              <div className="field"><label htmlFor="reply-inbox-search">Search all conversations</label><input id="reply-inbox-search" type="search" maxLength={200} value={replyInboxSearch} onChange={event=>setReplyInboxSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void searchReplyThreads();}}} placeholder="Search name, company, message or channel" /><button className="button secondary" type="button" disabled={replyInboxLoadingMore || !workspaceId || !csrf} onClick={searchReplyThreads}>{replyInboxLoadingMore ? "Searching…" : "Search inbox"}</button></div>
+              {unifiedReplyThreads.length ? unifiedReplyThreads.map(thread=><button key={thread.prospect_id} type="button" className={"button " + (selectedReplyProspectId===thread.prospect_id ? "" : "secondary")} disabled={unifiedReplyBusy} onClick={()=>openUnifiedReplyThread(thread)} style={{display:"block",width:"100%",textAlign:"left",marginBottom:"0.5rem",whiteSpace:"normal"}}>
                 <strong>{thread.prospect_name}</strong><span style={{display:"block"}}>{thread.prospect_company} · {thread.channel.toUpperCase()} · {thread.message_count} messages · {thread.latest_direction || "inbound"}{thread.latest_delivery_status ? " · " + thread.latest_delivery_status : ""}</span><span style={{display:"block"}}>{thread.latest_message}</span><span className="fine">{new Date(thread.latest_message_at).toLocaleString()}</span>
               </button>) : <p className="fine">No linked email or WhatsApp replies have been received yet.</p>}
               {replyInboxHasMore && <button className="button secondary" type="button" disabled={replyInboxLoadingMore || !workspaceId || !csrf} onClick={loadMoreReplyThreads}>{replyInboxLoadingMore ? "Loading…" : "Load 50 more conversations"}</button>}
