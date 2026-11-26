@@ -3,7 +3,7 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `2988c21e4aed1b3dfa5e0847012e078988747a74` on `main` (2026-11-26). Recent billing dashboard, research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed the consolidated CI/build or provider acceptance.  
+**Current application implementation source checked:** `d49311d234bf6874531ed29753087039a25b5036` on `main` (2026-11-26). Billing dashboard, WhatsApp queue management/pagination and dispatch gating, research provider fallback and bounded research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed the consolidated CI/build or provider acceptance.  
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
