@@ -72,7 +72,13 @@ async def analytics_summary(
                        AND messages.received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_inbound_messages,
                     (SELECT count(*) FROM whatsapp_delivery_status_events
                      WHERE workspace_id=$1
-                       AND received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_status_events
+                       AND received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_status_events,
+                    (SELECT count(DISTINCT provider_message_id) FROM whatsapp_delivery_status_events
+                     WHERE workspace_id=$1 AND status IN ('delivered','read')
+                       AND received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_provider_confirmed_deliveries,
+                    (SELECT count(DISTINCT provider_message_id) FROM whatsapp_delivery_status_events
+                     WHERE workspace_id=$1 AND status='read'
+                       AND received_at >= now() - ($2::int * interval '1 day')) AS whatsapp_read_messages
                 """,
                 workspace_id,
                 since_days,
@@ -90,6 +96,8 @@ async def analytics_summary(
             "inbound_replies": "Persisted generic inbound reply events received during the selected period; WhatsApp webhook messages are counted separately.",
             "whatsapp_inbound_messages": "Persisted inbound messages received from mapped WhatsApp accounts during the selected period; not necessarily qualified replies.",
             "whatsapp_status_events": "Persisted WhatsApp provider status event records received during the selected period; event counts are not unique campaign conversions.",
+            "whatsapp_provider_confirmed_deliveries": "Distinct WhatsApp provider message IDs with a delivered or read status event received during the selected period; read is included because it implies prior delivery.",
+            "whatsapp_read_messages": "Distinct WhatsApp provider message IDs with a read status event received during the selected period.",
             "prospects_converted": "Prospects explicitly moved to the converted CRM stage; not independently verified revenue.",
         },
         "unavailable_metrics": [
@@ -168,16 +176,22 @@ async def campaign_performance_analytics(
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
                        AND q.updated_at >= now() - ($2::int * interval '1 day')
                        AND q.status IN ('sent','delivered','read')) AS whatsapp_sent_or_confirmed,
-                    (SELECT count(*) FROM whatsapp_outbound_deliveries q
+                    (SELECT count(DISTINCT q.id) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.updated_at >= now() - ($2::int * interval '1 day')
-                       AND q.status='delivered') AS whatsapp_delivered,
-                    (SELECT count(*) FROM whatsapp_outbound_deliveries q
+                       AND EXISTS (SELECT 1 FROM whatsapp_delivery_status_events e
+                         WHERE e.workspace_id=q.workspace_id AND e.account_id=q.account_id
+                           AND e.provider_message_id=q.provider_message_id
+                           AND e.status IN ('delivered','read')
+                           AND e.received_at >= now() - ($2::int * interval '1 day'))) AS whatsapp_delivered,
+                    (SELECT count(DISTINCT q.id) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
-                       AND q.updated_at >= now() - ($2::int * interval '1 day')
-                       AND q.status='read') AS whatsapp_read,
+                       AND EXISTS (SELECT 1 FROM whatsapp_delivery_status_events e
+                         WHERE e.workspace_id=q.workspace_id AND e.account_id=q.account_id
+                           AND e.provider_message_id=q.provider_message_id
+                           AND e.status='read'
+                           AND e.received_at >= now() - ($2::int * interval '1 day'))) AS whatsapp_read,
                     (SELECT count(*) FROM whatsapp_outbound_deliveries q
                      JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
                      WHERE q.workspace_id=c.workspace_id AND d.campaign_id=c.id
