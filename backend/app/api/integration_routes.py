@@ -5,11 +5,12 @@ No credential is returned to the browser. Provider configuration is not proof of
 """
 from __future__ import annotations
 
-import os
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.auth_routes import _authenticated, _check_csrf
 from app.core.config import settings
+from app.workers.whatsapp_dispatch_worker import dispatch_is_enabled
+
 from app.services.email_delivery import (
     EmailDeliveryFailed,
     EmailDeliveryNotConfigured,
@@ -63,9 +64,7 @@ async def integration_status(
         missing_whatsapp.append("app_secret_minimum_32_bytes")
     if len((settings.meta_whatsapp_webhook_verify_token or "").encode("utf-8")) < 32:
         missing_whatsapp.append("webhook_verify_token_minimum_32_bytes")
-    dispatch_gate_enabled = bool(settings.whatsapp_dispatch_enabled) and os.getenv(
-        "WHATSAPP_DISPATCH_ENABLED", ""
-    ).strip().lower() in {"1", "true"}
+    dispatch_gate_enabled = dispatch_is_enabled()
     active_whatsapp_accounts = 0
     pool = getattr(request.app.state, "db_pool", None)
     if pool is not None:
