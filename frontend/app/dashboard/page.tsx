@@ -1584,6 +1584,17 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setAuditBusy(false); }
   }
 
+  async function deleteResearchRun(run: ResearchRun) {
+    if (!workspaceId || !csrf || !canWrite) return;
+    setResearchHistoryBusy(true); setError("");
+    try {
+      await api("/api/v1/research/runs/" + encodeURIComponent(run.id) + "?workspace_id=" + encodeURIComponent(workspaceId), csrf, { method: "DELETE" });
+      setResearchRuns(current => current.filter(item => item.id !== run.id));
+      setNotice("Saved research run deleted from this workspace.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Saved research could not be deleted."); }
+    finally { setResearchHistoryBusy(false); }
+  }
+
   async function openResearchRun(run: ResearchRun) {
     if (!workspaceId || !csrf) return;
     setResearchHistoryBusy(true); setError("");
@@ -2934,7 +2945,7 @@ export default function DashboardPage() {
             {researchHistoryBusy && <p className="fine">Loading saved research…</p>}
             {!researchHistoryBusy && researchRuns.length === 0 && <p className="fine">No saved research runs yet. New successful searches will appear here.</p>}
             {researchRuns.length > 0 && <div className="table-wrap"><table><thead><tr><th>Type</th><th>Search</th><th>Provider</th><th>Results</th><th>Date</th><th></th></tr></thead><tbody>
-              {researchRuns.map(run=><tr key={run.id}><td>{run.research_type === "influencers" ? "Creators" : "Prospects"}</td><td>{run.query}</td><td>{run.provider}</td><td>{run.result_count}</td><td>{new Date(run.created_at).toLocaleString()}</td><td><button className="button secondary" type="button" disabled={researchHistoryBusy} onClick={()=>void openResearchRun(run)}>Restore</button></td></tr>)}
+              {researchRuns.map(run=><tr key={run.id}><td>{run.research_type === "influencers" ? "Creators" : "Prospects"}</td><td>{run.query}</td><td>{run.provider}</td><td>{run.result_count}</td><td>{new Date(run.created_at).toLocaleString()}</td><td><div className="actions"><button className="button secondary" type="button" disabled={researchHistoryBusy} onClick={()=>void openResearchRun(run)}>Restore</button><button className="button secondary" type="button" disabled={researchHistoryBusy || !canWrite} onClick={()=>void deleteResearchRun(run)}>Delete</button></div></td></tr>)}
             </tbody></table></div>}
           </article>
           {researchResults.length > 0 && <div className="cards">{researchResults.map(item=><article className="card" key={item.url}><h3><a href={item.url} target="_blank" rel="noreferrer">{item.title}</a></h3><p>{item.description || "No search description supplied."}</p><p className="fine">Domain: {item.domain || "Domain unavailable"} · Relevance hint: {typeof item.relevance_score === "number" ? item.relevance_score + "/100" : "not scored"} · Review required · Not saved to CRM</p>{item.relevance_reasons && item.relevance_reasons.length > 0 && <p className="fine">{item.relevance_reasons.join(" · ")}</p>}<button className="button secondary" type="button" disabled={busy || !canWrite} onClick={() => { setProspectName(item.title.slice(0, 200)); setProspectCompany(""); setProspectWebsite(""); setProspectEmail(""); setProspectPhone(""); setEvidenceUrl(item.url); setFitReason((item.description || "Public search result; verify relevance before saving.").slice(0, 2000)); setNotice("Search evidence copied to the prospect form. Verify the real contact name, company, website and relevance before saving."); document.getElementById("prospect-name")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>Prepare CRM record for review</button></article>)}</div>}
