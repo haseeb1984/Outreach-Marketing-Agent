@@ -3,12 +3,16 @@
 # Implementation status and release blockers
 
 **Reviewed branch:** `main`  
-**Current application implementation source checked:** `461d481846fb98c69a8f91c6669237f4f03f3a99` on `main` (2026-11-26). Billing dashboard, verified Paddle portal plan-change reconciliation, WhatsApp queue and provider-confirmed delivery analytics, dispatch gating, research provider fallback and bounded/paginated research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed consolidated CI/build or provider acceptance.
+**Current application implementation source checked:** `b690be9f5342f253b2d95f8ac25743113e6e2dac` on `main` (2026-11-26). Billing dashboard, verified Paddle portal plan-change reconciliation, WhatsApp queue and provider-confirmed delivery analytics, dispatch gating, research provider fallback and bounded/paginated research history, inbox, campaign and editorial/WordPress changes are source-only and have not completed consolidated CI/build or provider acceptance.
 **Latest backend CI evidence:** [Run 45295962702](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962702) passed on application commit `dd9a499baaf8989cbf4d11531f6882d54ba1cd16` across Python 3.11, 3.12 and 3.13. Dependency audit ran on Python 3.12; it was skipped on 3.11 and 3.13.  
 **Latest verified frontend acceptance evidence:** [Run 45295962678](https://github.com/haseeb1984/Outreach-Marketing-Agent/actions/runs/45295962678) passed on the same application commit, including type-check, production build, production-server smoke tests, Playwright browser acceptance and Hostinger source-ZIP packaging.  
 **Scope:** Repository/source review and automated CI evidence only. CI does not prove current live deployment, authenticated production behavior, provider credentials, external delivery, payment acceptance, or production readiness.
 
 > **Status freshness note (2026-11-24):** The historical notes and matrix below contain older phase snapshots. Read the dated update below as the newer evidence where it conflicts with an older status. The old “latest deployed commit” value below is historical, not a current deployment claim.
+
+## Implementation update — 2026-11-26 (API readiness migration gate)
+
+- Corrected the FastAPI `/ready` schema gate, which still required only 62 migrations despite source migrations through 069. It now requires migrations 063–069, verifies the billing price-history and daily research quota tables plus key editorial, WordPress and research-history columns, and expects all 69 migrations in the ledger. Source-only; no live database, tests or deployment were run.
 
 ## Implementation update — 2026-11-26 (schema readiness alignment)
 
