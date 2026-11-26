@@ -27,17 +27,42 @@ class CampaignStore:
             )
         return self._serialize(dict(row))
 
-    async def list_campaigns(self, *, workspace_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+    async def list_campaigns(self, *, workspace_id: str, limit: int = 50, offset: int = 0,
+                           search: str = "", status: str = "current") -> list[dict[str, Any]]:
         self._validate_page(limit, offset)
+        if status not in {"current", "draft", "active", "paused", "archived", "all"}:
+            raise ValueError("invalid_campaign_status_filter")
+        term = search.strip()[:120]
+        pattern = "%" + term.replace("%", "\\%").replace("_", "\\_") + "%"
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """SELECT id,workspace_id,name,client_business,client_offer,target_customer_profile,
                           status,created_by,created_at,updated_at
-                   FROM outreach_campaigns WHERE workspace_id=$1 AND status <> 'archived'
-                   ORDER BY updated_at DESC,id LIMIT $2 OFFSET $3""",
-                workspace_id, limit, offset,
+                   FROM outreach_campaigns
+                   WHERE workspace_id=$1
+                     AND ($2='all' OR ($2='current' AND status <> 'archived') OR status=$2)
+                     AND ($3='' OR name ILIKE $4 OR client_business ILIKE $4
+                          OR client_offer ILIKE $4 OR target_customer_profile ILIKE $4)
+                   ORDER BY updated_at DESC,id LIMIT $5 OFFSET $6""",
+                workspace_id, status, term, pattern, limit, offset,
             )
         return [self._serialize(dict(row)) for row in rows]
+
+    async def count_campaigns(self, *, workspace_id: str, search: str = "", status: str = "current") -> int:
+        if status not in {"current", "draft", "active", "paused", "archived", "all"}:
+            raise ValueError("invalid_campaign_status_filter")
+        term = search.strip()[:120]
+        pattern = "%" + term.replace("%", "\\%").replace("_", "\\_") + "%"
+        async with self._pool.acquire() as conn:
+            count = await conn.fetchval(
+                """SELECT count(*) FROM outreach_campaigns
+                   WHERE workspace_id=$1
+                     AND ($2='all' OR ($2='current' AND status <> 'archived') OR status=$2)
+                     AND ($3='' OR name ILIKE $4 OR client_business ILIKE $4
+                          OR client_offer ILIKE $4 OR target_customer_profile ILIKE $4)""",
+                workspace_id, status, term, pattern,
+            )
+        return int(count or 0)
 
     async def update_campaign(self, *, workspace_id: str, campaign_id: UUID, name: str, client_business: str, client_offer: str, target_customer_profile: str, status: str) -> dict[str, Any] | None:
         if status not in {"draft", "active", "paused", "archived"}:
