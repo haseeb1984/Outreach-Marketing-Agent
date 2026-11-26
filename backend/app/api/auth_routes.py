@@ -31,6 +31,7 @@ class RegistrationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
+    workspace_name: str | None = Field(default=None, max_length=160)
 
 
 class LoginInput(BaseModel):
@@ -190,6 +191,8 @@ async def register(payload: RegistrationInput, request: Request):
         created = await store.register_user(
             email=email, password=payload.password, workspace_name=workspace_name,
         )
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=422, detail="invalid_registration_input") from None
     except Exception:
