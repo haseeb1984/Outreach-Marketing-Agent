@@ -47,7 +47,7 @@ jobs:
       - name: Run production-server smoke tests
         run: npm run test:smoke
       - name: Install Chromium for browser acceptance tests
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Run browser-level acceptance tests
         run: npm run test:e2e
       - name: Upload public-site browser screenshots
