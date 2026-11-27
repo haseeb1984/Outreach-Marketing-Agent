@@ -342,7 +342,7 @@ async def search_public_prospects(payload: ProspectSearchInput, request: Request
         user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
-    if not ((settings.brave_search_api_key and settings.brave_search_api_key.strip()) or (settings.serpapi_api_key and settings.serpapi_api_key.strip())):
+    if not ((settings.brave_search_api_key and settings.brave_search_api_key.strip()) or (getattr(settings, "serpapi_api_key", None) and getattr(settings, "serpapi_api_key", "").strip())):
         raise HTTPException(status_code=503, detail="search_provider_not_configured")
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
