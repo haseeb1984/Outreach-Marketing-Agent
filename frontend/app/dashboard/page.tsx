@@ -123,7 +123,7 @@ export default function DashboardPage() {
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectOverview, setProjectOverview] = useState<Record<string, { counts: { campaigns: number; prospects: number }; draft_counts: {pending_approval:number;approved:number;rejected:number}; campaigns: Array<{id:string;name:string;status:string}>; prospects: Array<{id:string;name:string;company:string;stage:string}>; recent_drafts:Array<{id:string;status:string;channel:string;created_at:string;prospect_name:string;campaign_name:string}>; outreach_activity:Array<{id:string;channel:string;status:string;activity_at:string;prospect_name:string;campaign_name:string}>; performance: CampaignPerformance[] }>>({});
+  const [projectOverview, setProjectOverview] = useState<Record<string, { counts: { campaigns: number; prospects: number }; draft_counts: {pending_approval:number;approved:number;rejected:number}; campaigns: Array<{id:string;name:string;status:string}>; prospects: Array<{id:string;name:string;company:string;stage:string}>; recent_drafts:Array<{id:string;status:string;channel:string;created_at:string;prospect_name:string;campaign_name:string}>; outreach_activity:Array<{id:string;channel:string;status:string;activity_at:string;prospect_name:string;campaign_name:string}>; performance: CampaignPerformance[]; performance_unavailable:boolean }>>({});
   const [projectOverviewLoading, setProjectOverviewLoading] = useState<string>("");
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
@@ -1521,13 +1521,18 @@ export default function DashboardPage() {
     const requestedWorkspaceId = workspaceId;
     setProjectOverviewLoading(project.id); setError("");
     try {
-      const [result, performance] = await Promise.all([
+      const [overviewResult, performanceResult] = await Promise.allSettled([
         api<{counts:{campaigns:number;prospects:number};draft_counts:{pending_approval:number;approved:number;rejected:number};campaigns:Array<{id:string;name:string;status:string}>;prospects:Array<{id:string;name:string;company:string;stage:string}>;recent_drafts:Array<{id:string;status:string;channel:string;created_at:string;prospect_name:string;campaign_name:string}>;outreach_activity:Array<{id:string;channel:string;status:string;activity_at:string;prospect_name:string;campaign_name:string}>}>(
           "/api/v1/projects/" + encodeURIComponent(project.id) + "/overview?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf
         ),
         api<{items:CampaignPerformance[]}>("/api/v1/analytics/campaigns?workspace_id="+encodeURIComponent(requestedWorkspaceId)+"&project_id="+encodeURIComponent(project.id)+"&since_days="+periodRef.current+"&limit=100", csrf),
       ]);
-      if (requestedWorkspaceId === workspaceId) setProjectOverview(current => ({ ...current, [project.id]: { ...result, performance: performance.items || [] } }));
+      if (overviewResult.status !== "fulfilled") throw overviewResult.reason;
+      if (requestedWorkspaceId === workspaceId) setProjectOverview(current => ({ ...current, [project.id]: {
+        ...overviewResult.value,
+        performance: performanceResult.status === "fulfilled" ? (performanceResult.value.items || []) : [],
+        performance_unavailable: performanceResult.status !== "fulfilled",
+      } }));
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project overview could not be loaded.");
     } finally {
@@ -3100,7 +3105,7 @@ export default function DashboardPage() {
                   {projectOverview[project.id].recent_drafts.length ? <ul>{projectOverview[project.id].recent_drafts.map(item=><li key={item.id}><strong>{item.prospect_name}</strong> · {item.campaign_name} — {item.channel} / {item.status}</li>)}</ul> : <p className="fine">No drafts linked to this project yet.</p>}
                 </section>
                 <section><h4>Campaign performance · last {periodRef.current} days</h4>
-                  {projectOverview[project.id].performance.length ? <div className="cards">{projectOverview[project.id].performance.map(item=><article className="card" key={item.id}><strong>{item.name}</strong><p>{item.counts.drafts_pending_approval||0} pending review · {item.counts.drafts_approved||0} approved · {item.counts.email_sent_marked||0} email sent · {item.counts.whatsapp_delivered||0} WhatsApp delivered · {item.counts.replies_from_campaign_prospects||0} associated replies</p></article>)}</div> : <p className="fine">No campaign performance records for this project and period.</p>}
+                  {projectOverview[project.id].performance_unavailable ? <p className="fine">Campaign performance is temporarily unavailable; the project CRM, drafts and outreach activity are still shown.</p> : projectOverview[project.id].performance.length ? <div className="cards">{projectOverview[project.id].performance.map(item=><article className="card" key={item.id}><strong>{item.name}</strong><p>{item.counts.drafts_pending_approval||0} pending review · {item.counts.drafts_approved||0} approved · {item.counts.email_sent_marked||0} email sent · {item.counts.whatsapp_delivered||0} WhatsApp delivered · {item.counts.replies_from_campaign_prospects||0} associated replies</p></article>)}</div> : <p className="fine">No campaign performance records for this project and period.</p>}
                 </section>
                 <section><h4>Recent outreach activity</h4>
                   {projectOverview[project.id].outreach_activity.length ? <ul>{projectOverview[project.id].outreach_activity.map(item=><li key={item.channel+item.id}><strong>{item.prospect_name}</strong> · {item.campaign_name} — {item.channel} / {item.status} ({new Date(item.activity_at).toLocaleString()})</li>)}</ul> : <p className="fine">No email or WhatsApp delivery activity recorded for this project.</p>}
