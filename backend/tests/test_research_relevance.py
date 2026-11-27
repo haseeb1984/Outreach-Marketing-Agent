@@ -405,6 +405,9 @@ def test_influencer_search_uses_workspace_quota_and_returns_only_reviewable_prof
     monkeypatch.setattr(research_routes, "_check_csrf", lambda request, session: None)
     monkeypatch.setattr(research_routes, "settings", type("Settings", (), {"brave_search_api_key": "test-search-key"})())
     monkeypatch.setattr(research_routes.httpx, "AsyncClient", FakeHttpClient)
+    async def fake_persist(*args, **kwargs):
+        return {"id": "research-run-1", "created_at": "2026-11-27T00:00:00+00:00"}
+    monkeypatch.setattr(research_routes, "_persist_research_run", fake_persist)
 
     with TestClient(app) as client:
         app.state.auth_store = FakeAuthStore()

@@ -55,7 +55,7 @@ def test_restore_requires_explicit_confirmation_and_uses_dbname_flag(tmp_path, m
     backup.with_suffix(".dump.sha256").write_text(hashlib.sha256(b"backup bytes").hexdigest() + "  sample.dump\n")
     calls = []
     monkeypatch.setattr(database_backup, "_run", lambda command, env: calls.append((command, env)))
-    monkeypatch.setattr(database_backup.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="f\\n"))
+    monkeypatch.setattr(database_backup.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="f"))
     monkeypatch.setenv("SOURCE_DATABASE_URL", "postgresql://user:secret@source.example:5432/prod")
     monkeypatch.setenv("RESTORE_DATABASE_URL", "postgresql://user:secret@restore.example:5432/recovery")
     monkeypatch.delenv("CONFIRM_RESTORE", raising=False)
@@ -172,7 +172,7 @@ def test_backup_writes_private_archive_and_checksum_atomically(tmp_path, monkeyp
     assert result.read_bytes() == b"verified backup archive"
     checksum_file = result.with_suffix(".dump.sha256")
     expected = hashlib.sha256(b"verified backup archive").hexdigest()
-    assert checksum_file.read_text(encoding="utf-8") == f"{expected}  {result.name}\\n"
+    assert checksum_file.read_text(encoding="utf-8") == f"{expected}  {result.name}\n"
     assert result.stat().st_mode & 0o777 == 0o600
     assert checksum_file.stat().st_mode & 0o777 == 0o600
     assert len(calls) == 2
