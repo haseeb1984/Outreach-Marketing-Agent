@@ -310,10 +310,25 @@ async def get_project_overview(
             )
         def serialize(row):
             item = dict(row)
-            for key in ("id",):
-                if item.get(key) is not None:
-                    item[key] = str(item[key])
+            for key, value in item.items():
+                if isinstance(value, UUID):
+                    item[key] = str(value)
             return item
+        conversation_store = getattr(request.app.state, "conversation_store", None)
+        reply_threads = []
+        if conversation_store is not None:
+            thread_rows = await conversation_store.list_threads(
+                workspace_id=workspace_id, limit=10, offset=0, search="", project_id=project_id
+            )
+            safe_thread_fields = {
+                "id", "prospect_id", "prospect_name", "prospect_company", "channel",
+                "latest_message", "provider", "latest_direction", "latest_delivery_status",
+                "latest_message_at", "received_at", "message_count",
+            }
+            reply_threads = [
+                {key: value for key, value in item.items() if key in safe_thread_fields}
+                for item in thread_rows
+            ]
         project_data = dict(project)
         project_data["id"] = str(project_data["id"])
         return {
@@ -329,9 +344,7 @@ async def get_project_overview(
             )[:10],
             "followup_sequences": [serialize(row) for row in followup_sequences],
             "recent_followup_enrollments": [serialize(row) for row in recent_enrollments],
-            "reply_threads": await request.app.state.conversation_store.list_threads(
-                workspace_id=workspace_id, limit=10, offset=0, search="", project_id=project_id
-            ) if getattr(request.app.state, "conversation_store", None) is not None else [],
+            "reply_threads": reply_threads,
             "prospects": [serialize(row) for row in prospects],
             "recent_limit": 10,
         }
