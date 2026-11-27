@@ -59,7 +59,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Package Hostinger source ZIP (exclude secrets and build outputs)
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -88,7 +88,7 @@ jobs:
           print(f"Packaged {len(names)} files into {output.name}; archive paths are at the frontend app root.")
           PY
       - name: Upload Hostinger ZIP
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: outreach-marketing-agent-hostinger
