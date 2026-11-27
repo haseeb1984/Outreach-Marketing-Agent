@@ -88,6 +88,7 @@ REQUIRED_MIGRATIONS = (
     "068_project_scoped_wordpress_connections.sql",
     "069_workspace_research_history.sql",
     "070_campaign_project_relationship.sql",
+    "071_crm_prospect_project_relationship.sql",
 )
 
 REQUIRED_TABLES = (
@@ -126,6 +127,7 @@ REQUIRED_CONSTRAINTS = (
     "outreach_deliveries_draft_workspace_fk",
     "outreach_deliveries_email_account_workspace_fk",
     "outreach_campaigns_project_workspace_fk",
+    "crm_prospects_project_workspace_fk",
 )
 
 REQUIRED_INDEXES = (
@@ -135,6 +137,7 @@ REQUIRED_INDEXES = (
     "outreach_campaigns_id_workspace_uidx",
     "workspace_projects_id_workspace_uidx",
     "outreach_campaigns_project_workspace_idx",
+    "crm_prospects_project_workspace_idx",
     "outreach_drafts_id_workspace_uidx",
     "workspace_email_accounts_id_workspace_uidx",
     "platform_billing_plan_price_history_slug_idx",
@@ -179,6 +182,7 @@ REQUIRED_COLUMNS = (
     ("workspace_research_runs", "results"),
     ("daily_feature_usage_reservations", "usage_date"),
     ("outreach_campaigns", "project_id"),
+    ("crm_prospects", "project_id"),
 )
 
 

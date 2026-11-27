@@ -184,3 +184,16 @@ def test_create_prospect_rejects_cross_workspace_member(monkeypatch):
         response = client.post("/api/v1/prospects", json=payload)
     assert response.status_code == 404
     assert response.json()["detail"] == "workspace_not_found"
+
+
+def test_prospect_project_link_is_optional_and_uuid_validated():
+    base = dict(workspace_id="workspace-a", name="Jane", company="Example", website_url="https://example.com", evidence_url="https://example.com/source", fit_reason="Verified fit")
+    assert prospect_routes.ProspectCreate(**base).project_id is None
+    pid = "00000000-0000-0000-0000-000000000071"
+    assert str(prospect_routes.ProspectCreate(**base, project_id=pid).project_id) == pid
+
+
+def test_prospect_update_distinguishes_omitted_project_from_explicit_unlink():
+    base = dict(workspace_id="workspace-a")
+    assert "project_id" not in prospect_routes.ProspectUpdate(**base).model_fields_set
+    assert "project_id" in prospect_routes.ProspectUpdate(**{**base, "project_id": None}).model_fields_set

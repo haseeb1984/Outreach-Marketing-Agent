@@ -60,6 +60,7 @@ REQUIRED_RELEASE_MIGRATIONS = (
     "068_project_scoped_wordpress_connections.sql",
     "069_workspace_research_history.sql",
     "070_campaign_project_relationship.sql",
+    "071_crm_prospect_project_relationship.sql",
 )
 
 

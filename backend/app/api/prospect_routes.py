@@ -60,6 +60,7 @@ class ProspectCreate(BaseModel):
     evidence_url: str = Field(min_length=8, max_length=2048)
     fit_reason: str = Field(min_length=1, max_length=2000)
     verified_facts: list[str] = Field(default_factory=list, max_length=30)
+    project_id: UUID | None = None
 
     @field_validator("contact_email")
     @classmethod
@@ -113,6 +114,7 @@ class ProspectUpdate(BaseModel):
     website_url: str | None = Field(default=None, min_length=8, max_length=2048)
     evidence_url: str | None = Field(default=None, min_length=8, max_length=2048)
     fit_reason: str | None = Field(default=None, min_length=1, max_length=2000)
+    project_id: UUID | None = None
 
     @field_validator("contact_email")
     @classmethod
@@ -283,8 +285,10 @@ async def create_prospect(payload: ProspectCreate, request: Request):
             contact_email=payload.contact_email, contact_phone_e164=payload.contact_phone_e164,
             website_url=payload.website_url,
             evidence_url=payload.evidence_url, fit_reason=payload.fit_reason,
-            verified_facts=payload.verified_facts,
+            verified_facts=payload.verified_facts, project_id=payload.project_id,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception as exc:
         # Do not return database details or SQL to the caller.
         if type(exc).__name__ == "UniqueViolationError":
@@ -305,6 +309,8 @@ async def update_prospect(prospect_id: UUID, payload: ProspectUpdate, request: R
             company=payload.company, role=payload.role, contact_email=payload.contact_email,
             contact_phone_e164=payload.contact_phone_e164, website_url=payload.website_url,
             evidence_url=payload.evidence_url, fit_reason=payload.fit_reason,
+            project_id=payload.project_id,
+            project_id_supplied="project_id" in payload.model_fields_set,
         )
     except ValueError:
         raise HTTPException(status_code=422, detail="no_prospect_updates_supplied") from None

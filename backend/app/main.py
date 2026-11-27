@@ -287,6 +287,8 @@ async def readiness() -> Response:
                      AND to_regclass('public.workspace_research_runs') IS NOT NULL
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='outreach_campaigns' AND column_name='project_id')
                      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname='outreach_campaigns_project_workspace_fk')
+                     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_prospects' AND column_name='project_id')
+                     AND EXISTS (SELECT 1 FROM pg_constraint WHERE conname='crm_prospects_project_workspace_fk')
                      AND to_regclass('public.website_content_briefs') IS NOT NULL
                      AND to_regclass('public.workspace_wordpress_connections') IS NOT NULL
                      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workspace_wordpress_connections' AND column_name='project_id')
@@ -406,8 +408,9 @@ async def readiness() -> Response:
                             '067_wordpress_content_delivery.sql',
                             '068_project_scoped_wordpress_connections.sql',
                             '069_workspace_research_history.sql',
-                            '070_campaign_project_relationship.sql'
-                          )) = 70
+                            '070_campaign_project_relationship.sql',
+                            '071_crm_prospect_project_relationship.sql'
+                          )) = 71
                      AND to_regclass('public.outreach_followup_delivery_resolutions') IS NOT NULL
                      AND to_regclass('public.whatsapp_inbox_sla_policies') IS NOT NULL
                      AND to_regclass('public.whatsapp_conversation_activity') IS NOT NULL
