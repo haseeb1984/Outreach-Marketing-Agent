@@ -317,18 +317,22 @@ async def get_project_overview(
         conversation_store = getattr(request.app.state, "conversation_store", None)
         reply_threads = []
         if conversation_store is not None:
-            thread_rows = await conversation_store.list_threads(
-                workspace_id=workspace_id, limit=10, offset=0, search="", project_id=project_id
-            )
-            safe_thread_fields = {
-                "id", "prospect_id", "prospect_name", "prospect_company", "channel",
-                "latest_message", "provider", "latest_direction", "latest_delivery_status",
-                "latest_message_at", "received_at", "message_count",
-            }
-            reply_threads = [
-                {key: value for key, value in item.items() if key in safe_thread_fields}
-                for item in thread_rows
-            ]
+            try:
+                thread_rows = await conversation_store.list_threads(
+                    workspace_id=workspace_id, limit=10, offset=0, search="", project_id=project_id
+                )
+                safe_thread_fields = {
+                    "id", "prospect_id", "prospect_name", "prospect_company", "channel",
+                    "latest_message", "provider", "latest_direction", "latest_delivery_status",
+                    "latest_message_at", "received_at", "message_count",
+                }
+                reply_threads = [
+                    {key: value for key, value in item.items() if key in safe_thread_fields}
+                    for item in thread_rows
+                ]
+            except Exception:
+                # Inbox availability must not hide the project's core CRM/campaign snapshot.
+                reply_threads = []
         project_data = dict(project)
         project_data["id"] = str(project_data["id"])
         return {
