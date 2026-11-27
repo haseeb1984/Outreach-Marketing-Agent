@@ -138,7 +138,7 @@ class CampaignStore:
                    FROM outreach_campaigns c
                    JOIN crm_prospects p ON p.workspace_id=c.workspace_id
                    LEFT JOIN workspace_projects project
-                     ON project.id=c.project_id AND project.workspace_id=c.workspace_id
+                     ON project.id=COALESCE(c.project_id,p.project_id) AND project.workspace_id=c.workspace_id
                    LEFT JOIN outreach_contact_controls ctrl
                      ON ctrl.workspace_id=p.workspace_id AND ctrl.prospect_id=p.id
                    WHERE c.id=$1 AND c.workspace_id=$2 AND c.status NOT IN ('archived','paused')
