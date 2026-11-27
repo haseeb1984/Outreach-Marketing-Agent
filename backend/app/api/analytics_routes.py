@@ -5,6 +5,8 @@ sales, revenue, or ROI when no verified integration data exists.
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.auth_routes import _authenticated
@@ -117,6 +119,7 @@ async def campaign_performance_analytics(
     workspace_id: str = Query(min_length=1, max_length=200),
     since_days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=50, ge=1, le=100),
+    project_id: UUID | None = Query(default=None),
 ):
     """Return per-campaign persisted workflow counts, not fabricated ROI attribution."""
     _, _, session = await _authenticated(request)
@@ -219,9 +222,10 @@ async def campaign_performance_analytics(
                        AND p.archived_at IS NULL AND p.stage='converted') AS converted_stage_prospects
                    FROM outreach_campaigns c
                    WHERE c.workspace_id=$1 AND c.status <> 'archived'
+                     AND ($4::uuid IS NULL OR c.project_id=$4)
                    ORDER BY c.updated_at DESC, c.id
                    LIMIT $3""",
-                workspace_id, since_days, limit,
+                workspace_id, since_days, limit, project_id,
             )
         items = []
         for row in rows:
@@ -244,6 +248,7 @@ async def campaign_performance_analytics(
     return {
         "workspace_id": workspace_id,
         "period_days": since_days,
+        "project_id": str(project_id) if project_id else None,
         "items": items,
         "definitions": {
             "email_sent_marked": "SMTP adapter accepted the send operation; not proof of inbox delivery.",

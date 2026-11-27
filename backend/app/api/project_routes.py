@@ -223,6 +223,49 @@ async def get_project_overview(
                    WHERE workspace_id=$1 AND project_id=$2 AND archived_at IS NULL""",
                 workspace_id, project_id,
             )
+            draft_counts = await conn.fetchrow(
+                """SELECT
+                    count(*) FILTER (WHERE status='pending_approval') AS pending_approval,
+                    count(*) FILTER (WHERE status='approved') AS approved,
+                    count(*) FILTER (WHERE status='rejected') AS rejected
+                   FROM outreach_drafts
+                   WHERE workspace_id=$1 AND campaign_id IN (
+                     SELECT id FROM outreach_campaigns WHERE workspace_id=$1 AND project_id=$2
+                   )""",
+                workspace_id, project_id,
+            )
+            recent_drafts = await conn.fetch(
+                """SELECT d.id, d.status, d.channel, d.created_at,
+                          p.name AS prospect_name, c.name AS campaign_name
+                   FROM outreach_drafts d
+                   JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
+                   WHERE d.workspace_id=$1 AND c.project_id=$2
+                   ORDER BY d.created_at DESC, d.id DESC LIMIT 10""",
+                workspace_id, project_id,
+            )
+            email_activity = await conn.fetch(
+                """SELECT q.id, q.channel, q.status, q.updated_at AS activity_at,
+                          p.name AS prospect_name, c.name AS campaign_name
+                   FROM outreach_deliveries q
+                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                   JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
+                   WHERE q.workspace_id=$1 AND c.project_id=$2
+                   ORDER BY q.updated_at DESC, q.id DESC LIMIT 10""",
+                workspace_id, project_id,
+            )
+            whatsapp_activity = await conn.fetch(
+                """SELECT q.id, 'whatsapp' AS channel, q.status, q.updated_at AS activity_at,
+                          p.name AS prospect_name, c.name AS campaign_name
+                   FROM whatsapp_outbound_deliveries q
+                   JOIN outreach_drafts d ON d.id=q.draft_id AND d.workspace_id=q.workspace_id
+                   JOIN outreach_campaigns c ON c.id=d.campaign_id AND c.workspace_id=d.workspace_id
+                   JOIN crm_prospects p ON p.id=d.prospect_id AND p.workspace_id=d.workspace_id
+                   WHERE q.workspace_id=$1 AND c.project_id=$2
+                   ORDER BY q.updated_at DESC, q.id DESC LIMIT 10""",
+                workspace_id, project_id,
+            )
             campaigns = await conn.fetch(
                 """SELECT id, name, status, updated_at
                    FROM outreach_campaigns
@@ -249,6 +292,13 @@ async def get_project_overview(
             "project": project_data,
             "counts": {"campaigns": int(campaign_count or 0), "prospects": int(prospect_count or 0)},
             "campaigns": [serialize(row) for row in campaigns],
+            "draft_counts": {key: int(draft_counts[key] or 0) for key in ("pending_approval", "approved", "rejected")},
+            "recent_drafts": [serialize(row) for row in recent_drafts],
+            "outreach_activity": sorted(
+                [serialize(row) for row in [*email_activity, *whatsapp_activity]],
+                key=lambda item: item.get("activity_at") or "",
+                reverse=True,
+            )[:10],
             "prospects": [serialize(row) for row in prospects],
             "recent_limit": 10,
         }

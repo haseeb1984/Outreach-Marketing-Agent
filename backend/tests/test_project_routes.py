@@ -256,3 +256,42 @@ def test_project_overview_is_workspace_scoped_and_returns_linked_workflow_snapsh
     assert len(connection.calls) == 5
     assert all(call[2][:2] == (PROJECT_ID, "workspace-a") if call[0] == "fetchrow" else call[2][0] == "workspace-a" for call in connection.calls)
     assert "crm_prospects" in connection.calls[4][1]
+
+def test_project_overview_includes_project_draft_and_outreach_activity(monkeypatch):
+    from datetime import datetime, timezone
+
+    connection = _Connection()
+    connection.scalar = 2
+    _patch_auth(monkeypatch, role="viewer")
+    monkeypatch.setattr(project_routes, "_pool", lambda request: _Pool(connection))
+
+    async def fetch(query, *args):
+        connection.calls.append(("fetch", query, args))
+        if "FROM outreach_drafts d" in query:
+            return [{"id": PROJECT_ID, "status": "pending_approval", "channel": "email",
+                     "created_at": datetime(2026, 11, 27, tzinfo=timezone.utc),
+                     "prospect_name": "A", "campaign_name": "C"}]
+        if "FROM outreach_deliveries q" in query:
+            return [{"id": PROJECT_ID, "channel": "email", "status": "sent",
+                     "activity_at": datetime(2026, 11, 27, tzinfo=timezone.utc),
+                     "prospect_name": "A", "campaign_name": "C"}]
+        if "FROM whatsapp_outbound_deliveries q" in query:
+            return [{"id": PROJECT_ID, "channel": "whatsapp", "status": "delivered",
+                     "activity_at": datetime(2026, 11, 26, tzinfo=timezone.utc),
+                     "prospect_name": "A", "campaign_name": "C"}]
+        return []
+    async def fetchrow(query, *args):
+        connection.calls.append(("fetchrow", query, args))
+        if "FILTER (WHERE status=" in query:
+            return {"pending_approval": 1, "approved": 2, "rejected": 0}
+        return connection.row
+    connection.fetch=fetch
+    connection.fetchrow=fetchrow
+
+    result = asyncio.run(project_routes.get_project_overview(
+        PROJECT_ID, SimpleNamespace(), workspace_id="workspace-a"
+    ))
+    assert result["draft_counts"] == {"pending_approval": 1, "approved": 2, "rejected": 0}
+    assert result["recent_drafts"][0]["prospect_name"] == "A"
+    assert [item["channel"] for item in result["outreach_activity"]] == ["email", "whatsapp"]
+    assert all("workspace_id=$1 AND c.project_id=$2" in call[1] for call in connection.calls if call[0] == "fetch")

@@ -185,3 +185,33 @@ def test_campaign_analytics_scopes_draft_counts_to_selected_period(monkeypatch):
     assert query.count("d.created_at >= now() - ($2::int * interval '1 day')") >= 5
     assert "q.sent_at >= now() - ($2::int * interval '1 day')" in query
     assert "m.occurred_at >= now() - ($2::int * interval '1 day')" in query
+
+def test_campaign_analytics_can_filter_to_one_client_project(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from uuid import UUID
+    import app.api.analytics_routes as analytics
+
+    project_id = UUID("00000000-0000-0000-0000-000000000099")
+    class AuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+    class Connection:
+        async def fetch(self, query, workspace_id, since_days, limit, selected_project):
+            assert selected_project == project_id
+            assert "c.project_id=$4" in query
+            return []
+    connection = Connection()
+    class Acquire:
+        async def __aenter__(self): return connection
+        async def __aexit__(self, *args): return False
+    class Pool:
+        def acquire(self): return Acquire()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(auth_store=AuthStore(), db_pool=Pool())))
+    async def authenticated(_request): return AuthStore(), "session", {"user_id":"user-1"}
+    monkeypatch.setattr(analytics, "_authenticated", authenticated)
+    result = asyncio.run(analytics.campaign_performance_analytics(
+        request, workspace_id="workspace-1", since_days=14, limit=20, project_id=project_id
+    ))
+    assert result["project_id"] == str(project_id)
+    assert result["items"] == []
