@@ -197,3 +197,67 @@ def test_prospect_update_distinguishes_omitted_project_from_explicit_unlink():
     base = dict(workspace_id="workspace-a")
     assert "project_id" not in prospect_routes.ProspectUpdate(**base).model_fields_set
     assert "project_id" in prospect_routes.ProspectUpdate(**{**base, "project_id": None}).model_fields_set
+
+
+def test_list_prospects_validates_project_filter_and_passes_project_scope(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from uuid import UUID
+
+    user_id = "00000000-0000-0000-0000-000000000001"
+    project_id = "00000000-0000-0000-0000-000000000099"
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class FakeProspectStore:
+        async def list_prospects(self, **kwargs):
+            assert kwargs["project_id"] == UUID(project_id)
+            assert kwargs["unlinked_only"] is False
+            return []
+        async def count_prospects(self, **kwargs):
+            assert kwargs["project_id"] == UUID(project_id)
+            assert kwargs["unlinked_only"] is False
+            return 0
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id": user_id}
+
+    monkeypatch.setattr(prospect_routes, "_authenticated", fake_authenticated)
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = FakeProspectStore()
+        response = client.get("/api/v1/prospects", params={"workspace_id":"workspace-a","project_id":project_id})
+        invalid = client.get("/api/v1/prospects", params={"workspace_id":"workspace-a","project_id":"not-a-uuid"})
+    assert response.status_code == 200
+    assert invalid.status_code == 422
+
+
+def test_list_prospects_can_filter_unlinked_contacts(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    class FakeAuthStore:
+        async def authorize_workspace(self, **kwargs):
+            return True
+
+    class FakeProspectStore:
+        async def list_prospects(self, **kwargs):
+            assert kwargs["project_id"] is None
+            assert kwargs["unlinked_only"] is True
+            return []
+        async def count_prospects(self, **kwargs):
+            assert kwargs["project_id"] is None
+            assert kwargs["unlinked_only"] is True
+            return 0
+
+    async def fake_authenticated(request):
+        return FakeAuthStore(), "session-token", {"user_id":"00000000-0000-0000-0000-000000000001"}
+
+    monkeypatch.setattr(prospect_routes, "_authenticated", fake_authenticated)
+    with TestClient(app) as client:
+        app.state.auth_store = FakeAuthStore()
+        app.state.prospect_store = FakeProspectStore()
+        response = client.get("/api/v1/prospects", params={"workspace_id":"workspace-a","project_id":"unlinked"})
+    assert response.status_code == 200

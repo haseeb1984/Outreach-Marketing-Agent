@@ -154,15 +154,27 @@ async def list_prospects(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100000),
     search: str | None = Query(default=None, max_length=120),
+    project_id: str | None = Query(default=None, max_length=40),
 ):
     if stage is not None and stage not in ALLOWED_STAGES:
         raise HTTPException(status_code=422, detail="invalid_prospect_stage")
+    if project_id is not None and project_id != "unlinked":
+        try:
+            UUID(project_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid_project_filter") from None
     await _authorize(request, workspace_id, "viewer")
     store = _store(request)
     items = await store.list_prospects(
         workspace_id=workspace_id, stage=stage, limit=limit, offset=offset, search=search,
+        project_id=UUID(project_id) if project_id and project_id != "unlinked" else None,
+        unlinked_only=project_id == "unlinked",
     )
-    total = await store.count_prospects(workspace_id=workspace_id, stage=stage, search=search)
+    total = await store.count_prospects(
+        workspace_id=workspace_id, stage=stage, search=search,
+        project_id=UUID(project_id) if project_id and project_id != "unlinked" else None,
+        unlinked_only=project_id == "unlinked",
+    )
     return {"items": items, "limit": limit, "offset": offset, "total": total, "has_more": offset + len(items) < total}
 
 

@@ -13,6 +13,7 @@ class ProspectStore:
     async def list_prospects(
         self, *, workspace_id: str, stage: str | None = None,
         limit: int = 50, offset: int = 0, search: str | None = None,
+        project_id: UUID | None = None, unlinked_only: bool = False,
     ) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100 or not 0 <= offset <= 100_000:
             raise ValueError("pagination_out_of_range")
@@ -35,9 +36,12 @@ class ProspectStore:
                           COALESCE(p.contact_email,'') ILIKE '%' || $5 || '%' OR
                           COALESCE(p.contact_phone_e164,'') ILIKE '%' || $5 || '%' OR
                           COALESCE(p.role,'') ILIKE '%' || $5 || '%' OR p.website_url ILIKE '%' || $5 || '%' OR COALESCE(wp.name,'') ILIKE '%' || $5 || '%')
+                     AND ($6::uuid IS NULL OR p.project_id=$6)
+                     AND (NOT $7::boolean OR p.project_id IS NULL)
                    ORDER BY p.updated_at DESC, p.id
                    LIMIT $3 OFFSET $4""",
                 workspace_id, stage, limit, offset, search.strip()[:120] if search and search.strip() else None,
+                project_id, unlinked_only,
             )
         return [self._serialize(dict(row)) for row in rows]
 
@@ -137,6 +141,7 @@ class ProspectStore:
 
     async def count_prospects(
         self, *, workspace_id: str, stage: str | None = None, search: str | None = None,
+        project_id: UUID | None = None, unlinked_only: bool = False,
     ) -> int:
         async with self._pool.acquire() as conn:
             count = await conn.fetchval(
@@ -149,8 +154,11 @@ class ProspectStore:
                           COALESCE(p.contact_email,'') ILIKE '%' || $3 || '%' OR
                           COALESCE(p.contact_phone_e164,'') ILIKE '%' || $3 || '%' OR
                           COALESCE(p.role,'') ILIKE '%' || $3 || '%' OR p.website_url ILIKE '%' || $3 || '%' OR
-                          COALESCE(wp.name,'') ILIKE '%' || $3 || '%')""",
+                          COALESCE(wp.name,'') ILIKE '%' || $3 || '%')
+                     AND ($4::uuid IS NULL OR p.project_id=$4)
+                     AND (NOT $5::boolean OR p.project_id IS NULL)""",
                 workspace_id, stage, search.strip()[:120] if search and search.strip() else None,
+                project_id, unlinked_only,
             )
         return int(count or 0)
 
