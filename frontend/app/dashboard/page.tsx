@@ -336,6 +336,7 @@ export default function DashboardPage() {
     const loadSequence = ++loadSequenceRef.current;
     const isCurrentLoad = () => loadSequenceRef.current === loadSequence;
     setGrowthJobReport(null);
+    setProjectOverview({});
     // Load independent dashboard surfaces independently: one unavailable API must not blank the whole workspace.
     const primaryResults = await Promise.allSettled([
       api<ApiResult<Prospect>>("/api/v1/prospects?workspace_id=" + encodeURIComponent(selectedId) + "&limit=50", token),
