@@ -123,6 +123,8 @@ export default function DashboardPage() {
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectOverview, setProjectOverview] = useState<Record<string, { counts: { campaigns: number; prospects: number }; campaigns: Array<{id:string;name:string;status:string}>; prospects: Array<{id:string;name:string;company:string;stage:string}> }>>({});
+  const [projectOverviewLoading, setProjectOverviewLoading] = useState<string>("");
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
@@ -629,7 +631,7 @@ export default function DashboardPage() {
     setGrowthSchedules([]); setGrowthSchedulesUnavailable(false); setGrowthJobs([]); setGrowthJobsUnavailable(false); setGrowthJobReport(null);
     setScheduleStartUrl(""); setScheduleBusinessType(""); setScheduleTargetMarket(""); setScheduleQueries("");
     setEntitlements([]); setEntitlementsUnavailable(false); setBillingAccount(null); setBillingAccountUnavailable(false); setIntegrationStatus(null);
-    setProjects([]); setProjectName(""); setProjectWebsite(""); setProjectBusinessModel(""); setProjectMarket("");
+    setProjects([]); setProjectOverview({}); setProjectOverviewLoading(""); setProjectName(""); setProjectWebsite(""); setProjectBusinessModel(""); setProjectMarket("");
     setProjectLanguage(""); setProjectAudience(""); setProjectOffer(""); setProjectGoal(""); setProjectBrandVoice(""); setProjectCompetitors("");
     setMembers([]); setInvitations([]); setInviteEmail(""); setInviteRole("member");
     setEmailAccounts([]); setSelectedEmailAccountId(""); setEditingEmailAccountId(null); setEmailAccountLabel("");
@@ -1507,6 +1509,26 @@ export default function DashboardPage() {
     } catch (err) {
       if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Campaign could not be updated.");
     } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
+  }
+
+  async function loadProjectOverview(project: Project) {
+    if (!workspaceId || !csrf || projectOverviewLoading) return;
+    if (projectOverview[project.id]) {
+      setProjectOverview(current => { const next = { ...current }; delete next[project.id]; return next; });
+      return;
+    }
+    const requestedWorkspaceId = workspaceId;
+    setProjectOverviewLoading(project.id); setError("");
+    try {
+      const result = await api<{counts:{campaigns:number;prospects:number};campaigns:Array<{id:string;name:string;status:string}>;prospects:Array<{id:string;name:string;company:string;stage:string}>}>(
+        "/api/v1/projects/" + encodeURIComponent(project.id) + "/overview?workspace_id=" + encodeURIComponent(requestedWorkspaceId), csrf
+      );
+      if (requestedWorkspaceId === workspaceId) setProjectOverview(current => ({ ...current, [project.id]: result }));
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project overview could not be loaded.");
+    } finally {
+      if (requestedWorkspaceId === workspaceId) setProjectOverviewLoading("");
+    }
   }
 
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
@@ -3061,7 +3083,19 @@ export default function DashboardPage() {
         </div></section>
         <section className="section" aria-labelledby="projects-title"><h2 id="projects-title">Client projects and websites</h2>
           <p className="fine">Keep each client website, audience, offer, language and growth goal in its own workspace-scoped project profile.</p>
-          <div className="cards">{projects.length ? projects.map(project=><article className="card" key={project.id}><h3>{project.name}</h3><p>{project.website_url || "No website URL added yet."}</p><p className="fine">{project.business_model} · {project.target_market} · {project.language}</p><p>{project.audience}</p><p className="fine">Goal: {project.conversion_goal || "Not set"}</p>{project.website_url && <p><a href={project.website_url} target="_blank" rel="noreferrer">Open project website</a></p>}
+          <div className="cards">{projects.length ? projects.map(project=><article className="card" key={project.id}><h3>{project.name}</h3><p>{project.website_url || "No website URL added yet."}</p><p className="fine">{project.business_model} · {project.target_market} · {project.language}</p><p>{project.audience}</p><p className="fine">Goal: {project.conversion_goal || "Not set"}</p><div className="project-workflow-overview">
+              <button className="button secondary" type="button" disabled={projectOverviewLoading!==""} onClick={()=>loadProjectOverview(project)}>{projectOverviewLoading===project.id ? "Loading workflow…" : projectOverview[project.id] ? "Hide client workflow" : "View client workflow"}</button>
+              {projectOverview[project.id] && <div className="project-workflow-panel">
+                <p><strong>{projectOverview[project.id].counts.campaigns}</strong> campaigns · <strong>{projectOverview[project.id].counts.prospects}</strong> active CRM prospects</p>
+                <div className="cards">
+                  <section><h4>Recent campaigns</h4>{projectOverview[project.id].campaigns.length ? <ul>{projectOverview[project.id].campaigns.map(item=><li key={item.id}><strong>{item.name}</strong> — {item.status}</li>)}</ul> : <p className="fine">No campaigns linked to this project yet.</p>}</section>
+                  <section><h4>Recent CRM contacts</h4>{projectOverview[project.id].prospects.length ? <ul>{projectOverview[project.id].prospects.map(item=><li key={item.id}><strong>{item.name}</strong> · {item.company} — {item.stage}</li>)}</ul> : <p className="fine">No active prospects linked to this project yet.</p>}</section>
+                </div>
+                <p className="fine">Showing the latest 10 records in each list. Totals include all linked records in this workspace.</p>
+                <button className="button secondary" type="button" onClick={()=>{setCampaignProjectId(project.id);setBusinessName(project.name);setOffer(project.offer||"");setTargetProfile(project.audience||"");if(!campaignName.trim())setCampaignName(project.name+" outreach");document.getElementById("campaign-project")?.scrollIntoView({behavior:"smooth",block:"center"});}}>Create campaign for this project</button>
+                <button className="button secondary" type="button" onClick={()=>{setProspectProjectId(project.id);document.getElementById("prospect-project")?.scrollIntoView({behavior:"smooth",block:"center"});}}>Add CRM prospect to this project</button>
+              </div>}
+            </div>{project.website_url && <p><a href={project.website_url} target="_blank" rel="noreferrer">Open project website</a></p>}
             {["owner","admin","member"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <details><summary>Edit project settings</summary><form onSubmit={event=>updateProject(event,project)}>
               <div className="field"><label>Project name</label><input name="name" required maxLength={160} defaultValue={project.name} /></div>
               <div className="field"><label>Website URL</label><input name="website_url" type="url" maxLength={2048} defaultValue={project.website_url || ""} /></div>
