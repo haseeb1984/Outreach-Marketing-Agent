@@ -79,7 +79,7 @@ def test_campaign_analytics_returns_scoped_counts_and_honest_definitions(monkeyp
     assert "not proof of inbox delivery" in body["definitions"]["email_sent_marked"]
     assert "not proof the campaign caused the reply" in body["definitions"]["replies_from_campaign_prospects"]
     assert "c.workspace_id=$1" in connection.query
-    assert connection.args == ("workspace-a", 14, 50)
+    assert connection.args == ("workspace-a", 14, 50, None)
 
 
 def test_campaign_analytics_hides_unknown_workspaces(monkeypatch):
