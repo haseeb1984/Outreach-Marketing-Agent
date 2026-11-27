@@ -295,7 +295,7 @@ def test_project_overview_includes_project_draft_and_outreach_activity(monkeypat
     connection.fetchrow=fetchrow
 
     result = asyncio.run(project_routes.get_project_overview(
-        PROJECT_ID, SimpleNamespace(), workspace_id="workspace-a"
+        PROJECT_ID, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(conversation_store=None))), workspace_id="workspace-a"
     ))
     assert result["draft_counts"] == {"pending_approval": 1, "approved": 2, "rejected": 0}
     assert result["recent_drafts"][0]["prospect_name"] == "A"
