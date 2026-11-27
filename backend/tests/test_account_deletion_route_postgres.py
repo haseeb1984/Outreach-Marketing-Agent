@@ -45,6 +45,9 @@ async def _exercise_account_deletion(monkeypatch) -> None:
 
     monkeypatch.setattr(account_routes, "_authenticated", authenticated)
     monkeypatch.setattr(account_routes, "_check_csrf", lambda _request, _session: None)
+    async def allow_rate_limit(*args, **kwargs):
+        return None
+    monkeypatch.setattr(account_routes, "_consume", allow_rate_limit)
     app.state.db_pool = pool
     app.state.auth_store = auth_store
 

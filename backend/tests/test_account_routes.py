@@ -64,6 +64,9 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     conn = FakeConnection()
     monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
+    async def allow_rate_limit(*args, **kwargs):
+        return None
+    monkeypatch.setattr(account_routes, "_consume", allow_rate_limit)
     with TestClient(app) as client:
         app.state.db_pool = FakePool(conn)
         response = client.request("DELETE", "/api/v1/account", json={"password": "correct-password"})
