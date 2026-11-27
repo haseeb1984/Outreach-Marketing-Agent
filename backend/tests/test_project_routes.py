@@ -36,6 +36,7 @@ class _Connection:
             "updated_at": "2026-11-02T00:00:00Z",
         }
         self.execute_result = execute_result
+        self.scalar = 0
 
     async def fetch(self, query, *args):
         self.calls.append(("fetch", query, args))
@@ -44,6 +45,10 @@ class _Connection:
     async def fetchrow(self, query, *args):
         self.calls.append(("fetchrow", query, args))
         return self.row
+
+    async def fetchval(self, query, *args):
+        self.calls.append(("fetchval", query, args))
+        return self.scalar
 
     async def execute(self, query, *args):
         self.calls.append(("execute", query, args))
@@ -231,3 +236,23 @@ def test_archive_project_returns_not_found_when_project_is_outside_workspace(mon
 
     assert error.value.status_code == 404
     assert error.value.detail == "project_not_found"
+
+
+def test_project_overview_is_workspace_scoped_and_returns_linked_workflow_snapshot(monkeypatch):
+    connection = _Connection()
+    connection.scalar = 7
+    _patch_auth(monkeypatch, role="viewer")
+    monkeypatch.setattr(project_routes, "_pool", lambda request: _Pool(connection))
+
+    result = asyncio.run(
+        project_routes.get_project_overview(
+            PROJECT_ID, SimpleNamespace(), workspace_id="workspace-a"
+        )
+    )
+
+    assert result["project"]["id"] == str(PROJECT_ID)
+    assert result["counts"] == {"campaigns": 7, "prospects": 7}
+    assert result["recent_limit"] == 10
+    assert len(connection.calls) == 5
+    assert all(call[2][:2] == (PROJECT_ID, "workspace-a") if call[0] == "fetchrow" else call[2][0] == "workspace-a" for call in connection.calls)
+    assert "crm_prospects" in connection.calls[4][1]

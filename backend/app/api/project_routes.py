@@ -194,6 +194,70 @@ async def create_project(payload: ProjectCreate, request: Request) -> dict:
         raise HTTPException(status_code=503, detail="project_create_unavailable") from None
 
 
+@router.get("/{project_id}/overview")
+async def get_project_overview(
+    project_id: UUID,
+    request: Request,
+    workspace_id: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Return a compact, workspace-scoped CRM and campaign snapshot for one project."""
+    _, _, session = await _authenticated(request)
+    await _authorize(request, workspace_id, "viewer", session)
+    try:
+        async with _pool(request).acquire() as conn:
+            project = await conn.fetchrow(
+                """SELECT id, name, status, website_url
+                   FROM workspace_projects
+                   WHERE id=$1 AND workspace_id=$2""",
+                project_id, workspace_id,
+            )
+            if project is None:
+                raise HTTPException(status_code=404, detail="project_not_found")
+            campaign_count = await conn.fetchval(
+                """SELECT count(*) FROM outreach_campaigns
+                   WHERE workspace_id=$1 AND project_id=$2""",
+                workspace_id, project_id,
+            )
+            prospect_count = await conn.fetchval(
+                """SELECT count(*) FROM crm_prospects
+                   WHERE workspace_id=$1 AND project_id=$2 AND archived_at IS NULL""",
+                workspace_id, project_id,
+            )
+            campaigns = await conn.fetch(
+                """SELECT id, name, status, updated_at
+                   FROM outreach_campaigns
+                   WHERE workspace_id=$1 AND project_id=$2
+                   ORDER BY updated_at DESC, id LIMIT 10""",
+                workspace_id, project_id,
+            )
+            prospects = await conn.fetch(
+                """SELECT id, name, company, stage, updated_at
+                   FROM crm_prospects
+                   WHERE workspace_id=$1 AND project_id=$2 AND archived_at IS NULL
+                   ORDER BY updated_at DESC, id LIMIT 10""",
+                workspace_id, project_id,
+            )
+        def serialize(row):
+            item = dict(row)
+            for key in ("id",):
+                if item.get(key) is not None:
+                    item[key] = str(item[key])
+            return item
+        project_data = dict(project)
+        project_data["id"] = str(project_data["id"])
+        return {
+            "project": project_data,
+            "counts": {"campaigns": int(campaign_count or 0), "prospects": int(prospect_count or 0)},
+            "campaigns": [serialize(row) for row in campaigns],
+            "prospects": [serialize(row) for row in prospects],
+            "recent_limit": 10,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="project_overview_unavailable") from None
+
+
 @router.patch("/{project_id}")
 async def update_project(project_id: UUID, payload: ProjectUpdate, request: Request) -> dict:
     _, _, session = await _authenticated(request)
