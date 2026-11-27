@@ -1,3 +1,8 @@
+## Implementation update — 2026-11-27 (project-scoped CRM workspace)
+- Added an optional project filter to the workspace CRM API and dashboard. Customers can view all prospects, prospects linked to one selected client project, or contacts that have no project link; stage and text search remain composable with the project filter.
+- The CRM total/count query uses the same project predicate as the page query, so pagination totals match the filtered result set. Filtered CSV export now applies the same project scope, including the unlinked-only view. Invalid project filter IDs are rejected, and workspace authorization remains in force.
+- The dashboard clears the selected project filter when switching workspaces. This batch adds source regression coverage but has not run tests, build, CI, database migration, browser acceptance or deployment.
+
 ## Implementation update — 2026-11-27 (project-aware draft generation)
 
 - AI draft generation now receives the linked client project's saved website, business model, target market, audience, offer, conversion goal and brand voice as bounded context alongside campaign positioning and prospect evidence. Project profile details guide positioning/tone; claims about a prospect remain restricted to the supplied verified facts.
