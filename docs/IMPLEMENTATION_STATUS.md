@@ -396,3 +396,11 @@ The existing `backend/app/api/paddle_routes.py` is the canonical implementation 
 
 
 - Reliability follow-up: the project panel now loads its core CRM/draft/outreach snapshot independently of campaign analytics. If the analytics endpoint is unavailable, the rest of the project workflow remains visible and the performance section reports its own unavailable state.
+
+
+## Implementation update — 2026-11-27 (project follow-up and reply workflow)
+
+- Project overview now includes campaign-linked follow-up sequences with enrollment totals split into active, awaiting-approval, paused, completed and stopped states, plus the ten most recently updated enrollment records with campaign, sequence and prospect context. All joins remain constrained to the requested workspace and project.
+- Unified conversation thread listing accepts an optional project UUID filter, applied against the workspace-owned CRM prospect after thread aggregation. The project overview reuses that filtered inbox query and exposes the ten latest project reply threads.
+- Existing sequence enrollment, scheduling, draft approval and delivery safeguards are unchanged: scheduler-created follow-ups remain pending-approval drafts; this project view does not trigger enrollment, scheduling or sends.
+- Source-only implementation. No tests, build, CI, database migration/runtime, browser acceptance, deployment or Hostinger ZIP were run or produced for this batch.

@@ -273,6 +273,34 @@ async def get_project_overview(
                    ORDER BY updated_at DESC, id LIMIT 10""",
                 workspace_id, project_id,
             )
+            followup_sequences = await conn.fetch(
+                """SELECT s.id, s.campaign_id, c.name AS campaign_name, s.name, s.channel, s.status,
+                          count(e.id)::int AS enrollment_count,
+                          count(e.id) FILTER (WHERE e.status='active')::int AS active_count,
+                          count(e.id) FILTER (WHERE e.status='awaiting_approval')::int AS awaiting_approval_count,
+                          count(e.id) FILTER (WHERE e.status='paused')::int AS paused_count,
+                          count(e.id) FILTER (WHERE e.status='completed')::int AS completed_count,
+                          count(e.id) FILTER (WHERE e.status LIKE 'stopped_%')::int AS stopped_count
+                   FROM outreach_followup_sequences s
+                   JOIN outreach_campaigns c ON c.id=s.campaign_id AND c.workspace_id=s.workspace_id
+                   LEFT JOIN outreach_followup_enrollments e ON e.sequence_id=s.id AND e.workspace_id=s.workspace_id
+                   WHERE s.workspace_id=$1 AND c.project_id=$2
+                   GROUP BY s.id,c.name ORDER BY s.updated_at DESC,s.id LIMIT 20""",
+                workspace_id, project_id,
+            )
+            recent_enrollments = await conn.fetch(
+                """SELECT e.id, e.sequence_id, e.prospect_id, e.current_step, e.status,
+                          e.next_run_at, e.pause_reason, e.last_error_code, e.updated_at,
+                          s.name AS sequence_name, s.channel, c.name AS campaign_name,
+                          p.name AS prospect_name, p.company
+                   FROM outreach_followup_enrollments e
+                   JOIN outreach_followup_sequences s ON s.id=e.sequence_id AND s.workspace_id=e.workspace_id
+                   JOIN outreach_campaigns c ON c.id=s.campaign_id AND c.workspace_id=s.workspace_id
+                   JOIN crm_prospects p ON p.id=e.prospect_id AND p.workspace_id=e.workspace_id
+                   WHERE e.workspace_id=$1 AND c.project_id=$2
+                   ORDER BY e.updated_at DESC,e.id DESC LIMIT 10""",
+                workspace_id, project_id,
+            )
             prospects = await conn.fetch(
                 """SELECT id, name, company, stage, updated_at
                    FROM crm_prospects
@@ -299,6 +327,11 @@ async def get_project_overview(
                 key=lambda item: item.get("activity_at") or "",
                 reverse=True,
             )[:10],
+            "followup_sequences": [serialize(row) for row in followup_sequences],
+            "recent_followup_enrollments": [serialize(row) for row in recent_enrollments],
+            "reply_threads": await request.app.state.conversation_store.list_threads(
+                workspace_id=workspace_id, limit=10, offset=0, search="", project_id=project_id
+            ) if getattr(request.app.state, "conversation_store", None) is not None else [],
             "prospects": [serialize(row) for row in prospects],
             "recent_limit": 10,
         }

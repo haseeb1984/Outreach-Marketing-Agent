@@ -169,3 +169,8 @@ Still required before connecting Meta: eligible Coexistence onboarding, provider
 
 
 - Reliability follow-up: the project panel now loads its core CRM/draft/outreach snapshot independently of campaign analytics. If the analytics endpoint is unavailable, the rest of the project workflow remains visible and the performance section reports its own unavailable state.
+
+
+### Project workflow integration — source implementation
+
+The project overview now brings campaign follow-up sequence status, enrollment progress and project-filtered reply threads into the same client workspace view. Sequence and enrollment actions remain governed by the existing admin-only follow-up APIs and human approval workflow. Automated follow-up processing creates approval drafts only; it does not send messages. Acceptance remains pending until the consolidated implementation-phase test/build/CI and database/browser acceptance run.
