@@ -473,6 +473,25 @@ test.describe("account and authenticated browser journeys", () => {
           contentType: "application/json",
           body: JSON.stringify({ items: [{ id: workspaceId, name: "Billing owner workspace", role: "owner" }] }),
         });
+      } else if (url.pathname === "/api/v1/billing/account") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            subscription: {
+              provider: "paddle",
+              plan_slug: "starter",
+              plan_name: "Starter",
+              status: "active",
+              display_price: "$19",
+              currency: "USD",
+              billing_interval: "month",
+            },
+            usage: [],
+            invoices: [],
+          }),
+        });
       } else if (url.pathname === "/api/v1/billing/paddle/plans") {
         await route.fulfill({
           status: 200,
