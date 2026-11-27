@@ -144,13 +144,13 @@ test.describe("account and authenticated browser journeys", () => {
     await page.getByLabel("Password").fill("correct-password");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByRole("heading", { name: "Create project profile" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Create your first project profile" })).toBeVisible();
 
     await page.getByLabel("Project name").fill("Northstar Client");
     await page.getByLabel("Website URL (optional)").fill("https://northstar.example");
     await page.getByLabel("Business model").fill("B2B SaaS");
     await page.getByRole("region", { name: "Client projects and websites" }).getByLabel("Target market").fill("United Kingdom");
-    await page.getByRole("button", { name: "Save project profile" }).click();
+    await page.getByRole("button", { name: "Create first project" }).click();
     await expect(page.getByRole("heading", { name: "Northstar Client" })).toBeVisible();
     await expect(page.getByText("Project profile saved. Website ownership verification is a separate step.")).toBeVisible();
 
