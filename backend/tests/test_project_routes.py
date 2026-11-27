@@ -232,7 +232,7 @@ def test_archive_project_returns_not_found_when_project_is_outside_workspace(mon
     with pytest.raises(HTTPException) as error:
         asyncio.run(
             project_routes.archive_project(
-                PROJECT_ID, SimpleNamespace(), workspace_id="workspace-a"
+                PROJECT_ID, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(conversation_store=None))), workspace_id="workspace-a"
             )
         )
 

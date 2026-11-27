@@ -66,7 +66,7 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
     with TestClient(app) as client:
         app.state.db_pool = FakePool(conn)
-        response = client.delete("/api/v1/account", json={"password": "correct-password"})
+        response = client.request("DELETE", "/api/v1/account", json={"password": "correct-password"})
     assert response.status_code == 200
     assert response.json()["status"] == "deleted"
     assert "deleted+00000000000000000000000000000001@accounts.invalid" in str(conn.executed)
@@ -92,7 +92,7 @@ def test_delete_account_refuses_to_orphan_workspace_with_any_non_revoked_member(
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
     with TestClient(app) as client:
         app.state.db_pool = FakePool(conn)
-        response = client.delete("/api/v1/account")
+        response = client.request("DELETE", "/api/v1/account", json={"password": "correct-password"})
     assert response.status_code == 409
     assert response.json()["detail"] == "transfer_workspace_ownership_before_account_deletion"
     assert conn.executed == []

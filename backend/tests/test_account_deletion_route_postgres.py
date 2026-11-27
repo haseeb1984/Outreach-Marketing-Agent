@@ -75,7 +75,7 @@ async def _exercise_account_deletion(monkeypatch) -> None:
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            blocked = await client.delete("/api/v1/account", json={"password": "integration-test-password"})
+            blocked = await client.request("DELETE", "/api/v1/account", json={"password": "integration-test-password"})
             assert blocked.status_code == 409, blocked.text
             assert blocked.json()["detail"] == "transfer_workspace_ownership_before_account_deletion"
 
