@@ -1540,6 +1540,44 @@ export default function DashboardPage() {
     }
   }
 
+  async function refreshProjectWorkflow(project: Project) {
+    if (!workspaceId || !csrf) return;
+    setProjectOverview(current => { const next = { ...current }; delete next[project.id]; return next; });
+    await loadProjectOverview(project);
+  }
+
+  async function setProjectSequenceStatus(project: Project, sequence: { id: string; status: string }, status: "active" | "paused" | "archived") {
+    if (!workspaceId || !csrf) return;
+    const requestedWorkspaceId = workspaceId;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id), csrf, {
+        method: "PATCH", body: JSON.stringify({ workspace_id: requestedWorkspaceId, status }),
+      });
+      if (requestedWorkspaceId !== workspaceId) return;
+      setNotice("Project follow-up sequence " + status + ". Existing human-approval and consent checks remain in force.");
+      await refreshProjectWorkflow(project);
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project follow-up sequence could not be updated.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
+  }
+
+  async function enrollProjectProspect(project: Project, sequence: { id: string; name: string }, prospectId: string) {
+    if (!workspaceId || !csrf || !prospectId) { setError("Choose a project prospect before enrolling."); return; }
+    const requestedWorkspaceId = workspaceId;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("/api/v1/follow-up-sequences/" + encodeURIComponent(sequence.id) + "/enroll", csrf, {
+        method: "POST", body: JSON.stringify({ workspace_id: requestedWorkspaceId, prospect_id: prospectId }),
+      });
+      if (requestedWorkspaceId !== workspaceId) return;
+      setNotice("Prospect enrolled in " + sequence.name + ". The scheduler will create a draft when due; it will not send automatically.");
+      await refreshProjectWorkflow(project);
+    } catch (err) {
+      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Project prospect could not be enrolled.");
+    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
+  }
+
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !csrf) return;
@@ -3114,8 +3152,30 @@ export default function DashboardPage() {
                   {projectOverview[project.id].followup_sequences.length ? <div className="cards">{projectOverview[project.id].followup_sequences.map(sequence=><article className="card" key={sequence.id}>
                     <strong>{sequence.name}</strong><p className="fine">{sequence.campaign_name} · {sequence.channel} · {sequence.status}</p>
                     <p>{sequence.enrollment_count} enrolled · {sequence.active_count} active · {sequence.awaiting_approval_count} awaiting approval · {sequence.paused_count} paused · {sequence.completed_count} completed · {sequence.stopped_count} stopped</p>
+                    {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && <div className="actions">
+                      {sequence.status !== "paused" && sequence.status !== "archived" && <button className="button secondary" type="button" disabled={busy} onClick={()=>setProjectSequenceStatus(project,sequence,"paused")}>Pause sequence</button>}
+                      {sequence.status === "paused" && <button className="button secondary" type="button" disabled={busy} onClick={()=>setProjectSequenceStatus(project,sequence,"active")}>Resume sequence</button>}
+                      {sequence.status !== "archived" && <button className="button secondary" type="button" disabled={busy} onClick={()=>{if(window.confirm("Archive this sequence and stop its active or paused enrollments?")) void setProjectSequenceStatus(project,sequence,"archived");}}>Archive sequence</button>}
+                    </div>}
+                    {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && sequence.status === "active" && projectOverview[project.id].prospects.length > 0 && <div className="actions">
+                      <select className="input" aria-label={"Choose prospect for "+sequence.name} value={followupProspectId} onChange={event=>setFollowupProspectId(event.target.value)}>
+                        <option value="">Choose project prospect</option>
+                        {projectOverview[project.id].prospects.map(prospect=><option key={prospect.id} value={prospect.id}>{prospect.name}{prospect.company ? " · "+prospect.company : ""}</option>)}
+                      </select>
+                      <button className="button secondary" type="button" disabled={busy || !followupProspectId} onClick={()=>enrollProjectProspect(project,sequence,followupProspectId)}>Enroll prospect</button>
+                    </div>}
                   </article>)}</div> : <p className="fine">No follow-up sequences are linked to this project yet.</p>}
                   {projectOverview[project.id].recent_followup_enrollments.length ? <ul>{projectOverview[project.id].recent_followup_enrollments.map(enrollment=><li key={enrollment.id}><strong>{enrollment.prospect_name}</strong> · {enrollment.sequence_name} — step {enrollment.current_step}, {enrollment.status}{enrollment.next_run_at ? " · next " + new Date(enrollment.next_run_at).toLocaleString() : ""}{enrollment.pause_reason ? " · " + enrollment.pause_reason.replaceAll("_"," ") : ""}</li>)}</ul> : null}
+                  {["owner","admin"].includes(workspaces.find(w=>w.id===workspaceId)?.role || "") && projectOverview[project.id].campaigns.some(campaign=>campaign.status==="active") && <details><summary>Create a follow-up sequence for this project</summary>
+                    <form className="stack" onSubmit={createFollowupSequence}>
+                      <label>Campaign<select className="input" required value={followupCampaignId} onChange={event=>setFollowupCampaignId(event.target.value)}><option value="">Choose project campaign</option>{projectOverview[project.id].campaigns.filter(campaign=>campaign.status==="active").map(campaign=><option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
+                      <label>Sequence name<input className="input" required maxLength={200} value={followupName} onChange={event=>setFollowupName(event.target.value)} placeholder="e.g. Initial outreach follow-up" /></label>
+                      <label>Channel<select className="input" value={followupChannel} onChange={event=>setFollowupChannel(event.target.value)}><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label>
+                      <label>Steps (JSON)<textarea className="input" rows={8} value={followupStepsJson} onChange={event=>setFollowupStepsJson(event.target.value)} /></label>
+                      <button className="button" type="submit" disabled={busy || !followupCampaignId || !followupName.trim()}>Create and activate sequence</button>
+                      <p className="fine">Due steps create drafts for human approval. Nothing is sent automatically; WhatsApp still requires documented opt-in and an active account.</p>
+                    </form>
+                  </details>}
                 </section>
                 <section><h4>Project reply inbox</h4>
                   {projectOverview[project.id].reply_threads.length ? <ul>{projectOverview[project.id].reply_threads.map(thread=><li key={thread.prospect_id}><button className="button secondary" type="button" onClick={()=>{void openUnifiedReplyThread(thread);document.getElementById("inbox")?.scrollIntoView({behavior:"smooth",block:"start"});}}><strong>{thread.prospect_name}</strong> · {thread.channel.toUpperCase()} · {thread.message_count} messages</button><p className="fine">{thread.latest_message}</p></li>)}</ul> : <p className="fine">No reply threads are linked to this project yet.</p>}
