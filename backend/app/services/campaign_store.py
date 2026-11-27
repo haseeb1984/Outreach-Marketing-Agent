@@ -122,17 +122,28 @@ class CampaignStore:
         """Load and pre-qualify workspace-owned facts before spending on AI generation."""
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT c.client_business,c.client_offer,c.target_customer_profile,p.name AS prospect_name,
-                          p.evidence_url,p.fit_reason,p.verified_facts,p.stage,
+                """SELECT c.client_business,c.client_offer,c.target_customer_profile,
+                          c.project_id AS campaign_project_id,
+                          p.project_id AS prospect_project_id,
+                          project.name AS project_name,project.website_url AS project_website_url,
+                          project.business_model AS project_business_model,
+                          project.target_market AS project_target_market,
+                          project.audience AS project_audience,project.offer AS project_offer,
+                          project.conversion_goal AS project_conversion_goal,
+                          project.brand_voice AS project_brand_voice,
+                          p.name AS prospect_name,p.evidence_url,p.fit_reason,p.verified_facts,p.stage,
                           p.contact_email,p.contact_phone_e164,
                           ctrl.email_suppressed,ctrl.whatsapp_opt_in_at,
                           ctrl.whatsapp_opt_in_evidence_url,ctrl.whatsapp_account_id
                    FROM outreach_campaigns c
                    JOIN crm_prospects p ON p.workspace_id=c.workspace_id
+                   LEFT JOIN workspace_projects project
+                     ON project.id=c.project_id AND project.workspace_id=c.workspace_id
                    LEFT JOIN outreach_contact_controls ctrl
                      ON ctrl.workspace_id=p.workspace_id AND ctrl.prospect_id=p.id
                    WHERE c.id=$1 AND c.workspace_id=$2 AND c.status NOT IN ('archived','paused')
-                     AND p.id=$3 AND p.archived_at IS NULL""",
+                     AND p.id=$3 AND p.archived_at IS NULL
+                     AND (c.project_id IS NULL OR p.project_id IS NULL OR c.project_id=p.project_id)""",
                 campaign_id, workspace_id, prospect_id,
             )
             if row is None:
@@ -210,6 +221,9 @@ class CampaignStore:
                 )
                 if campaign is None or prospect is None:
                     return None
+                if (campaign.get("project_id") is not None and prospect.get("project_id") is not None
+                        and campaign["project_id"] != prospect["project_id"]):
+                    raise ValueError("campaign_prospect_project_mismatch")
                 if campaign["status"] == "paused":
                     raise ValueError("campaign_paused")
                 p = dict(prospect)
