@@ -118,11 +118,11 @@ async def _search_public_web(query: str, count: int) -> tuple[str, list[dict] | 
                         brave_empty = results
             except (httpx.HTTPError, ValueError, TypeError):
                 pass
-        if settings.serpapi_api_key and settings.serpapi_api_key.strip():
+        if getattr(settings, "serpapi_api_key", None) and getattr(settings, "serpapi_api_key", "").strip():
             try:
                 response = await client.get(
                     "https://serpapi.com/search.json",
-                    params={"engine": "google", "q": query, "num": min(20, count), "safe": "active", "api_key": settings.serpapi_api_key},
+                    params={"engine": "google", "q": query, "num": min(20, count), "safe": "active", "api_key": getattr(settings, "serpapi_api_key", "")},
                 )
                 if response.status_code == 200:
                     data = response.json()
@@ -561,7 +561,7 @@ async def search_public_influencers(payload: InfluencerSearchInput, request: Req
         user_id=session["user_id"], workspace_id=payload.workspace_id, minimum_role="member"
     ):
         raise HTTPException(status_code=404, detail="workspace_not_found")
-    if not ((settings.brave_search_api_key and settings.brave_search_api_key.strip()) or (settings.serpapi_api_key and settings.serpapi_api_key.strip())):
+    if not ((settings.brave_search_api_key and settings.brave_search_api_key.strip()) or (getattr(settings, "serpapi_api_key", None) and getattr(settings, "serpapi_api_key", "").strip())):
         raise HTTPException(status_code=503, detail="search_provider_not_configured")
     subscriptions = getattr(request.app.state, "subscription_store", None)
     if subscriptions is None:
