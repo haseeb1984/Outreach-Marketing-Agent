@@ -124,7 +124,7 @@ def test_readiness_checks_all_migrations_and_phase_one_tables():
         "whatsapp_conversations_id_workspace_uidx",
     ):
         assert index in connection.schema_query
-    assert ")) = 62" in connection.schema_query
+    assert ")) = 71" in connection.schema_query
 
 
 def test_readiness_rejects_incomplete_migration_chain():

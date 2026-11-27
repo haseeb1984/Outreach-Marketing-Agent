@@ -33,7 +33,7 @@ def test_missing_migration_is_named_in_diagnostic():
     )
     assert result["ok"] is False
     ledger = next(check for check in result["checks"] if check["name"] == "migration_ledger")
-    assert ledger["missing"] == ["057_core_outreach_tenant_integrity.sql"]
+    assert ledger["missing"] == ["071_crm_prospect_project_relationship.sql"]
 
 
 def test_missing_repository_migration_is_separate_from_database_state():

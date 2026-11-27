@@ -304,7 +304,7 @@ def test_search_route_releases_reservation_on_unexpected_provider_processing_err
     from app.api.research_routes import search_public_prospects
 
     source = inspect.getsource(search_public_prospects)
-    provider_call = source.index("async with httpx.AsyncClient")
+    provider_call = source.index("await _search_public_web")
     outer_handler = source.index("except Exception:", provider_call)
     handler = source[outer_handler:]
     assert 'outcome="released"' in handler
