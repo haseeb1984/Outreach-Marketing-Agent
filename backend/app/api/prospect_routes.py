@@ -184,19 +184,30 @@ async def export_prospects_csv(
     workspace_id: str = Query(min_length=1, max_length=200),
     stage: str | None = Query(default=None),
     search: str | None = Query(default=None, max_length=120),
+    project_id: str | None = Query(default=None, max_length=40),
 ):
     """Export the caller's authorized workspace CRM records as a spreadsheet-safe CSV."""
     if stage is not None and stage not in ALLOWED_STAGES:
         raise HTTPException(status_code=422, detail="invalid_prospect_stage")
+    if project_id is not None and project_id != "unlinked":
+        try:
+            UUID(project_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid_project_filter") from None
     await _authorize(request, workspace_id, "viewer")
     store = _store(request)
+    selected_project_id = UUID(project_id) if project_id and project_id != "unlinked" else None
+    unlinked_only = project_id == "unlinked"
     output = io.StringIO(newline="")
     writer = csv.writer(output)
     columns = ("id", "name", "company", "role", "contact_email", "contact_phone_e164", "website_url", "evidence_url", "fit_reason", "stage", "notes", "created_at", "updated_at")
     writer.writerow(columns)
     offset = 0
     while True:
-        rows = await store.list_prospects(workspace_id=workspace_id, stage=stage, limit=100, offset=offset, search=search)
+        rows = await store.list_prospects(
+            workspace_id=workspace_id, stage=stage, limit=100, offset=offset, search=search,
+            project_id=selected_project_id, unlinked_only=unlinked_only,
+        )
         if not rows:
             break
         for row in rows:

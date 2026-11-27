@@ -616,7 +616,7 @@ export default function DashboardPage() {
     whatsappSLAActionSequenceRef.current += 1;
     whatsappSLALoadSequenceRef.current += 1;
     crmLoadSequenceRef.current += 1;
-    setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setCrmOffset(0); setCrmTotal(0);
+    setProspects([]); setProspectSearch(""); setProspectStageFilter("all"); setProspectProjectFilter(""); setCrmOffset(0); setCrmTotal(0);
     setResearchQuery(""); setResearchResults([]); setResearchBusy(false);
     setDomainName(""); setDomainChallenge(null); setDomainBusy(false);
     setAuditUrl(""); setAuditReport(null); setAuditHistory([]); setAuditBusy(false); setGrowthReviewResult(null);

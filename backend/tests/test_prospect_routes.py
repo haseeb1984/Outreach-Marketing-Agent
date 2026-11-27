@@ -91,10 +91,10 @@ def test_list_prospects_checks_workspace_membership_and_uses_workspace_filter(mo
 
     class FakeProspectStore:
         async def list_prospects(self, **kwargs):
-            assert kwargs == {"workspace_id": "workspace-a", "stage": "qualified", "limit": 10, "offset": 0, "search": None}
+            assert kwargs == {"workspace_id": "workspace-a", "stage": "qualified", "limit": 10, "offset": 0, "search": None, "project_id": None, "unlinked_only": False}
             return [{"id": "prospect-1", "workspace_id": "workspace-a", "stage": "qualified"}]
         async def count_prospects(self, **kwargs):
-            assert kwargs == {"workspace_id": "workspace-a", "stage": "qualified", "search": None}
+            assert kwargs == {"workspace_id": "workspace-a", "stage": "qualified", "search": None, "project_id": None, "unlinked_only": False}
             return 1
 
     async def fake_authenticated(request):
