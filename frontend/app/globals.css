@@ -362,3 +362,63 @@ html{scroll-behavior:smooth}body{background:#fff;color:var(--ink);letter-spacing
 
 /* Use the full OM mark in the illustrative workspace preview, not a text-only initial. */
 .preview-brand-mark svg{display:block;width:100%;height:100%;padding:.12rem}
+
+
+/* Responsive public-page headers and hero sections — shared across marketing routes */
+main.wrap{width:min(1240px,calc(100% - 3rem));min-width:0}
+.page-head,.hero,.hero-premium,.how-hero,.about-hero{min-width:0;max-width:100%}
+.page-head{padding:clamp(1.35rem,4.5vw,4.2rem);overflow:hidden}
+.page-head h1,.hero h1,.hero-premium h1,.how-hero h1,.form-card h1{
+  max-width:100%;
+  font-size:clamp(2rem,5.4vw,3.8rem);
+  line-height:1.06;
+  letter-spacing:-.055em;
+  overflow-wrap:anywhere;
+  text-wrap:balance;
+}
+.page-head .lead,.hero .lead,.how-hero .lead{max-width: min(100%, 760px);overflow-wrap:anywhere}
+.page-head:after{width:clamp(70px,15vw,170px);height:clamp(70px,15vw,170px)}
+.hero-premium h1{font-size:clamp(2.2rem,6.2vw,5.5rem);line-height:1.02}
+.hero-premium .lead{max-width:min(100%,670px)}
+.hero-premium .actions,.actions{flex-wrap:wrap}
+.product-preview,.preview-main,.preview-lower,.preview-metrics{min-width:0}
+.how-hero{padding:clamp(1.35rem,4.5vw,4.5rem)}
+.contact-support-panel{min-width:0}
+.contact-support-copy,.contact-support-action{min-width:0}
+@media(max-width:800px){
+  main.wrap{width:calc(100% - 2rem)}
+  .site-header .topbar{width:calc(100% - 2rem);align-items:flex-start;flex-direction:column;gap:.65rem;padding:.7rem 0}
+  .site-header .nav{
+    width:100%;justify-content:flex-start;align-items:center;flex-wrap:wrap;
+    overflow:visible;gap:.45rem .8rem;padding:.2rem 0 .45rem
+  }
+  .site-header .nav a,.site-header .nav a:not(.login-link):not(.nav-cta),
+  .site-header .nav .security-nav{display:inline-flex!important;flex:0 1 auto;white-space:normal}
+  .site-header .nav .login-link{margin-left:0}
+  .page-head{margin:1.35rem 0 1.5rem;border-radius:1rem}
+  .page-head h1,.hero h1,.how-hero h1,.form-card h1{font-size:clamp(2rem,7vw,3.2rem)}
+  .how-flow-heading{align-items:flex-start;flex-direction:column;gap:.7rem}
+}
+@media(max-width:600px){
+  main.wrap{width:calc(100% - 1.5rem)}
+  .page-head{padding:1.35rem 1.15rem;margin:1rem 0 1.25rem}
+  .page-head:after{right:-1.5rem;top:auto;bottom:-2rem;opacity:.45}
+  .page-head h1,.hero h1,.how-hero h1,.form-card h1{font-size:clamp(1.85rem,8.5vw,2.65rem);line-height:1.08;letter-spacing:-.045em}
+  .page-head .lead,.hero .lead,.how-hero .lead{font-size:1rem;line-height:1.65}
+  .hero-premium{padding:3rem 0 1.8rem}
+  .hero-premium h1{font-size:clamp(2.15rem,9.5vw,3.25rem);line-height:1.04}
+  .hero-premium .actions{align-items:stretch}
+  .hero-premium .actions .button,.actions .button{flex:1 1 100%;width:100%}
+  .hero-assurance{justify-content:flex-start}
+  .how-hero{padding:1.35rem 1.15rem;margin-top:1rem}
+  .how-hero-meta{gap:.55rem .9rem;font-size:.78rem}
+  .contact-support-panel{padding:1.25rem}
+}
+@media(max-width:380px){
+  .brand-name{font-size:1rem}
+  .brand-name small{font-size:.68rem}
+  .site-header .nav{gap:.4rem .6rem}
+  .site-header .nav a{font-size:.76rem!important}
+  .page-head h1,.hero h1,.how-hero h1,.form-card h1{font-size:1.85rem}
+  .hero-premium h1{font-size:2.05rem}
+}
