@@ -258,8 +258,8 @@ def test_project_overview_is_workspace_scoped_and_returns_linked_workflow_snapsh
     assert len(connection.calls) == 11
     assert connection.calls[0][2] == (PROJECT_ID, "workspace-a")
     assert connection.calls[3][2] == ("workspace-a", PROJECT_ID)
-    assert "outreach_followup_sequences" in connection.calls[7][1]
-    assert "outreach_followup_enrollments" in connection.calls[8][1]
+    assert "outreach_followup_sequences" in connection.calls[8][1]
+    assert "outreach_followup_enrollments" in connection.calls[9][1]
     assert "crm_prospects" in connection.calls[-1][1]
     assert all(call[2][0] == "workspace-a" for call in connection.calls if call[0] in {"fetch", "fetchval"})
 
