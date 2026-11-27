@@ -570,9 +570,9 @@ export default function DashboardPage() {
         // Render the authenticated workspace shell immediately; secondary dashboard
         // panels continue loading independently and must not hide the workspace switcher.
         setLoading(false);
-        // The workspaceId effect owns the initial data load. Calling it here as well
-        // races that effect and invalidates its request sequence, causing dashboard
-        // sections to repeatedly detach while the browser is interacting with them.
+        // Start workspace loading after the workspace id and CSRF token are set.
+        // Keep it independent from session-list loading so the shell stays responsive.
+        if (first) void loadWorkspaceData(first, session.csrf_token);
         const sessionList = await api<{ items: AuthSession[] }>("/api/v1/auth/sessions", session.csrf_token);
         if (!cancelled) setAuthSessions(sessionList.items || []);
       } catch (err) {
