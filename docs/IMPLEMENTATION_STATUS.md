@@ -393,3 +393,6 @@ The existing `backend/app/api/paddle_routes.py` is the canonical implementation 
 - Campaign performance analytics now accepts an optional UUID project filter, preserving the existing workspace authorization and selected reporting period. The project panel loads campaign-level draft, email, WhatsApp, reply-association and CRM-conversion-stage counts for that project, without claiming causal attribution, inbox delivery for SMTP, revenue or ROI.
 - Added focused source regression cases for project-scoped campaign analytics and project draft/activity data. These are source changes only; no tests, build, CI, database, browser acceptance or deployment were run.
 - Application commits: `ca4c8f85ae5b2d92083cc0667500d59a953b4f59`, `0d2aabea700569c1c95ce1e8478299e0bd60ed44`, `d05da6b1b208f6bceb9348ce63591da35a117d42`.
+
+
+- Reliability follow-up: the project panel now loads its core CRM/draft/outreach snapshot independently of campaign analytics. If the analytics endpoint is unavailable, the rest of the project workflow remains visible and the performance section reports its own unavailable state.
