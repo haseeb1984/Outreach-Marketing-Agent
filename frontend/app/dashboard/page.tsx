@@ -475,7 +475,7 @@ export default function DashboardPage() {
     setEntitlements(availableEntitlements);
     setEntitlementsUnavailable(availableEntitlements.length !== 5);
     const accountResult = billingAccountResult[0];
-    setBillingAccount(accountResult.status === "fulfilled" ? accountResult.value : null);
+    setBillingAccount(accountResult.status === "fulfilled" ? { ...accountResult.value, usage: Array.isArray(accountResult.value.usage) ? accountResult.value.usage : [], invoices: Array.isArray(accountResult.value.invoices) ? accountResult.value.invoices : [] } : null);
     setBillingAccountUnavailable(accountResult.status === "rejected");
     const failedSections = [...primaryFailureNames];
     if (followupResult[0].status === "rejected") failedSections.push("follow-up automation");
@@ -3035,9 +3035,9 @@ export default function DashboardPage() {
             </article>;
           })}</div>
           <h3>Usage in the current billing period</h3>
-          {billingAccount?.usage.length ? <div className="cards">{billingAccount.usage.map(item=><article className="card" key={item.feature}><h3>{item.feature.replaceAll("_"," ")}</h3><p>{item.consumed} consumed · {item.reserved} reserved · {item.released} released</p></article>)}</div> : <p className="fine">No quota usage records are available for the current billing period.</p>}
+          {billingAccount?.usage?.length ? <div className="cards">{billingAccount.usage.map(item=><article className="card" key={item.feature}><h3>{item.feature.replaceAll("_"," ")}</h3><p>{item.consumed} consumed · {item.reserved} reserved · {item.released} released</p></article>)}</div> : <p className="fine">No quota usage records are available for the current billing period.</p>}
           <h3>Recent invoices and transactions</h3>
-          {billingAccount?.invoices.length ? <div className="cards">{billingAccount.invoices.map(invoice=><article className="card" key={invoice.transaction_id}><h3>{invoice.invoice_number || invoice.transaction_id}</h3><p>{invoice.status.replaceAll("_"," ")}</p><p className="fine">Updated: {invoice.updated_at ? new Date(invoice.updated_at).toLocaleString() : "—"}</p></article>)}</div> : <p className="fine">No invoice or transaction records are available yet.</p>}
+          {billingAccount?.invoices?.length ? <div className="cards">{billingAccount.invoices.map(invoice=><article className="card" key={invoice.transaction_id}><h3>{invoice.invoice_number || invoice.transaction_id}</h3><p>{invoice.status.replaceAll("_"," ")}</p><p className="fine">Updated: {invoice.updated_at ? new Date(invoice.updated_at).toLocaleString() : "—"}</p></article>)}</div> : <p className="fine">No invoice or transaction records are available yet.</p>}
         </section>
         <section className="section" id="analytics" aria-labelledby="metrics-title"><div className="section-head"><h2 id="metrics-title">Recorded activity</h2><p className="fine">Counts from saved records; not estimates of revenue or ROI.</p></div><div className="dashboard-grid">{metricItems.map(([label,key])=><article className="metric" key={key}><strong>{counts[key] ?? "—"}</strong><span>{label}</span></article>)}</div><p className="fine">“Marked sent” means the configured email adapter returned successfully; it does not prove inbox delivery. Clicks, revenue and ROI are not inferred.</p></section>
         <section className="section" aria-labelledby="campaign-performance-title">
