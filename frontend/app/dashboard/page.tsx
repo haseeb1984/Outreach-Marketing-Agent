@@ -2930,26 +2930,6 @@ export default function DashboardPage() {
     } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
   }
 
-  async function deleteAccount() {
-    if (!csrf || busy) return;
-    const requestedWorkspaceId = workspaceId;
-    if (!window.confirm("Delete this account? Sign-in will stop, sessions and pending invitations will be revoked, and sole-member workspaces may be deleted. Shared workspace ownership must be transferred first.")) return;
-    const confirmation = window.prompt("Type DELETE MY ACCOUNT to confirm this irreversible action.");
-    if (confirmation !== "DELETE MY ACCOUNT") {
-      if (requestedWorkspaceId !== workspaceId) return;
-      setNotice("Account deletion was not confirmed; no changes were made.");
-      return;
-    }
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api<{ status: string }>("/api/v1/account", csrf, { method: "DELETE", body: "{}" });
-      router.replace("/login?account_deleted=1");
-      router.refresh();
-    } catch (err) {
-      if (requestedWorkspaceId === workspaceId) setError(err instanceof Error ? err.message : "Account deletion could not be completed.");
-    } finally { if (requestedWorkspaceId === workspaceId) setBusy(false); }
-  }
-
   async function logout() {
     setBusy(true);
     try { await api("/api/v1/auth/logout", csrf, { method: "POST", body: "{}" }); }
