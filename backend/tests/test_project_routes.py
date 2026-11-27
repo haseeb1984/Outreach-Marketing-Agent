@@ -253,9 +253,11 @@ def test_project_overview_is_workspace_scoped_and_returns_linked_workflow_snapsh
     assert result["project"]["id"] == str(PROJECT_ID)
     assert result["counts"] == {"campaigns": 7, "prospects": 7}
     assert result["recent_limit"] == 10
-    assert len(connection.calls) == 5
-    assert all(call[2][:2] == (PROJECT_ID, "workspace-a") if call[0] == "fetchrow" else call[2][0] == "workspace-a" for call in connection.calls)
-    assert "crm_prospects" in connection.calls[4][1]
+    assert len(connection.calls) == 9
+    assert connection.calls[0][2] == (PROJECT_ID, "workspace-a")
+    assert connection.calls[3][2] == ("workspace-a", PROJECT_ID)
+    assert "crm_prospects" in connection.calls[-1][1]
+    assert all(call[2][0] == "workspace-a" for call in connection.calls if call[0] in {"fetch", "fetchval"})
 
 def test_project_overview_includes_project_draft_and_outreach_activity(monkeypatch):
     from datetime import datetime, timezone
@@ -294,4 +296,6 @@ def test_project_overview_includes_project_draft_and_outreach_activity(monkeypat
     assert result["draft_counts"] == {"pending_approval": 1, "approved": 2, "rejected": 0}
     assert result["recent_drafts"][0]["prospect_name"] == "A"
     assert [item["channel"] for item in result["outreach_activity"]] == ["email", "whatsapp"]
-    assert all("workspace_id=$1 AND c.project_id=$2" in call[1] for call in connection.calls if call[0] == "fetch")
+    scoped_activity_queries = [call[1] for call in connection.calls if call[0] == "fetch" and ("FROM outreach_drafts d" in call[1] or "FROM outreach_deliveries q" in call[1] or "FROM whatsapp_outbound_deliveries q" in call[1])]
+    assert len(scoped_activity_queries) == 3
+    assert all("project_id=$2" in query and "$1" in query for query in scoped_activity_queries)

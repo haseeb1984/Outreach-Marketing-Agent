@@ -144,7 +144,7 @@ def test_campaign_analytics_scopes_draft_counts_to_selected_period(monkeypatch):
     class Connection:
         query = ""
 
-        async def fetch(self, query, workspace_id, since_days, limit):
+        async def fetch(self, query, workspace_id, since_days, limit, project_id=None):
             self.query = query
             assert workspace_id == "workspace-1"
             assert since_days == 7
