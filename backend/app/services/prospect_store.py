@@ -141,13 +141,15 @@ class ProspectStore:
         async with self._pool.acquire() as conn:
             count = await conn.fetchval(
                 """SELECT count(*) FROM crm_prospects p
+                   LEFT JOIN workspace_projects wp ON wp.id=p.project_id AND wp.workspace_id=p.workspace_id
                    WHERE p.workspace_id=$1 AND p.archived_at IS NULL
                      AND ($2::text IS NULL OR p.stage=$2)
                      AND ($3::text IS NULL OR
                           p.name ILIKE '%' || $3 || '%' OR p.company ILIKE '%' || $3 || '%' OR
                           COALESCE(p.contact_email,'') ILIKE '%' || $3 || '%' OR
                           COALESCE(p.contact_phone_e164,'') ILIKE '%' || $3 || '%' OR
-                          COALESCE(p.role,'') ILIKE '%' || $3 || '%' OR p.website_url ILIKE '%' || $3 || '%')""",
+                          COALESCE(p.role,'') ILIKE '%' || $3 || '%' OR p.website_url ILIKE '%' || $3 || '%' OR
+                          COALESCE(wp.name,'') ILIKE '%' || $3 || '%')""",
                 workspace_id, stage, search.strip()[:120] if search and search.strip() else None,
             )
         return int(count or 0)
