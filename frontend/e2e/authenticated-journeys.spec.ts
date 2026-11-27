@@ -13,6 +13,7 @@ test.describe("account and authenticated browser journeys", () => {
     });
 
     await page.goto("/register");
+    await page.getByLabel("Business or workspace name").fill("Browser Test Workspace");
     await page.getByLabel("Work email").fill("browser-test@example.test");
     await page.getByLabel("Password").fill("Correct-Horse-Battery-42!");
     await page.getByRole("button", { name: "Create account" }).click();
@@ -21,6 +22,7 @@ test.describe("account and authenticated browser journeys", () => {
     expect(requestBody).toEqual({
       email: "browser-test@example.test",
       password: "Correct-Horse-Battery-42!",
+      workspace_name: "Browser Test Workspace",
     });
   });
 
