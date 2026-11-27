@@ -49,8 +49,15 @@ class FakePool:
         yield self.conn
 
 
+class FakeAccountAuthStore:
+    async def authenticate_password(self, *, email, password):
+        if email == "user@example.test" and password == "correct-password":
+            return {"user_id": "00000000-0000-0000-0000-000000000001", "email": email}
+        return None
+
+
 async def _authenticated(request):
-    return ("user@example.test", None, {"user_id": "00000000-0000-0000-0000-000000000001"})
+    return (FakeAccountAuthStore(), None, {"user_id": "00000000-0000-0000-0000-000000000001", "email": "user@example.test"})
 
 
 def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cookies(monkeypatch):
@@ -59,7 +66,7 @@ def test_delete_account_revokes_sessions_pseudonymizes_identity_and_clears_cooki
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
     with TestClient(app) as client:
         app.state.db_pool = FakePool(conn)
-        response = client.delete("/api/v1/account")
+        response = client.delete("/api/v1/account", json={"password": "correct-password"})
     assert response.status_code == 200
     assert response.json()["status"] == "deleted"
     assert "deleted+00000000000000000000000000000001@accounts.invalid" in str(conn.executed)

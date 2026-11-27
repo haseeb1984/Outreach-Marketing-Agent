@@ -14,6 +14,7 @@ from app.api import account_routes
 from app.db.migrations import apply_migrations
 from app.main import app
 from app.services.auth_store import AuthStore
+from app.services.auth_security import hash_password
 
 
 @pytest.mark.skipif(
@@ -37,21 +38,24 @@ async def _exercise_account_deletion(monkeypatch) -> None:
     pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2)
     previous_pool = getattr(app.state, "db_pool", None)
 
+    auth_store = AuthStore(pool)
+
     async def authenticated(_request):
-        return email, None, {"user_id": str(user_id)}
+        return auth_store, None, {"user_id": str(user_id), "email": email}
 
     monkeypatch.setattr(account_routes, "_authenticated", authenticated)
     monkeypatch.setattr(account_routes, "_check_csrf", lambda _request, _session: None)
     app.state.db_pool = pool
+    app.state.auth_store = auth_store
 
     try:
         async with pool.acquire() as connection:
             await connection.execute(
                 """INSERT INTO app_users
                    (id,email,password_hash,status,email_verified_at)
-                   VALUES ($1,$2,'integration-test-hash','active',now()),
+                   VALUES ($1,$2,$5,'active',now()),
                           ($3,$4,'integration-test-hash','active',now())""",
-                user_id, email, other_user_id, other_email,
+                user_id, email, other_user_id, other_email, hash_password("integration-test-password").encoded,
             )
             await connection.execute(
                 "INSERT INTO workspaces (id,name) VALUES ($1,$2),($3,$4)",
@@ -71,7 +75,7 @@ async def _exercise_account_deletion(monkeypatch) -> None:
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            blocked = await client.delete("/api/v1/account")
+            blocked = await client.delete("/api/v1/account", json={"password": "integration-test-password"})
             assert blocked.status_code == 409, blocked.text
             assert blocked.json()["detail"] == "transfer_workspace_ownership_before_account_deletion"
 
@@ -88,7 +92,7 @@ async def _exercise_account_deletion(monkeypatch) -> None:
                     shared_workspace, other_user_id,
                 )
 
-            deleted = await client.delete("/api/v1/account")
+            deleted = await client.delete("/api/v1/account", json={"password": "integration-test-password"})
             assert deleted.status_code == 200, deleted.text
             assert deleted.json()["status"] == "deleted"
             assert deleted.headers["cache-control"] == "no-store, private"
