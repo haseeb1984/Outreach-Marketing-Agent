@@ -95,7 +95,7 @@ async def _exercise_account_deletion(monkeypatch) -> None:
                     shared_workspace, other_user_id,
                 )
 
-            deleted = await client.delete("/api/v1/account", json={"password": "integration-test-password"})
+            deleted = await client.request("DELETE", "/api/v1/account", json={"password": "integration-test-password"})
             assert deleted.status_code == 200, deleted.text
             assert deleted.json()["status"] == "deleted"
             assert deleted.headers["cache-control"] == "no-store, private"

@@ -93,6 +93,9 @@ def test_delete_account_refuses_to_orphan_workspace_with_any_non_revoked_member(
     conn = FakeConnection(blocked=True)
     monkeypatch.setattr(account_routes, "_authenticated", _authenticated)
     monkeypatch.setattr(account_routes, "_check_csrf", lambda request, session: None)
+    async def allow_rate_limit(*args, **kwargs):
+        return None
+    monkeypatch.setattr(account_routes, "_consume", allow_rate_limit)
     with TestClient(app) as client:
         app.state.db_pool = FakePool(conn)
         response = client.request("DELETE", "/api/v1/account", json={"password": "correct-password"})
@@ -120,7 +123,7 @@ def test_delete_account_requires_csrf_before_database_access(monkeypatch):
     monkeypatch.setattr(account_routes, "_check_csrf", reject_csrf)
     with TestClient(app) as client:
         app.state.db_pool = NeverPool()
-        response = client.delete("/api/v1/account")
+        response = client.request("DELETE", "/api/v1/account", json={"password": "correct-password"})
     assert response.status_code == 403
 
 

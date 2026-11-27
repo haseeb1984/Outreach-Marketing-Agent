@@ -65,8 +65,8 @@ def test_restore_requires_explicit_confirmation_and_uses_dbname_flag(tmp_path, m
     monkeypatch.setenv("CONFIRM_RESTORE", "YES")
     database_backup.restore(backup)
 
-    assert len(calls) == 2
-    restore_command, restore_env = calls[1]
+    assert len(calls) == 3
+    restore_command, restore_env = calls[2]
     assert restore_command[0] == "pg_restore"
     assert "--dbname" in restore_command
     assert "--single-transaction" in restore_command

@@ -248,7 +248,7 @@ def test_project_overview_is_workspace_scoped_and_returns_linked_workflow_snapsh
 
     result = asyncio.run(
         project_routes.get_project_overview(
-            PROJECT_ID, SimpleNamespace(), workspace_id="workspace-a"
+            PROJECT_ID, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(conversation_store=None))), workspace_id="workspace-a"
         )
     )
 
