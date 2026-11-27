@@ -385,3 +385,11 @@ The existing `backend/app/api/paddle_routes.py` is the canonical implementation 
 - Project cards now open an in-place workflow panel with campaign and CRM snapshots, record totals, empty states, and direct actions to start a campaign or add a prospect with the project preselected. The panel loads on demand and remains isolated to the active workspace.
 - Added focused route regression coverage for authorization, tenant scoping and the combined overview response. Source-only: tests, build, CI, database, browser acceptance and deployment have not been run.
 - Application commit: `f5841284392fa9e74f7f45492d641d099b2ab507`.
+
+
+## Implementation update — 2026-11-27 (project-level outreach operations)
+
+- Expanded the client project overview with persisted draft-review totals (pending approval, approved and rejected), the 10 most recent project-linked drafts, and a merged latest-10 activity timeline across email delivery records and WhatsApp outbound records. Activity is associated through the project's campaigns and workspace-scoped joins; no message body, contact address or credential is exposed.
+- Campaign performance analytics now accepts an optional UUID project filter, preserving the existing workspace authorization and selected reporting period. The project panel loads campaign-level draft, email, WhatsApp, reply-association and CRM-conversion-stage counts for that project, without claiming causal attribution, inbox delivery for SMTP, revenue or ROI.
+- Added focused source regression cases for project-scoped campaign analytics and project draft/activity data. These are source changes only; no tests, build, CI, database, browser acceptance or deployment were run.
+- Application commits: `ca4c8f85ae5b2d92083cc0667500d59a953b4f59`, `0d2aabea700569c1c95ce1e8478299e0bd60ed44`, `d05da6b1b208f6bceb9348ce63591da35a117d42`.
