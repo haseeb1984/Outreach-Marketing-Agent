@@ -44,6 +44,8 @@ class _Connection:
 
     async def fetchrow(self, query, *args):
         self.calls.append(("fetchrow", query, args))
+        if "FILTER (WHERE status=" in query:
+            return {"pending_approval": 0, "approved": 0, "rejected": 0}
         return self.row
 
     async def fetchval(self, query, *args):
