@@ -1,5 +1,6 @@
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -54,6 +55,7 @@ def test_restore_requires_explicit_confirmation_and_uses_dbname_flag(tmp_path, m
     backup.with_suffix(".dump.sha256").write_text(hashlib.sha256(b"backup bytes").hexdigest() + "  sample.dump\n")
     calls = []
     monkeypatch.setattr(database_backup, "_run", lambda command, env: calls.append((command, env)))
+    monkeypatch.setattr(database_backup.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="f\\n"))
     monkeypatch.setenv("SOURCE_DATABASE_URL", "postgresql://user:secret@source.example:5432/prod")
     monkeypatch.setenv("RESTORE_DATABASE_URL", "postgresql://user:secret@restore.example:5432/recovery")
     monkeypatch.delenv("CONFIRM_RESTORE", raising=False)
@@ -63,8 +65,8 @@ def test_restore_requires_explicit_confirmation_and_uses_dbname_flag(tmp_path, m
     monkeypatch.setenv("CONFIRM_RESTORE", "YES")
     database_backup.restore(backup)
 
-    assert len(calls) == 3
-    restore_command, restore_env = calls[2]
+    assert len(calls) == 2
+    restore_command, restore_env = calls[1]
     assert restore_command[0] == "pg_restore"
     assert "--dbname" in restore_command
     assert "--single-transaction" in restore_command
@@ -158,8 +160,9 @@ def test_backup_writes_private_archive_and_checksum_atomically(tmp_path, monkeyp
 
     def fake_run(command, environment):
         calls.append((command, environment))
-        output_index = command.index("--file") + 1
-        Path(command[output_index]).write_bytes(b"verified backup archive")
+        if command[0] == "pg_dump":
+            output_index = command.index("--file") + 1
+            Path(command[output_index]).write_bytes(b"verified backup archive")
 
     monkeypatch.setattr(database_backup, "_run", fake_run)
     result = database_backup.backup()
@@ -172,7 +175,7 @@ def test_backup_writes_private_archive_and_checksum_atomically(tmp_path, monkeyp
     assert checksum_file.read_text(encoding="utf-8") == f"{expected}  {result.name}\\n"
     assert result.stat().st_mode & 0o777 == 0o600
     assert checksum_file.stat().st_mode & 0o777 == 0o600
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert calls[0][0][:3] == ["pg_dump", "--format=custom", "--no-owner"]
     assert calls[0][1]["PGPASSWORD"] == "backup-pass"
     assert sorted(path.name for path in tmp_path.iterdir()) == sorted([result.name, checksum_file.name])
