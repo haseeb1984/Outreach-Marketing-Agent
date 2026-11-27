@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("account and authenticated browser journeys", () => {
+  test.beforeEach(async ({ page }) => {
+    page.on("pageerror", error => console.error("BROWSER_PAGE_ERROR:", error.stack || error.message));
+    page.on("console", message => {
+      if (message.type() === "error") console.error("BROWSER_CONSOLE_ERROR:", message.text());
+    });
+  });
+
   test("registration submits same-origin credentials and shows the neutral confirmation", async ({ page }) => {
     let requestBody: Record<string, unknown> | undefined;
     await page.route("**/api/v1/auth/register", async (route) => {
